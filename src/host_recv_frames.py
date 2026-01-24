@@ -3,14 +3,17 @@ import os, sys, time, struct, fcntl, termios, select
 
 SEND_RESET = True
 SEND_STOP = True
-BOOT_WAIT = 0.25
-DIAG_SECS = 0.0
+SEND_BOOT = True
+BOOT_WAIT = 1.0
+DIAG_SECS = 5.0
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
         SEND_RESET = False
     elif arg == "--no-stop":
         SEND_STOP = False
+    elif arg == "--no-boot":
+        SEND_BOOT = False
     elif arg.startswith("--boot-wait="):
         value = arg.split("=", 1)[1]
         try:
@@ -100,9 +103,11 @@ def pop_one_packet(buf: bytearray):
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
 set_raw_and_dtr(fd)
 
-# Give Pico time to reboot after opening the CDC port (if applicable).
-if BOOT_WAIT > 0:
-    time.sleep(BOOT_WAIT)
+if SEND_BOOT:
+    os.write(fd, b"P")
+    # Give the target time to power up or settle before capture.
+    if BOOT_WAIT > 0:
+        time.sleep(BOOT_WAIT)
 
 if SEND_STOP:
     os.write(fd, b"X")
@@ -136,7 +141,8 @@ if SEND_RESET:
 os.write(fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
+boot_note = "boot" if SEND_BOOT else "no-boot"
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -208,5 +214,9 @@ finally:
             os.write(fd, b"X")
         except OSError:
             pass
+    try:
+        os.write(fd, b"p")
+    except OSError:
+        pass
 
 print("[host] complete.")
