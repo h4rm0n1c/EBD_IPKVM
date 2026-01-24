@@ -168,6 +168,8 @@ if SEND_RESET:
     time.sleep(0.05)
 if TEST_START:
     os.write(fd, b"T")
+    FORCE_AFTER = 0.0
+    FORCE_START = False
 elif FORCE_START:
     os.write(fd, b"F")
 else:
@@ -185,7 +187,7 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 start_rx = last_rx
-force_sent = FORCE_START
+force_sent = FORCE_START or TEST_START
 test_sent = TEST_START
 
 try:
