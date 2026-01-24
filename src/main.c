@@ -73,10 +73,6 @@ static inline void txq_reset(void) {
     restore_interrupts(s);
 }
 
-static inline bool can_emit_text(void) {
-    return !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
-}
-
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
     gpio_put(PIN_PS_ON, on ? 1 : 0);
@@ -86,6 +82,10 @@ static inline bool txq_is_empty(void) {
     uint16_t r = txq_r;
     uint16_t w = txq_w;
     return r == w;
+}
+
+static inline bool can_emit_text(void) {
+    return !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
 }
 
 static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
