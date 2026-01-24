@@ -1,0 +1,28 @@
+#upload uf2 file
+sudo mkdir -p /mnt/RPI-RP2
+sudo mount /dev/sda1 /mnt/RPI-RP2
+sudo cp -v ~/pico/EBD_IPKVM/build/EBD_IPKVM.uf2 /mnt/RPI-RP2/
+sync
+sudo umount /mnt/RPI-RP2
+
+
+#prefer pushd/popd over cd
+pushd ~/pico/EBD_IPKVM/build
+ninja -v
+popd
+
+#gives a list of connected drives so we can find the pico
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
+
+#check if pico is connected
+sudo dmesg | tail -n 50
+ls -l /dev/ttyACM*
+
+#check if pico is talking
+picocom -b 115200 /dev/ttyACM0
+
+#this is where I usually operate from
+cd ~/pico/EBD_IPKVM/src/
+
+#env setup if we get issues with sdk missing
+export PICO_SDK_PATH="$HOME/pico/pico-sdk"
