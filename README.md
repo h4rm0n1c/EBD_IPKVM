@@ -42,7 +42,7 @@ python3 src/host_recv_frames.py /dev/ttyACM0 frames
 ```
 
 This test script:
-- Arms capture by sending `S` to the device.
+- Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale).
 

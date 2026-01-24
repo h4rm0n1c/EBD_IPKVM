@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import os, sys, time, struct, fcntl, termios, select
 
-DEV = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyACM0"
-OUTDIR = sys.argv[2] if len(sys.argv) > 2 else "frames"
+SEND_RESET = "--no-reset" not in sys.argv
+ARGS = [arg for arg in sys.argv[1:] if arg != "--no-reset"]
+
+DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
+OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
 MAX_FRAMES = 100
 
 W = 512
@@ -73,10 +76,14 @@ def pop_one_packet(buf: bytearray):
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
 set_raw_and_dtr(fd)
 
-# Tell Pico to start (host-controlled firmware expects this)
+# Tell Pico to reset counters (optional) then start.
+if SEND_RESET:
+    os.write(fd, b"R")
+    time.sleep(0.05)
 os.write(fd, b"S")
 
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm")
+mode_note = "reset+start" if SEND_RESET else "start"
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note})")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
