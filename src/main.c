@@ -345,6 +345,12 @@ static void poll_cdc_commands(void) {
             sleep_ms(10);
             watchdog_reboot(0, 0, 0);
             while (true) { tight_loop_contents(); }
+        } else if (ch == 'F' || ch == 'f') {
+            if (!capture_enabled) {
+                want_frame = true;
+                raw_line = 0;
+                start_capture_window();
+            }
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();

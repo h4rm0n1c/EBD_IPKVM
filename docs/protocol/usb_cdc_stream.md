@@ -34,6 +34,7 @@ The firmware is host-controlled over the same CDC channel:
 | `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
 | `G` | Report GPIO input states and edge counts over a short sampling window. |
+| `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.

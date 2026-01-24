@@ -14,3 +14,4 @@
 - 2026-01-26: Stop capture on host exit and pre-stop before arming in `host_recv_frames.py`.
 - 2026-01-26: Stop re-arming DMA after a capture window completes to avoid stale DMA activity between runs.
 - 2026-01-26: Adjusted GPIO diagnostic command to use polling-based edge sampling to avoid IRQ overload on PIXCLK.
+- 2026-01-26: Added a force-capture CDC command and host fallback to trigger capture when VSYNC gating stalls.

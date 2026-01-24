@@ -6,6 +6,8 @@ SEND_STOP = True
 SEND_BOOT = True
 BOOT_WAIT = 12.0
 DIAG_SECS = 12.0
+FORCE_AFTER = 2.0
+FORCE_START = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -27,6 +29,17 @@ for arg in sys.argv[1:]:
             DIAG_SECS = float(value)
         except ValueError:
             print(f"[host] invalid --diag-secs value: {value}")
+            sys.exit(2)
+    elif arg == "--force-start":
+        FORCE_START = True
+    elif arg == "--no-force":
+        FORCE_AFTER = 0.0
+    elif arg.startswith("--force-after="):
+        value = arg.split("=", 1)[1]
+        try:
+            FORCE_AFTER = float(value)
+        except ValueError:
+            print(f"[host] invalid --force-after value: {value}")
             sys.exit(2)
     else:
         ARGS.append(arg)
@@ -140,7 +153,10 @@ if BOOT_WAIT > 0:
 if SEND_RESET:
     os.write(fd, b"R")
     time.sleep(0.05)
-os.write(fd, b"S")
+if FORCE_START:
+    os.write(fd, b"F")
+else:
+    os.write(fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
@@ -153,14 +169,21 @@ last_print = time.time()
 
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
+start_rx = last_rx
+force_sent = FORCE_START
 
 try:
     while done_count < MAX_FRAMES:
         r, _, _ = select.select([fd], [], [], 0.25)
         if not r:
-            if time.time() - last_rx > 2.0:
+            now = time.time()
+            if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
+                os.write(fd, b"F")
+                force_sent = True
+                print(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
+            if now - last_rx > 2.0:
                 print("[host] no data yet (is Pico armed + Mac running?)")
-                last_rx = time.time()
+                last_rx = now
             continue
 
         chunk = os.read(fd, 8192)
