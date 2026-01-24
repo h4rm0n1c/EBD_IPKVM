@@ -33,6 +33,13 @@ The firmware is host-controlled over the same CDC channel:
 | `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
 | `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
+| `G` | Report GPIO input states and edge counts over a short sampling window. |
+
+### GPIO diagnostic output (`G`)
+- Only emitted while capture is stopped and the TX queue is empty.
+- Temporarily samples GPIO states and counts edges for PIXCLK/HSYNC/VSYNC/VIDEO.
+- Output format:
+  - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.

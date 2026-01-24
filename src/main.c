@@ -56,6 +56,11 @@ static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
+static volatile bool diag_active = false;
+static volatile uint32_t diag_pixclk_edges = 0;
+static volatile uint32_t diag_hsync_edges = 0;
+static volatile uint32_t diag_vsync_edges = 0;
+static volatile uint32_t diag_video_edges = 0;
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -76,6 +81,13 @@ static inline void txq_reset(void) {
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
     gpio_put(PIN_PS_ON, on ? 1 : 0);
+}
+
+static inline void reset_diag_counts(void) {
+    diag_pixclk_edges = 0;
+    diag_hsync_edges = 0;
+    diag_vsync_edges = 0;
+    diag_video_edges = 0;
 }
 
 static inline bool txq_is_empty(void) {
@@ -186,6 +198,20 @@ static void __isr dma_irq0_handler(void) {
 }
 
 static void gpio_irq(uint gpio, uint32_t events) {
+    if (diag_active) {
+        if (!(events & (GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE))) return;
+        if (gpio == PIN_PIXCLK) {
+            diag_pixclk_edges++;
+        } else if (gpio == PIN_HSYNC) {
+            diag_hsync_edges++;
+        } else if (gpio == PIN_VSYNC) {
+            diag_vsync_edges++;
+        } else if (gpio == PIN_VIDEO) {
+            diag_video_edges++;
+        }
+        return;
+    }
+
     if (gpio != PIN_VSYNC) return;
     if (!(events & GPIO_IRQ_EDGE_FALL)) return;
 
@@ -200,6 +226,66 @@ static void gpio_irq(uint gpio, uint32_t events) {
 
     raw_line = 0;
     start_capture_window();
+}
+
+static void run_gpio_diag(void) {
+    const uint32_t diag_ms = 500;
+
+    armed = false;
+    want_frame = false;
+    stop_capture();
+    txq_reset();
+
+    gpio_set_function(PIN_PIXCLK, GPIO_FUNC_SIO);
+    gpio_set_function(PIN_HSYNC, GPIO_FUNC_SIO);
+    gpio_set_function(PIN_VIDEO, GPIO_FUNC_SIO);
+
+    reset_diag_counts();
+    diag_active = true;
+
+    gpio_acknowledge_irq(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    gpio_acknowledge_irq(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    gpio_acknowledge_irq(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+
+    gpio_set_irq_enabled(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
+    gpio_set_irq_enabled(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
+
+    absolute_time_t end = make_timeout_time_ms(diag_ms);
+    while (absolute_time_diff_us(get_absolute_time(), end) > 0) {
+        tud_task();
+        tight_loop_contents();
+    }
+
+    diag_active = false;
+
+    gpio_set_irq_enabled(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL, true);
+
+    bool pixclk = gpio_get(PIN_PIXCLK);
+    bool hsync = gpio_get(PIN_HSYNC);
+    bool vsync = gpio_get(PIN_VSYNC);
+    bool video = gpio_get(PIN_VIDEO);
+
+    gpio_set_function(PIN_PIXCLK, GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_HSYNC, GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_VIDEO, GPIO_FUNC_PIO0);
+
+    printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
+           pixclk ? 1 : 0,
+           hsync ? 1 : 0,
+           vsync ? 1 : 0,
+           video ? 1 : 0,
+           diag_ms / 1000.0,
+           (unsigned long)diag_pixclk_edges,
+           (unsigned long)diag_hsync_edges,
+           (unsigned long)diag_vsync_edges,
+           (unsigned long)diag_video_edges);
 }
 
 static void poll_cdc_commands(void) {
@@ -268,6 +354,10 @@ static void poll_cdc_commands(void) {
             sleep_ms(10);
             watchdog_reboot(0, 0, 0);
             while (true) { tight_loop_contents(); }
+        } else if (ch == 'G' || ch == 'g') {
+            if (can_emit_text()) {
+                run_gpio_diag();
+            }
         }
     }
 }
@@ -314,6 +404,7 @@ int main(void) {
     printf("\n[EBD_IPKVM] USB packet stream @ ~30fps, capture 100 frames\n");
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
+    printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
     gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_pull_down(PIN_PIXCLK);
