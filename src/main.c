@@ -63,6 +63,7 @@ static volatile uint32_t diag_video_edges = 0;
 static volatile bool test_frame_active = false;
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
+static uint8_t probe_buf[PKT_BYTES];
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -128,6 +129,24 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
     /* publish write index last so reader never sees a half-filled packet */
     txq_w = next;
     return true;
+}
+
+static void send_probe_packet(void) {
+    if (!tud_cdc_connected()) return;
+    if (tud_cdc_write_available() < (int)PKT_BYTES) return;
+
+    probe_buf[0] = 0xEB;
+    probe_buf[1] = 0xD1;
+    probe_buf[2] = 0xAA;
+    probe_buf[3] = 0x55;
+    probe_buf[4] = 0x34;
+    probe_buf[5] = 0x12;
+    probe_buf[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
+    probe_buf[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
+    memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
+
+    tud_cdc_write(probe_buf, PKT_BYTES);
+    tud_cdc_write_flush();
 }
 
 static inline void arm_dma(uint32_t *dst) {
@@ -388,6 +407,8 @@ static void poll_cdc_commands(void) {
             txq_reset();
             test_frame_active = true;
             test_line = 0;
+        } else if (ch == 'U' || ch == 'u') {
+            send_probe_packet();
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();

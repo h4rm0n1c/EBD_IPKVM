@@ -10,6 +10,7 @@ FORCE_AFTER = 2.0
 FORCE_START = False
 TEST_AFTER = 0.0
 TEST_START = False
+PROBE_ONLY = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -36,6 +37,8 @@ for arg in sys.argv[1:]:
         FORCE_START = True
     elif arg == "--test-frame":
         TEST_START = True
+    elif arg == "--probe":
+        PROBE_ONLY = True
     elif arg == "--no-force":
         FORCE_AFTER = 0.0
     elif arg == "--no-test":
@@ -166,6 +169,20 @@ if BOOT_WAIT > 0:
 if SEND_RESET:
     os.write(fd, b"R")
     time.sleep(0.05)
+if PROBE_ONLY:
+    os.write(fd, b"U")
+    time.sleep(0.2)
+    probe_deadline = time.time() + 1.0
+    probe_bytes = 0
+    while time.time() < probe_deadline:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            continue
+        chunk = os.read(fd, 8192)
+        if chunk:
+            probe_bytes += len(chunk)
+    print(f"[host] probe bytes received: {probe_bytes}")
+    sys.exit(0)
 if TEST_START:
     os.write(fd, b"T")
     FORCE_AFTER = 0.0
