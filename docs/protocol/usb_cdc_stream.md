@@ -29,6 +29,10 @@ The firmware is host-controlled over the same CDC channel:
 | `X` | Stop capture, clear TX queue. |
 | `R` | Reset counters and internal state. |
 | `Q` | Park (stop capture and idle forever until reset). |
+| `P` | Assert ATX `PS_ON` (power on; GPIO9 high via ULN2803). |
+| `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
+| `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
+| `Z` | Reboot the RP2040 firmware (watchdog reset). |
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.

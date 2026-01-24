@@ -6,7 +6,9 @@
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
+#include "hardware/watchdog.h"
 #include "hardware/sync.h"
+#include "pico/bootrom.h"
 
 #include "tusb.h"
 #include "classic_line.pio.h"
@@ -15,6 +17,7 @@
 #define PIN_VSYNC  1   // active-low
 #define PIN_HSYNC  2   // active-low
 #define PIN_VIDEO  3
+#define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
 
 #define ACTIVE_H    342
 #define YOFF_LINES  28
@@ -52,6 +55,7 @@ static volatile uint32_t usb_drops = 0;
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
+static volatile bool ps_on_state = false;
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -67,6 +71,15 @@ static inline void txq_reset(void) {
     txq_w = 0;
     txq_r = 0;
     restore_interrupts(s);
+}
+
+static inline bool can_emit_text(void) {
+    return !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
+}
+
+static inline void set_ps_on(bool on) {
+    ps_on_state = on;
+    gpio_put(PIN_PS_ON, on ? 1 : 0);
 }
 
 static inline bool txq_is_empty(void) {
@@ -203,7 +216,9 @@ static void poll_cdc_commands(void) {
             want_frame = false;
             stop_capture();
             txq_reset();
-            printf("[EBD_IPKVM] armed=0 (host stop)\n");
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] armed=0 (host stop)\n");
+            }
         } else if (ch == 'R' || ch == 'r') {
             frames_done = 0;
             frame_id = 0;
@@ -216,14 +231,43 @@ static void poll_cdc_commands(void) {
             done_latched = false;
             stop_capture();
             txq_reset();
-            printf("[EBD_IPKVM] reset counters\n");
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] reset counters\n");
+            }
         } else if (ch == 'Q' || ch == 'q') {
             armed = false;
             want_frame = false;
             stop_capture();
             txq_reset();
-            printf("[EBD_IPKVM] parked\n");
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] parked\n");
+            }
             while (true) { tud_task(); sleep_ms(50); }
+        } else if (ch == 'P') {
+            set_ps_on(true);
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] ps_on=1\n");
+            }
+        } else if (ch == 'p') {
+            set_ps_on(false);
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] ps_on=0\n");
+            }
+        } else if (ch == 'B' || ch == 'b') {
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            sleep_ms(10);
+            reset_usb_boot(0, 0);
+        } else if (ch == 'Z' || ch == 'z') {
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            sleep_ms(10);
+            watchdog_reboot(0, 0, 0);
+            while (true) { tight_loop_contents(); }
         }
     }
 }
@@ -269,6 +313,7 @@ int main(void) {
 
     printf("\n[EBD_IPKVM] USB packet stream @ ~30fps, capture 100 frames\n");
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
+    printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
     gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_pull_down(PIN_PIXCLK);
@@ -277,6 +322,7 @@ int main(void) {
 
     // VSYNC must remain SIO GPIO for IRQ to work
     gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_pull_up(PIN_VSYNC);
+    gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
 
     // Clear any stale IRQ state, then enable callback
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL);
@@ -330,9 +376,10 @@ int main(void) {
                 uint32_t ve = vsync_edges;
                 vsync_edges = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu frames=%lu/100\n",
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu frames=%lu/100\n",
                        armed ? 1 : 0,
                        capture_enabled ? 1 : 0,
+                       ps_on_state ? 1 : 0,
                        (unsigned long)per_s,
                        (unsigned long)l,
                        (unsigned long)lines_drop,

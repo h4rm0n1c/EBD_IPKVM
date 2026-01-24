@@ -13,6 +13,7 @@ Tap raw 1-bpp video + sync, capture with PIO+DMA, and stream to a host UI.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
+- `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
 
