@@ -2,12 +2,15 @@
 import os, sys, time, struct, fcntl, termios, select
 
 SEND_RESET = True
+SEND_STOP = True
 BOOT_WAIT = 0.25
 DIAG_SECS = 0.0
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
         SEND_RESET = False
+    elif arg == "--no-stop":
+        SEND_STOP = False
     elif arg.startswith("--boot-wait="):
         value = arg.split("=", 1)[1]
         try:
@@ -101,6 +104,10 @@ set_raw_and_dtr(fd)
 if BOOT_WAIT > 0:
     time.sleep(BOOT_WAIT)
 
+if SEND_STOP:
+    os.write(fd, b"X")
+    time.sleep(0.05)
+
 if DIAG_SECS > 0:
     end_diag = time.time() + DIAG_SECS
     print(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
@@ -139,60 +146,67 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 
-while done_count < MAX_FRAMES:
-    r, _, _ = select.select([fd], [], [], 0.25)
-    if not r:
-        if time.time() - last_rx > 2.0:
-            print("[host] no data yet (is Pico armed + Mac running?)")
-            last_rx = time.time()
-        continue
-
-    chunk = os.read(fd, 8192)
-    if not chunk:
-        time.sleep(0.01)
-        continue
-
-    last_rx = time.time()
-    buf.extend(chunk)
-
-    while True:
-        pkt = pop_one_packet(buf)
-        if pkt is None:
-            break
-
-        frame_id = pkt[2] | (pkt[3] << 8)
-        line_id  = pkt[4] | (pkt[5] << 8)
-        plen     = pkt[6] | (pkt[7] << 8)
-
-        if plen != LINE_BYTES or line_id >= H:
+try:
+    while done_count < MAX_FRAMES:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            if time.time() - last_rx > 2.0:
+                print("[host] no data yet (is Pico armed + Mac running?)")
+                last_rx = time.time()
             continue
 
-        payload = pkt[8:8 + LINE_BYTES]
-        row = bytes_to_row64(payload)
+        chunk = os.read(fd, 8192)
+        if not chunk:
+            time.sleep(0.01)
+            continue
 
-        fm = frames.setdefault(frame_id, {})
-        if line_id not in fm:
-            fm[line_id] = row
+        last_rx = time.time()
+        buf.extend(chunk)
 
-        if len(fm) == H:
-            out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
-            rows = [fm[i] for i in range(H)]
-            write_pgm(out, rows)
-            print(f"[host] wrote {out} (frame_id={frame_id})")
-            done_count += 1
-            # free memory for this frame_id
-            del frames[frame_id]
-            if done_count >= MAX_FRAMES:
+        while True:
+            pkt = pop_one_packet(buf)
+            if pkt is None:
                 break
 
-    now = time.time()
-    if now - last_print > 1.0:
-        last_print = now
-        if frames:
-            newest = max(frames.keys())
-            have = len(frames[newest])
-            print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
-        else:
-            print(f"[host] done={done_count}/100 (waiting for packets)")
+            frame_id = pkt[2] | (pkt[3] << 8)
+            line_id  = pkt[4] | (pkt[5] << 8)
+            plen     = pkt[6] | (pkt[7] << 8)
+
+            if plen != LINE_BYTES or line_id >= H:
+                continue
+
+            payload = pkt[8:8 + LINE_BYTES]
+            row = bytes_to_row64(payload)
+
+            fm = frames.setdefault(frame_id, {})
+            if line_id not in fm:
+                fm[line_id] = row
+
+            if len(fm) == H:
+                out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
+                rows = [fm[i] for i in range(H)]
+                write_pgm(out, rows)
+                print(f"[host] wrote {out} (frame_id={frame_id})")
+                done_count += 1
+                # free memory for this frame_id
+                del frames[frame_id]
+                if done_count >= MAX_FRAMES:
+                    break
+
+        now = time.time()
+        if now - last_print > 1.0:
+            last_print = now
+            if frames:
+                newest = max(frames.keys())
+                have = len(frames[newest])
+                print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
+            else:
+                print(f"[host] done={done_count}/100 (waiting for packets)")
+finally:
+    if SEND_STOP:
+        try:
+            os.write(fd, b"X")
+        except OSError:
+            pass
 
 print("[host] complete.")

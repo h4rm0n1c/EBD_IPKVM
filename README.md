@@ -43,6 +43,7 @@ python3 src/host_recv_frames.py /dev/ttyACM0 frames
 
 This test script:
 - Waits briefly after opening the CDC port (default 0.25s) to allow Pico boot.
+- Sends `X` to stop any prior run before arming (use `--no-stop` to skip).
 - Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
 - Adjust the boot wait with `--boot-wait=SECONDS` if needed.
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
