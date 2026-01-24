@@ -1,8 +1,21 @@
 #!/usr/bin/env python3
 import os, sys, time, struct, fcntl, termios, select
 
-SEND_RESET = "--no-reset" not in sys.argv
-ARGS = [arg for arg in sys.argv[1:] if arg != "--no-reset"]
+SEND_RESET = True
+BOOT_WAIT = 0.25
+ARGS = []
+for arg in sys.argv[1:]:
+    if arg == "--no-reset":
+        SEND_RESET = False
+    elif arg.startswith("--boot-wait="):
+        value = arg.split("=", 1)[1]
+        try:
+            BOOT_WAIT = float(value)
+        except ValueError:
+            print(f"[host] invalid --boot-wait value: {value}")
+            sys.exit(2)
+    else:
+        ARGS.append(arg)
 
 DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
@@ -76,6 +89,10 @@ def pop_one_packet(buf: bytearray):
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
 set_raw_and_dtr(fd)
 
+# Give Pico time to reboot after opening the CDC port (if applicable).
+if BOOT_WAIT > 0:
+    time.sleep(BOOT_WAIT)
+
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
     os.write(fd, b"R")
@@ -83,7 +100,7 @@ if SEND_RESET:
 os.write(fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note})")
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
