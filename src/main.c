@@ -1,0 +1,349 @@
+#include <stdio.h>
+#include <string.h>
+
+#include "pico/stdlib.h"
+#include "hardware/pio.h"
+#include "hardware/dma.h"
+#include "hardware/irq.h"
+#include "hardware/gpio.h"
+#include "hardware/sync.h"
+
+#include "tusb.h"
+#include "classic_line.pio.h"
+
+#define PIN_PIXCLK 0
+#define PIN_VSYNC  1   // active-low
+#define PIN_HSYNC  2   // active-low
+#define PIN_VIDEO  3
+
+#define ACTIVE_H    342
+#define YOFF_LINES  28
+#define CAP_LINES   (YOFF_LINES + ACTIVE_H)   // 370 HSYNCs after VSYNC fall
+
+#define BYTES_PER_LINE 64
+#define WORDS_PER_LINE (BYTES_PER_LINE / 4)
+
+#define PKT_HDR_BYTES 8
+#define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
+
+/* TX queue: power-of-two depth so we can mask wrap. */
+#define TXQ_DEPTH 32
+#define TXQ_MASK  (TXQ_DEPTH - 1)
+
+static uint32_t line_a[WORDS_PER_LINE];
+static uint32_t line_b[WORDS_PER_LINE];
+
+static volatile bool using_a = true;
+
+static volatile bool armed = false;            // host says start/stop
+static volatile bool capture_enabled = false;  // SM+DMA running right now
+static volatile bool want_frame = false;       // transmit this frame or skip
+static volatile bool take_toggle = false;      // every other frame => ~30fps
+
+static volatile uint16_t frame_id = 0;         // increments per transmitted frame
+static volatile uint16_t raw_line = 0;         // 0..CAP_LINES-1
+
+static volatile uint32_t lines_ok = 0;
+/* repurpose as: queue overflows (we couldn't enqueue a line packet fast enough) */
+static volatile uint32_t lines_drop = 0;
+/* repurpose as: usb send failures (no space / disconnected / short write) */
+static volatile uint32_t usb_drops = 0;
+
+static volatile uint32_t vsync_edges = 0;
+static volatile uint32_t frames_done = 0;
+
+static int dma_chan;
+static PIO pio = pio0;
+static uint sm = 0;
+
+/* Ring buffer of complete line packets (72 bytes each). */
+static uint8_t txq[TXQ_DEPTH][PKT_BYTES];
+static volatile uint16_t txq_w = 0;
+static volatile uint16_t txq_r = 0;
+
+static inline void txq_reset(void) {
+    uint32_t s = save_and_disable_interrupts();
+    txq_w = 0;
+    txq_r = 0;
+    restore_interrupts(s);
+}
+
+static inline bool txq_is_empty(void) {
+    uint16_t r = txq_r;
+    uint16_t w = txq_w;
+    return r == w;
+}
+
+static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
+    uint16_t w = txq_w;
+    uint16_t next = (uint16_t)((w + 1) & TXQ_MASK);
+    if (next == txq_r) {
+        /* queue full */
+        return false;
+    }
+
+    uint8_t *p = txq[w];
+    p[0] = 0xEB;
+    p[1] = 0xD1;
+
+    p[2] = (uint8_t)(fid & 0xFF);
+    p[3] = (uint8_t)((fid >> 8) & 0xFF);
+
+    p[4] = (uint8_t)(lid & 0xFF);
+    p[5] = (uint8_t)((lid >> 8) & 0xFF);
+
+    p[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
+    p[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
+
+    memcpy(&p[8], data64, BYTES_PER_LINE);
+
+    /* publish write index last so reader never sees a half-filled packet */
+    txq_w = next;
+    return true;
+}
+
+static inline void arm_dma(uint32_t *dst) {
+    dma_channel_config c = dma_channel_get_default_config(dma_chan);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+    channel_config_set_read_increment(&c, false);
+    channel_config_set_write_increment(&c, true);
+    channel_config_set_dreq(&c, pio_get_dreq(pio, sm, false)); // RX
+
+    dma_channel_configure(
+        dma_chan,
+        &c,
+        dst,
+        &pio->rxf[sm],
+        WORDS_PER_LINE,
+        true
+    );
+}
+
+static inline void stop_capture(void) {
+    capture_enabled = false;
+    pio_sm_set_enabled(pio, sm, false);
+    dma_channel_abort(dma_chan);
+    dma_hw->ints0 = 1u << dma_chan;
+    pio_sm_clear_fifos(pio, sm);
+    pio_sm_restart(pio, sm);
+    using_a = true;
+}
+
+static inline void start_capture_window(void) {
+    capture_enabled = true;
+    pio_sm_clear_fifos(pio, sm);
+    pio_sm_restart(pio, sm);
+    using_a = true;
+    arm_dma(line_a);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static void __isr dma_irq0_handler(void) {
+    dma_hw->ints0 = 1u << dma_chan;
+    if (!capture_enabled) return;
+
+    uint32_t *buf = using_a ? line_a : line_b;
+
+    lines_ok++;
+
+    uint16_t this_raw = raw_line;
+    raw_line++;
+
+    if (want_frame && this_raw >= YOFF_LINES && this_raw < (YOFF_LINES + ACTIVE_H)) {
+        uint16_t line_id = (uint16_t)(this_raw - YOFF_LINES);
+
+        if (!txq_enqueue(frame_id, line_id, buf)) {
+            lines_drop++; /* queue overflow */
+        }
+    }
+
+    if (raw_line >= CAP_LINES) {
+        stop_capture();
+        if (want_frame) {
+            frames_done++;
+            want_frame = false;
+            frame_id++;
+        }
+    }
+
+    using_a = !using_a;
+    arm_dma(using_a ? line_a : line_b);
+}
+
+static void gpio_irq(uint gpio, uint32_t events) {
+    if (gpio != PIN_VSYNC) return;
+    if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+
+    vsync_edges++;
+
+    if (!armed) return;
+    if (capture_enabled) return; // ignore if we’re mid-frame
+    if (frames_done >= 100) return;
+
+    take_toggle = !take_toggle;          // every other VSYNC => ~30fps
+    want_frame = take_toggle;
+
+    raw_line = 0;
+    start_capture_window();
+}
+
+static void poll_cdc_commands(void) {
+    // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
+    while (tud_cdc_available()) {
+        uint8_t ch;
+        if (tud_cdc_read(&ch, 1) != 1) break;
+
+        if (ch == 'S' || ch == 's') {
+            armed = true;
+            /* IMPORTANT: do NOT printf here; keep binary stream clean once armed */
+        } else if (ch == 'X' || ch == 'x') {
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            printf("[EBD_IPKVM] armed=0 (host stop)\n");
+        } else if (ch == 'R' || ch == 'r') {
+            frames_done = 0;
+            frame_id = 0;
+            lines_ok = 0;
+            lines_drop = 0;
+            usb_drops = 0;
+            vsync_edges = 0;
+            take_toggle = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            printf("[EBD_IPKVM] reset counters\n");
+        } else if (ch == 'Q' || ch == 'q') {
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            printf("[EBD_IPKVM] parked\n");
+            while (true) { tud_task(); sleep_ms(50); }
+        }
+    }
+}
+
+static inline void service_txq(void) {
+    if (!tud_cdc_connected()) return;
+
+    bool wrote_any = false;
+
+    while (true) {
+        uint16_t r, w;
+        uint32_t s = save_and_disable_interrupts();
+        r = txq_r;
+        w = txq_w;
+        restore_interrupts(s);
+
+        if (r == w) break; /* empty */
+
+        /* Need room for one whole packet so we never partial-write a packet */
+        if (tud_cdc_write_available() < (int)PKT_BYTES) break;
+
+        uint32_t n = tud_cdc_write(txq[r], PKT_BYTES);
+        if (n != PKT_BYTES) {
+            usb_drops++;
+            break;
+        }
+
+        s = save_and_disable_interrupts();
+        txq_r = (uint16_t)((r + 1) & TXQ_MASK);
+        restore_interrupts(s);
+
+        wrote_any = true;
+    }
+
+    if (wrote_any) {
+        tud_cdc_write_flush();
+    }
+}
+
+int main(void) {
+    stdio_init_all();
+    sleep_ms(1200);
+
+    printf("\n[EBD_IPKVM] USB packet stream @ ~30fps, capture 100 frames\n");
+    printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
+
+    // SIO GPIO inputs + pulls (sane when Mac is off)
+    gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_pull_down(PIN_PIXCLK);
+    gpio_init(PIN_VIDEO);  gpio_set_dir(PIN_VIDEO,  GPIO_IN); gpio_pull_down(PIN_VIDEO);
+    gpio_init(PIN_HSYNC);  gpio_set_dir(PIN_HSYNC,  GPIO_IN); gpio_pull_up(PIN_HSYNC);
+
+    // VSYNC must remain SIO GPIO for IRQ to work
+    gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_pull_up(PIN_VSYNC);
+
+    // Clear any stale IRQ state, then enable callback
+    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL);
+    gpio_set_irq_enabled_with_callback(
+        PIN_VSYNC,
+        GPIO_IRQ_EDGE_FALL,
+        true,
+        &gpio_irq
+    );
+
+    // Hand ONLY the pins PIO needs to PIO0
+    gpio_set_function(PIN_PIXCLK, GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_HSYNC,  GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_VIDEO,  GPIO_FUNC_PIO0);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, PIN_PIXCLK, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, PIN_HSYNC,  1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, PIN_VIDEO,  1, false);
+
+    uint offset = pio_add_program(pio, &classic_line_program);
+    classic_line_program_init(pio, sm, offset, PIN_VIDEO);
+
+    dma_chan = dma_claim_unused_channel(true);
+    dma_channel_set_irq0_enabled(dma_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_irq0_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    stop_capture();
+    txq_reset();
+
+    absolute_time_t next = make_timeout_time_ms(1000);
+    uint32_t last_lines = 0;
+
+    while (true) {
+        tud_task();
+        poll_cdc_commands();
+
+        /* Send queued binary packets from thread context (NOT IRQ). */
+        service_txq();
+
+        /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
+        if (!armed && !capture_enabled && txq_is_empty()) {
+            if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
+                next = delayed_by_ms(next, 1000);
+
+                uint32_t l = lines_ok;
+                uint32_t per_s = l - last_lines;
+                last_lines = l;
+
+                uint32_t ve = vsync_edges;
+                vsync_edges = 0;
+
+                printf("[EBD_IPKVM] armed=%d cap=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu frames=%lu/100\n",
+                       armed ? 1 : 0,
+                       capture_enabled ? 1 : 0,
+                       (unsigned long)per_s,
+                       (unsigned long)l,
+                       (unsigned long)lines_drop,
+                       (unsigned long)usb_drops,
+                       (unsigned long)ve,
+                       (unsigned long)frames_done);
+            }
+
+            if (frames_done >= 100) {
+                printf("[EBD_IPKVM] done (100 frames). Send 'R' then 'S' to run again.\n");
+                /* park until host resets */
+                while (true) { tud_task(); poll_cdc_commands(); sleep_ms(50); }
+            }
+        }
+
+        tight_loop_contents();
+    }
+}

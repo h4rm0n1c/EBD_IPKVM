@@ -1,0 +1,22 @@
+/build/
+/frames/
+
+# Pico/RP2040 build artifacts (belt + suspenders)
+*.uf2
+*.elf
+*.bin
+*.hex
+*.map
+*.dis
+*.o
+*.a
+*.d
+*.log
+
+# Editor/OS noise
+*~
+.*.swp
+.*.swo
+.DS_Store
+.vscode/
+.idea/
