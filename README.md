@@ -45,6 +45,7 @@ This test script:
 - Waits briefly after opening the CDC port (default 0.25s) to allow Pico boot.
 - Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
 - Adjust the boot wait with `--boot-wait=SECONDS` if needed.
+- Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale).
 

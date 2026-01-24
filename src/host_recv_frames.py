@@ -3,6 +3,7 @@ import os, sys, time, struct, fcntl, termios, select
 
 SEND_RESET = True
 BOOT_WAIT = 0.25
+DIAG_SECS = 0.0
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -13,6 +14,13 @@ for arg in sys.argv[1:]:
             BOOT_WAIT = float(value)
         except ValueError:
             print(f"[host] invalid --boot-wait value: {value}")
+            sys.exit(2)
+    elif arg.startswith("--diag-secs="):
+        value = arg.split("=", 1)[1]
+        try:
+            DIAG_SECS = float(value)
+        except ValueError:
+            print(f"[host] invalid --diag-secs value: {value}")
             sys.exit(2)
     else:
         ARGS.append(arg)
@@ -93,6 +101,27 @@ set_raw_and_dtr(fd)
 if BOOT_WAIT > 0:
     time.sleep(BOOT_WAIT)
 
+if DIAG_SECS > 0:
+    end_diag = time.time() + DIAG_SECS
+    print(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
+    diag_buf = bytearray()
+    while time.time() < end_diag:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            continue
+        chunk = os.read(fd, 1024)
+        if not chunk:
+            continue
+        diag_buf.extend(chunk)
+        while b"\n" in diag_buf:
+            line, _, remainder = diag_buf.partition(b"\n")
+            diag_buf = bytearray(remainder)
+            try:
+                text = line.decode("utf-8", errors="replace")
+            except UnicodeDecodeError:
+                text = repr(line)
+            print(f"[host][diag] {text}")
+
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
     os.write(fd, b"R")
@@ -100,7 +129,7 @@ if SEND_RESET:
 os.write(fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s)")
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
