@@ -35,6 +35,7 @@ The firmware is host-controlled over the same CDC channel:
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
 | `G` | Report GPIO input states and edge counts over a short sampling window. |
 | `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
+| `T` | Transmit a synthetic test frame (alternating black/white lines). |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.

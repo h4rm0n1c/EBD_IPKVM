@@ -60,6 +60,9 @@ static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
 static volatile uint32_t diag_video_edges = 0;
+static volatile bool test_frame_active = false;
+static uint16_t test_line = 0;
+static uint8_t test_line_buf[BYTES_PER_LINE];
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -96,7 +99,7 @@ static inline bool txq_is_empty(void) {
 }
 
 static inline bool can_emit_text(void) {
-    return !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
+    return !capture_enabled && !test_frame_active && txq_is_empty() && (!armed || frames_done >= 100);
 }
 
 static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
@@ -279,6 +282,27 @@ static void run_gpio_diag(void) {
            (unsigned long)diag_video_edges);
 }
 
+static void service_test_frame(void) {
+    if (!test_frame_active || capture_enabled) return;
+
+    while (test_frame_active) {
+        uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
+        memset(test_line_buf, fill, BYTES_PER_LINE);
+        if (!txq_enqueue(frame_id, test_line, test_line_buf)) {
+            break;
+        }
+
+        test_line++;
+        if (test_line >= ACTIVE_H) {
+            test_frame_active = false;
+            test_line = 0;
+            frame_id++;
+            frames_done++;
+            break;
+        }
+    }
+}
+
 static void poll_cdc_commands(void) {
     // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
     while (tud_cdc_available()) {
@@ -293,6 +317,8 @@ static void poll_cdc_commands(void) {
             want_frame = false;
             stop_capture();
             txq_reset();
+            test_frame_active = false;
+            test_line = 0;
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] armed=0 (host stop)\n");
             }
@@ -308,6 +334,8 @@ static void poll_cdc_commands(void) {
             done_latched = false;
             stop_capture();
             txq_reset();
+            test_frame_active = false;
+            test_line = 0;
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] reset counters\n");
             }
@@ -316,6 +344,8 @@ static void poll_cdc_commands(void) {
             want_frame = false;
             stop_capture();
             txq_reset();
+            test_frame_active = false;
+            test_line = 0;
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] parked\n");
             }
@@ -351,6 +381,13 @@ static void poll_cdc_commands(void) {
                 raw_line = 0;
                 start_capture_window();
             }
+        } else if (ch == 'T' || ch == 't') {
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            test_frame_active = true;
+            test_line = 0;
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();
@@ -449,10 +486,11 @@ int main(void) {
         poll_cdc_commands();
 
         /* Send queued binary packets from thread context (NOT IRQ). */
+        service_test_frame();
         service_txq();
 
         /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
-        bool can_report = !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
+        bool can_report = !capture_enabled && !test_frame_active && txq_is_empty() && (!armed || frames_done >= 100);
         if (can_report) {
             if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
                 next = delayed_by_ms(next, 1000);

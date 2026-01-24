@@ -8,6 +8,8 @@ BOOT_WAIT = 12.0
 DIAG_SECS = 12.0
 FORCE_AFTER = 2.0
 FORCE_START = False
+TEST_AFTER = 0.0
+TEST_START = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -32,14 +34,25 @@ for arg in sys.argv[1:]:
             sys.exit(2)
     elif arg == "--force-start":
         FORCE_START = True
+    elif arg == "--test-frame":
+        TEST_START = True
     elif arg == "--no-force":
         FORCE_AFTER = 0.0
+    elif arg == "--no-test":
+        TEST_AFTER = 0.0
     elif arg.startswith("--force-after="):
         value = arg.split("=", 1)[1]
         try:
             FORCE_AFTER = float(value)
         except ValueError:
             print(f"[host] invalid --force-after value: {value}")
+            sys.exit(2)
+    elif arg.startswith("--test-after="):
+        value = arg.split("=", 1)[1]
+        try:
+            TEST_AFTER = float(value)
+        except ValueError:
+            print(f"[host] invalid --test-after value: {value}")
             sys.exit(2)
     else:
         ARGS.append(arg)
@@ -153,7 +166,9 @@ if BOOT_WAIT > 0:
 if SEND_RESET:
     os.write(fd, b"R")
     time.sleep(0.05)
-if FORCE_START:
+if TEST_START:
+    os.write(fd, b"T")
+elif FORCE_START:
     os.write(fd, b"F")
 else:
     os.write(fd, b"S")
@@ -171,6 +186,7 @@ last_print = time.time()
 last_rx = time.time()
 start_rx = last_rx
 force_sent = FORCE_START
+test_sent = TEST_START
 
 try:
     while done_count < MAX_FRAMES:
@@ -181,6 +197,10 @@ try:
                 os.write(fd, b"F")
                 force_sent = True
                 print(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
+            if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
+                os.write(fd, b"T")
+                test_sent = True
+                print(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:
                 print("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now
