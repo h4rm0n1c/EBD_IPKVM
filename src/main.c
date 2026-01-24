@@ -407,6 +407,7 @@ static void poll_cdc_commands(void) {
             txq_reset();
             test_frame_active = true;
             test_line = 0;
+            send_probe_packet();
         } else if (ch == 'U' || ch == 'u') {
             send_probe_packet();
         } else if (ch == 'G' || ch == 'g') {

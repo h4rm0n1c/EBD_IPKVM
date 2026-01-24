@@ -18,3 +18,4 @@
 - 2026-01-26: Added a synthetic test-frame CDC command and host option to isolate USB streaming from capture issues.
 - 2026-01-26: Prevented force-capture fallback from firing during synthetic test-frame runs.
 - 2026-01-26: Added a probe packet command and host probe option to sanity-check CDC raw bytes.
+- 2026-01-26: Emit a probe packet when starting a synthetic test frame to confirm CDC output immediately.
