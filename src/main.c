@@ -64,6 +64,7 @@ static volatile bool test_frame_active = false;
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
 static uint8_t probe_buf[PKT_BYTES];
+static volatile uint8_t probe_pending = 0;
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -131,9 +132,9 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
     return true;
 }
 
-static void send_probe_packet(void) {
-    if (!tud_cdc_connected()) return;
-    if (tud_cdc_write_available() < (int)PKT_BYTES) return;
+static bool try_send_probe_packet(void) {
+    if (!tud_cdc_connected()) return false;
+    if (tud_cdc_write_available() < (int)PKT_BYTES) return false;
 
     probe_buf[0] = 0xEB;
     probe_buf[1] = 0xD1;
@@ -147,6 +148,11 @@ static void send_probe_packet(void) {
 
     tud_cdc_write(probe_buf, PKT_BYTES);
     tud_cdc_write_flush();
+    return true;
+}
+
+static inline void request_probe_packet(void) {
+    probe_pending = 1;
 }
 
 static inline void arm_dma(uint32_t *dst) {
@@ -407,9 +413,9 @@ static void poll_cdc_commands(void) {
             txq_reset();
             test_frame_active = true;
             test_line = 0;
-            send_probe_packet();
+            request_probe_packet();
         } else if (ch == 'U' || ch == 'u') {
-            send_probe_packet();
+            request_probe_packet();
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();
@@ -508,6 +514,9 @@ int main(void) {
         poll_cdc_commands();
 
         /* Send queued binary packets from thread context (NOT IRQ). */
+        if (probe_pending && try_send_probe_packet()) {
+            probe_pending = 0;
+        }
         service_test_frame();
         service_txq();
 
