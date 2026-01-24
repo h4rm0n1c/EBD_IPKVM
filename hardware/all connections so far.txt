@@ -1,0 +1,43 @@
+GP pins are on U1
+
+U1 - Raspberry Pi Pico W
+U2 - 74LVC245
+U3 - ULN2803APG
+
+C1 - ceramic cap "104"
+
+U1 GP0 TO U2 PIN 18
+U1 GP1 TO U2 PIN 17
+U1 GP2 TO U2 PIN 15
+U1 GP3 TO U2 PIN 14
+U1 GP4 TO U2 PIN 13
+U1 GP5 TO U2 PIN 12
+U1 GP6 TO U2 PIN 11
+U1 GP7 TO U2 PIN 16
+U1 GND to Ground
+
+U2 PIN 10 TO GROUND BUS
+U2 pin 10 to C1
+C1 to U2 pin 20
+U2 pin 1 to U2 pin 20
+U2 pin 20 to 3.3vcc from pico pin 36 3v3 out
+U2 pin 19 to GND
+U2 A1-A8 (PINS 2-9), CONNECTED VIA 10K RESISTOR NETWORK TO GROUND.
+
+
+U3 PIN 7 TO U1 GP8
+U3 PIN 8 TO U1 GP9
+U3 PIN 6 TO U1 GP10
+U3 PIN 5 TO U1 GP11
+U3 PIN 4 TO U1 GP12 
+U3 PIN 3 TO U1 GP13
+U3 PIN 2 TO U1 GP15
+U3 PIN 1 TO U1 GP14
+U3 PIN 9 TO GROUND
+U3 4,5,6,7,8 connected to pin 9/GND via 6 pin 10k resistor pack, 
+
+U1 VSYS TO +5VSB from ATX PSU
+
+this arrangement allowed me to sit the chips next to eachother on veroboard and let the tracks make most of the connections, its also why the ordering seems weird where I've had to cut tracks to skip ground lines and then bodge in a gpio from further along to go to places.
+
+1
