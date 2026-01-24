@@ -7,3 +7,4 @@
 - 2026-01-26: Reset counters before arming capture in `host_recv_frames.py` to avoid stale 100-frame runs.
 - 2026-01-26: Added a short boot wait after opening CDC in `host_recv_frames.py`, configurable via `--boot-wait`.
 - 2026-01-26: Added `--diag-secs` to `host_recv_frames.py` for printing ASCII status before arming capture.
+- 2026-01-26: Allow status output to continue after 100-frame completion and avoid parking the main loop.
