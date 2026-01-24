@@ -18,6 +18,9 @@ After any non-trivial change:
 - If it’s a design choice (not just refactor), add it to `docs/agent/decisions.md`.
 - If you learned a constraint/quirk, write it down in `docs/agent/notes.md`.
 
+## Reference sources
+- Use `/opt/MacDevDocs` (Apple legacy Mac documentation) as a local reference when relevant to this project.
+
 ## Preferred reporting style
 - Cite file paths.
 - Cite function names / symbols.
