@@ -4,8 +4,8 @@ import os, sys, time, struct, fcntl, termios, select
 SEND_RESET = True
 SEND_STOP = True
 SEND_BOOT = True
-BOOT_WAIT = 1.0
-DIAG_SECS = 5.0
+BOOT_WAIT = 12.0
+DIAG_SECS = 12.0
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -105,9 +105,6 @@ set_raw_and_dtr(fd)
 
 if SEND_BOOT:
     os.write(fd, b"P")
-    # Give the target time to power up or settle before capture.
-    if BOOT_WAIT > 0:
-        time.sleep(BOOT_WAIT)
 
 if SEND_STOP:
     os.write(fd, b"X")
@@ -133,6 +130,11 @@ if DIAG_SECS > 0:
             except UnicodeDecodeError:
                 text = repr(line)
             print(f"[host][diag] {text}")
+
+if BOOT_WAIT > 0:
+    remaining = BOOT_WAIT - DIAG_SECS
+    if remaining > 0:
+        time.sleep(remaining)
 
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:

@@ -2,6 +2,7 @@
 
 - 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
 - 2026-01-26: Defaulted host test helper to send ATX power-on before capture, wait with diagnostics, and request ATX shutdown on exit.
+- 2026-01-26: Adjusted host helper defaults to 12s boot wait with diagnostics during boot.
 - 2026-01-25: Initial repo scaffolding (README, agents.md, docs/*, .gitignore).
 - 2026-01-25: Documented availability of `/opt/MacDevDocs` as a local reference source.
 - 2026-01-24: Expanded documentation with current capture behavior, pin map, and USB CDC packet format for host tooling.
