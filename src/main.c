@@ -165,6 +165,7 @@ static void __isr dma_irq0_handler(void) {
             want_frame = false;
             frame_id++;
         }
+        return;
     }
 
     using_a = !using_a;
