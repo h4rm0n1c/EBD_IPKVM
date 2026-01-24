@@ -56,7 +56,6 @@ static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
-static volatile bool diag_active = false;
 static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
@@ -198,20 +197,6 @@ static void __isr dma_irq0_handler(void) {
 }
 
 static void gpio_irq(uint gpio, uint32_t events) {
-    if (diag_active) {
-        if (!(events & (GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE))) return;
-        if (gpio == PIN_PIXCLK) {
-            diag_pixclk_edges++;
-        } else if (gpio == PIN_HSYNC) {
-            diag_hsync_edges++;
-        } else if (gpio == PIN_VSYNC) {
-            diag_vsync_edges++;
-        } else if (gpio == PIN_VIDEO) {
-            diag_video_edges++;
-        }
-        return;
-    }
-
     if (gpio != PIN_VSYNC) return;
     if (!(events & GPIO_IRQ_EDGE_FALL)) return;
 
@@ -228,6 +213,19 @@ static void gpio_irq(uint gpio, uint32_t events) {
     start_capture_window();
 }
 
+static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
+                                         bool *prev_pixclk, bool *prev_hsync,
+                                         bool *prev_vsync, bool *prev_video) {
+    if (pixclk != *prev_pixclk) diag_pixclk_edges++;
+    if (hsync != *prev_hsync) diag_hsync_edges++;
+    if (vsync != *prev_vsync) diag_vsync_edges++;
+    if (video != *prev_video) diag_video_edges++;
+    *prev_pixclk = pixclk;
+    *prev_hsync = hsync;
+    *prev_vsync = vsync;
+    *prev_video = video;
+}
+
 static void run_gpio_diag(void) {
     const uint32_t diag_ms = 500;
 
@@ -241,31 +239,24 @@ static void run_gpio_diag(void) {
     gpio_set_function(PIN_VIDEO, GPIO_FUNC_SIO);
 
     reset_diag_counts();
-    diag_active = true;
 
-    gpio_acknowledge_irq(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-    gpio_acknowledge_irq(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-    gpio_acknowledge_irq(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-
-    gpio_set_irq_enabled(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
-    gpio_set_irq_enabled(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
-    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
-    gpio_set_irq_enabled(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true);
+    bool prev_pixclk = gpio_get(PIN_PIXCLK);
+    bool prev_hsync = gpio_get(PIN_HSYNC);
+    bool prev_vsync = gpio_get(PIN_VSYNC);
+    bool prev_video = gpio_get(PIN_VIDEO);
 
     absolute_time_t end = make_timeout_time_ms(diag_ms);
     while (absolute_time_diff_us(get_absolute_time(), end) > 0) {
         tud_task();
+        bool pixclk = gpio_get(PIN_PIXCLK);
+        bool hsync = gpio_get(PIN_HSYNC);
+        bool vsync = gpio_get(PIN_VSYNC);
+        bool video = gpio_get(PIN_VIDEO);
+        diag_accumulate_edges(pixclk, hsync, vsync, video,
+                              &prev_pixclk, &prev_hsync, &prev_vsync, &prev_video);
+        sleep_us(2);
         tight_loop_contents();
     }
-
-    diag_active = false;
-
-    gpio_set_irq_enabled(PIN_PIXCLK, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
-    gpio_set_irq_enabled(PIN_HSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
-    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
-    gpio_set_irq_enabled(PIN_VIDEO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
-    gpio_set_irq_enabled(PIN_VSYNC, GPIO_IRQ_EDGE_FALL, true);
 
     bool pixclk = gpio_get(PIN_PIXCLK);
     bool hsync = gpio_get(PIN_HSYNC);

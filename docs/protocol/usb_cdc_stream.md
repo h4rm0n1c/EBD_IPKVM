@@ -37,7 +37,8 @@ The firmware is host-controlled over the same CDC channel:
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.
-- Temporarily samples GPIO states and counts edges for PIXCLK/HSYNC/VSYNC/VIDEO.
+- Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
+- Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:
   - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
