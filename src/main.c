@@ -51,6 +51,7 @@ static volatile uint32_t usb_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
+static volatile bool done_latched = false;
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -164,6 +165,7 @@ static void __isr dma_irq0_handler(void) {
             want_frame = false;
             frame_id++;
         }
+        return;
     }
 
     using_a = !using_a;
@@ -211,6 +213,7 @@ static void poll_cdc_commands(void) {
             vsync_edges = 0;
             take_toggle = false;
             want_frame = false;
+            done_latched = false;
             stop_capture();
             txq_reset();
             printf("[EBD_IPKVM] reset counters\n");
@@ -315,7 +318,8 @@ int main(void) {
         service_txq();
 
         /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
-        if (!armed && !capture_enabled && txq_is_empty()) {
+        bool can_report = !capture_enabled && txq_is_empty() && (!armed || frames_done >= 100);
+        if (can_report) {
             if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
                 next = delayed_by_ms(next, 1000);
 
@@ -337,10 +341,9 @@ int main(void) {
                        (unsigned long)frames_done);
             }
 
-            if (frames_done >= 100) {
+            if (frames_done >= 100 && !done_latched) {
                 printf("[EBD_IPKVM] done (100 frames). Send 'R' then 'S' to run again.\n");
-                /* park until host resets */
-                while (true) { tud_task(); poll_cdc_commands(); sleep_ms(50); }
+                done_latched = true;
             }
         }
 

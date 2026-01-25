@@ -1,8 +1,35 @@
 #!/usr/bin/env python3
 import os, sys, time, struct, fcntl, termios, select
 
-DEV = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyACM0"
-OUTDIR = sys.argv[2] if len(sys.argv) > 2 else "frames"
+SEND_RESET = True
+SEND_STOP = True
+BOOT_WAIT = 0.25
+DIAG_SECS = 0.0
+ARGS = []
+for arg in sys.argv[1:]:
+    if arg == "--no-reset":
+        SEND_RESET = False
+    elif arg == "--no-stop":
+        SEND_STOP = False
+    elif arg.startswith("--boot-wait="):
+        value = arg.split("=", 1)[1]
+        try:
+            BOOT_WAIT = float(value)
+        except ValueError:
+            print(f"[host] invalid --boot-wait value: {value}")
+            sys.exit(2)
+    elif arg.startswith("--diag-secs="):
+        value = arg.split("=", 1)[1]
+        try:
+            DIAG_SECS = float(value)
+        except ValueError:
+            print(f"[host] invalid --diag-secs value: {value}")
+            sys.exit(2)
+    else:
+        ARGS.append(arg)
+
+DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
+OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
 MAX_FRAMES = 100
 
 W = 512
@@ -73,10 +100,43 @@ def pop_one_packet(buf: bytearray):
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
 set_raw_and_dtr(fd)
 
-# Tell Pico to start (host-controlled firmware expects this)
+# Give Pico time to reboot after opening the CDC port (if applicable).
+if BOOT_WAIT > 0:
+    time.sleep(BOOT_WAIT)
+
+if SEND_STOP:
+    os.write(fd, b"X")
+    time.sleep(0.05)
+
+if DIAG_SECS > 0:
+    end_diag = time.time() + DIAG_SECS
+    print(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
+    diag_buf = bytearray()
+    while time.time() < end_diag:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            continue
+        chunk = os.read(fd, 1024)
+        if not chunk:
+            continue
+        diag_buf.extend(chunk)
+        while b"\n" in diag_buf:
+            line, _, remainder = diag_buf.partition(b"\n")
+            diag_buf = bytearray(remainder)
+            try:
+                text = line.decode("utf-8", errors="replace")
+            except UnicodeDecodeError:
+                text = repr(line)
+            print(f"[host][diag] {text}")
+
+# Tell Pico to reset counters (optional) then start.
+if SEND_RESET:
+    os.write(fd, b"R")
+    time.sleep(0.05)
 os.write(fd, b"S")
 
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm")
+mode_note = "reset+start" if SEND_RESET else "start"
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -86,60 +146,67 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 
-while done_count < MAX_FRAMES:
-    r, _, _ = select.select([fd], [], [], 0.25)
-    if not r:
-        if time.time() - last_rx > 2.0:
-            print("[host] no data yet (is Pico armed + Mac running?)")
-            last_rx = time.time()
-        continue
-
-    chunk = os.read(fd, 8192)
-    if not chunk:
-        time.sleep(0.01)
-        continue
-
-    last_rx = time.time()
-    buf.extend(chunk)
-
-    while True:
-        pkt = pop_one_packet(buf)
-        if pkt is None:
-            break
-
-        frame_id = pkt[2] | (pkt[3] << 8)
-        line_id  = pkt[4] | (pkt[5] << 8)
-        plen     = pkt[6] | (pkt[7] << 8)
-
-        if plen != LINE_BYTES or line_id >= H:
+try:
+    while done_count < MAX_FRAMES:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            if time.time() - last_rx > 2.0:
+                print("[host] no data yet (is Pico armed + Mac running?)")
+                last_rx = time.time()
             continue
 
-        payload = pkt[8:8 + LINE_BYTES]
-        row = bytes_to_row64(payload)
+        chunk = os.read(fd, 8192)
+        if not chunk:
+            time.sleep(0.01)
+            continue
 
-        fm = frames.setdefault(frame_id, {})
-        if line_id not in fm:
-            fm[line_id] = row
+        last_rx = time.time()
+        buf.extend(chunk)
 
-        if len(fm) == H:
-            out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
-            rows = [fm[i] for i in range(H)]
-            write_pgm(out, rows)
-            print(f"[host] wrote {out} (frame_id={frame_id})")
-            done_count += 1
-            # free memory for this frame_id
-            del frames[frame_id]
-            if done_count >= MAX_FRAMES:
+        while True:
+            pkt = pop_one_packet(buf)
+            if pkt is None:
                 break
 
-    now = time.time()
-    if now - last_print > 1.0:
-        last_print = now
-        if frames:
-            newest = max(frames.keys())
-            have = len(frames[newest])
-            print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
-        else:
-            print(f"[host] done={done_count}/100 (waiting for packets)")
+            frame_id = pkt[2] | (pkt[3] << 8)
+            line_id  = pkt[4] | (pkt[5] << 8)
+            plen     = pkt[6] | (pkt[7] << 8)
+
+            if plen != LINE_BYTES or line_id >= H:
+                continue
+
+            payload = pkt[8:8 + LINE_BYTES]
+            row = bytes_to_row64(payload)
+
+            fm = frames.setdefault(frame_id, {})
+            if line_id not in fm:
+                fm[line_id] = row
+
+            if len(fm) == H:
+                out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
+                rows = [fm[i] for i in range(H)]
+                write_pgm(out, rows)
+                print(f"[host] wrote {out} (frame_id={frame_id})")
+                done_count += 1
+                # free memory for this frame_id
+                del frames[frame_id]
+                if done_count >= MAX_FRAMES:
+                    break
+
+        now = time.time()
+        if now - last_print > 1.0:
+            last_print = now
+            if frames:
+                newest = max(frames.keys())
+                have = len(frames[newest])
+                print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
+            else:
+                print(f"[host] done={done_count}/100 (waiting for packets)")
+finally:
+    if SEND_STOP:
+        try:
+            os.write(fd, b"X")
+        except OSError:
+            pass
 
 print("[host] complete.")
