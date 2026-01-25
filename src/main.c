@@ -75,10 +75,10 @@ static uint offset_fall_pixrise = 0;
 static uint offset_fall_pixfall = 0;
 static uint offset_rise_pixrise = 0;
 static uint offset_rise_pixfall = 0;
-static bool hsync_fall_edge = false;
+static bool hsync_fall_edge = true;
 static bool vsync_fall_edge = true;
-static bool pixclk_rise_edge = false;
-static bool video_inverted = true;
+static bool pixclk_rise_edge = true;
+static bool video_inverted = false;
 static void gpio_irq(uint gpio, uint32_t events);
 
 /* Ring buffer of complete line packets (72 bytes each). */
