@@ -28,3 +28,4 @@
 - 2026-01-25: Add CDC commands to toggle HSYNC/VSYNC edges at runtime for capture testing.
 - 2026-01-25: Fix missing gpio_irq forward declaration after adding runtime edge toggles.
 - 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.
+- 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
