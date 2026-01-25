@@ -16,6 +16,7 @@ Macintosh Classic KVM:
 - Signal conditioning:
   - PIXCLK and VIDEO are buffered through a 74HC14 Schmitt-trigger inverter before reaching the Pico inputs.
   - Firmware defaults to sampling PIXCLK on the falling edge and inverts captured VIDEO bits to restore polarity.
+  - Signal path is Mac → 74HC14 → 74LVC245 → Pico for PIXCLK/VIDEO.
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
@@ -28,6 +29,7 @@ Macintosh Classic KVM:
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
   - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
+  - Video polarity: `O` toggles firmware VIDEO inversion (stops capture + clears queue).
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 
 ## Host tooling
