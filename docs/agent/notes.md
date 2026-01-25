@@ -7,3 +7,4 @@
 - Firmware defaults to falling-edge PIXCLK sampling and VIDEO bit inversion to undo the 74HC14 inversion.
 - Use CDC command `O` to toggle VIDEO inversion if the capture looks unstable through the 74HC14 → 74LVC245 path.
 - `scripts/ab_capture.py` runs back-to-back capture runs with VIDEO inversion toggled for A/B comparison.
+- `scripts/cdc_cmd.py` can be used to send `I`/`G` and read ASCII output from the Pico.
