@@ -20,6 +20,7 @@ After any non-trivial change:
 
 ## Reference sources
 - Use `/opt/MacDevDocs` (Apple legacy Mac documentation) as a local reference when relevant to this project.
+- When external timing data is needed, use the web tool to fetch sources and cite the URL; note any access blocks (e.g., JS challenges).
 
 ## Preferred reporting style
 - Cite file paths.

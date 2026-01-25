@@ -334,6 +334,63 @@ static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bo
     *prev_video = video;
 }
 
+static void run_gpio_edge_rates(uint32_t diag_ms) {
+    armed = false;
+    want_frame = false;
+    stop_capture();
+    txq_reset();
+
+    gpio_set_function(PIN_PIXCLK, GPIO_FUNC_SIO);
+    gpio_set_function(PIN_HSYNC, GPIO_FUNC_SIO);
+    gpio_set_function(PIN_VIDEO, GPIO_FUNC_SIO);
+
+    reset_diag_counts();
+
+    bool prev_pixclk = gpio_get(PIN_PIXCLK);
+    bool prev_hsync = gpio_get(PIN_HSYNC);
+    bool prev_vsync = gpio_get(PIN_VSYNC);
+    bool prev_video = gpio_get(PIN_VIDEO);
+
+    absolute_time_t end = make_timeout_time_ms(diag_ms);
+    while (absolute_time_diff_us(get_absolute_time(), end) > 0) {
+        tud_task();
+        bool pixclk = gpio_get(PIN_PIXCLK);
+        bool hsync = gpio_get(PIN_HSYNC);
+        bool vsync = gpio_get(PIN_VSYNC);
+        bool video = gpio_get(PIN_VIDEO);
+        diag_accumulate_edges(pixclk, hsync, vsync, video,
+                              &prev_pixclk, &prev_hsync, &prev_vsync, &prev_video);
+        sleep_us(2);
+        tight_loop_contents();
+    }
+
+    bool pixclk = gpio_get(PIN_PIXCLK);
+    bool hsync = gpio_get(PIN_HSYNC);
+    bool vsync = gpio_get(PIN_VSYNC);
+    bool video = gpio_get(PIN_VIDEO);
+
+    gpio_set_function(PIN_PIXCLK, GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_HSYNC, GPIO_FUNC_PIO0);
+    gpio_set_function(PIN_VIDEO, GPIO_FUNC_PIO0);
+
+    double secs = diag_ms / 1000.0;
+    double pix_rate = diag_pixclk_edges / secs;
+    double hsync_rate = diag_hsync_edges / secs;
+    double vsync_rate = diag_vsync_edges / secs;
+    double video_rate = diag_video_edges / secs;
+
+    printf("[EBD_IPKVM] gpio rate: pixclk=%d hsync=%d vsync=%d video=%d secs=%.2f pixclk=%.1f/s hsync=%.1f/s vsync=%.1f/s video=%.1f/s\n",
+           pixclk ? 1 : 0,
+           hsync ? 1 : 0,
+           vsync ? 1 : 0,
+           video ? 1 : 0,
+           secs,
+           pix_rate,
+           hsync_rate,
+           vsync_rate,
+           video_rate);
+}
+
 static void run_gpio_diag(void) {
     const uint32_t diag_ms = 500;
 
@@ -502,6 +559,10 @@ static void poll_cdc_commands(void) {
             if (can_emit_text()) {
                 run_gpio_diag();
             }
+        } else if (ch == 'E' || ch == 'e') {
+            if (can_emit_text()) {
+                run_gpio_edge_rates(1000);
+            }
         } else if (ch == 'H' || ch == 'h') {
             hsync_fall_edge = !hsync_fall_edge;
             armed = false;
@@ -617,6 +678,7 @@ int main(void) {
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
+    printf("[EBD_IPKVM] Edge rates: send 'E' for edges/sec on PIXCLK/HSYNC/VSYNC/VIDEO.\n");
     printf("[EBD_IPKVM] Edge toggles: 'H' HSYNC edge, 'K' PIXCLK edge, 'V' VSYNC edge.\n");
     printf("[EBD_IPKVM] Video polarity: 'O' toggles VIDEO inversion, '0' clears, '1' sets.\n");
 

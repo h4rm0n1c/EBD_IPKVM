@@ -24,12 +24,13 @@ Macintosh Classic KVM:
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.
-- USB CDC streaming:
-  - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
-  - Packets are fixed-size and headered (`0xEB 0xD1`).
-  - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
-  - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
-  - Video polarity: `O` toggles firmware VIDEO inversion (stops capture + clears queue); `0` clears, `1` sets.
+  - USB CDC streaming:
+    - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
+    - Packets are fixed-size and headered (`0xEB 0xD1`).
+    - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
+    - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
+    - Edge rates: `E` samples GPIO edges/sec for PIXCLK/HSYNC/VSYNC/VIDEO over a 1s window.
+    - Video polarity: `O` toggles firmware VIDEO inversion (stops capture + clears queue); `0` clears, `1` sets.
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 
 ## Host tooling
