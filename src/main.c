@@ -541,6 +541,24 @@ static void poll_cdc_commands(void) {
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] video_inverted=%d\n", video_inverted ? 1 : 0);
             }
+        } else if (ch == '0') {
+            video_inverted = false;
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] video_inverted=0\n");
+            }
+        } else if (ch == '1') {
+            video_inverted = true;
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] video_inverted=1\n");
+            }
         }
     }
 }
@@ -600,7 +618,7 @@ int main(void) {
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     printf("[EBD_IPKVM] Edge toggles: 'H' HSYNC edge, 'K' PIXCLK edge, 'V' VSYNC edge.\n");
-    printf("[EBD_IPKVM] Video polarity: 'O' toggles VIDEO inversion.\n");
+    printf("[EBD_IPKVM] Video polarity: 'O' toggles VIDEO inversion, '0' clears, '1' sets.\n");
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
     gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_disable_pulls(PIN_PIXCLK);
