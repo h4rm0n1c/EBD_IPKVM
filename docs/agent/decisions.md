@@ -10,3 +10,4 @@
 - 2026-01-26: Emit a probe packet alongside synthetic test frames for immediate CDC verification.
 - 2026-01-26: Add an on-demand debug command to expose CDC/queue state without a scope.
 - 2026-01-25: Switch line-capture trigger to HSYNC falling edge to validate sync polarity.
+- 2026-01-25: Set horizontal skip to 178 PIXCLK cycles after HSYNC falling edge based on VCD sweep results.
