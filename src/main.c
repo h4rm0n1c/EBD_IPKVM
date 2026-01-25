@@ -75,6 +75,7 @@ static uint offset_fall = 0;
 static uint offset_rise = 0;
 static bool hsync_fall_edge = true;
 static bool vsync_fall_edge = true;
+static void gpio_irq(uint gpio, uint32_t events);
 
 /* Ring buffer of complete line packets (72 bytes each). */
 static uint8_t txq[TXQ_DEPTH][PKT_BYTES];
