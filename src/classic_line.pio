@@ -1,4 +1,4 @@
-.program classic_line_fall
+.program classic_line_fall_pixrise
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 high->low)
@@ -27,7 +27,7 @@ xoff23:
     wait 0 gpio 0
     jmp x-- xoff23
 
-    ; Capture 512 bits as 16*32
+    ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
 cap_block:
     set x, 31
@@ -41,7 +41,50 @@ cap32:
     jmp start
 .wrap
 
-.program classic_line_rise
+.program classic_line_fall_pixfall
+
+; One line capture:
+;   wait HSYNC (GPIO2 high->low)
+;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   capture 512 VIDEO bits from IN base (GPIO3)
+;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
+
+.wrap_target
+start:
+    wait 1 gpio 2
+    wait 0 gpio 2
+
+    ; XOFF: 5*31 + 23 clocks
+    set y, 4
+xoff_b31:
+    set x, 30
+xoff31:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- xoff31
+    jmp y-- xoff_b31
+
+    set x, 22
+xoff23:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- xoff23
+
+    ; Capture 512 bits as 16*32 (PIXCLK falling edge)
+    set y, 15
+cap_block:
+    set x, 31
+cap32:
+    wait 0 gpio 0
+    in  pins, 1
+    wait 1 gpio 0
+    jmp x-- cap32
+    jmp y-- cap_block
+
+    jmp start
+.wrap
+
+.program classic_line_rise_pixrise
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
@@ -70,7 +113,7 @@ xoff23:
     wait 0 gpio 0
     jmp x-- xoff23
 
-    ; Capture 512 bits as 16*32
+    ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
 cap_block:
     set x, 31
@@ -84,18 +127,77 @@ cap32:
     jmp start
 .wrap
 
+.program classic_line_rise_pixfall
+
+; One line capture:
+;   wait HSYNC (GPIO2 low->high)
+;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   capture 512 VIDEO bits from IN base (GPIO3)
+;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
+
+.wrap_target
+start:
+    wait 0 gpio 2
+    wait 1 gpio 2
+
+    ; XOFF: 5*31 + 23 clocks
+    set y, 4
+xoff_b31:
+    set x, 30
+xoff31:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- xoff31
+    jmp y-- xoff_b31
+
+    set x, 22
+xoff23:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- xoff23
+
+    ; Capture 512 bits as 16*32 (PIXCLK falling edge)
+    set y, 15
+cap_block:
+    set x, 31
+cap32:
+    wait 0 gpio 0
+    in  pins, 1
+    wait 1 gpio 0
+    jmp x-- cap32
+    jmp y-- cap_block
+
+    jmp start
+.wrap
+
 % c-sdk {
 #include "hardware/pio.h"
-static inline void classic_line_fall_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
-    pio_sm_config c = classic_line_fall_program_get_default_config(offset);
+static inline void classic_line_fall_pixrise_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
+    pio_sm_config c = classic_line_fall_pixrise_program_get_default_config(offset);
     sm_config_set_in_pins(&c, pin_video);
     sm_config_set_in_shift(&c, false, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
     pio_sm_init(pio, sm, offset, &c);
 }
 
-static inline void classic_line_rise_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
-    pio_sm_config c = classic_line_rise_program_get_default_config(offset);
+static inline void classic_line_fall_pixfall_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
+    pio_sm_config c = classic_line_fall_pixfall_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, pin_video);
+    sm_config_set_in_shift(&c, false, true, 32);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+static inline void classic_line_rise_pixrise_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
+    pio_sm_config c = classic_line_rise_pixrise_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, pin_video);
+    sm_config_set_in_shift(&c, false, true, 32);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+static inline void classic_line_rise_pixfall_program_init(PIO pio, uint sm, uint offset, uint pin_video) {
+    pio_sm_config c = classic_line_rise_pixfall_program_get_default_config(offset);
     sm_config_set_in_pins(&c, pin_video);
     sm_config_set_in_shift(&c, false, true, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);

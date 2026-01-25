@@ -27,3 +27,4 @@
 - 2026-01-25: Tune horizontal skip to 178 PIXCLK cycles based on VCD reconstruction sweep.
 - 2026-01-25: Add CDC commands to toggle HSYNC/VSYNC edges at runtime for capture testing.
 - 2026-01-25: Fix missing gpio_irq forward declaration after adding runtime edge toggles.
+- 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.

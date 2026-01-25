@@ -19,10 +19,10 @@ Tap raw 1-bpp video + sync, capture with PIO+DMA, and stream to a host UI.
 
 ## Capture geometry
 - Active video: 512×342 (1 bpp)
-- Horizontal offset: 178 PIXCLK cycles after HSYNC falling edge (PIO skip loop)
+- Horizontal offset: 178 PIXCLK cycles after the selected HSYNC edge (PIO skip loop)
 - Vertical offset: 28 HSYNCs after VSYNC fall
 - Capture window: 370 HSYNCs total (28 VBL + 342 active)
-- Line capture begins on HSYNC falling edge (high→low).
+- Line capture begins on the selected HSYNC edge.
 
 ## USB stream (CDC)
 Each line is emitted as a 72-byte packet:
@@ -51,7 +51,7 @@ This test script:
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale).
-- Edge toggles for testing: send `H` to flip HSYNC edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
+- Edge toggles for testing: send `H` to flip HSYNC edge, `K` to flip PIXCLK edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)

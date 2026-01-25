@@ -16,7 +16,7 @@ Macintosh Classic KVM:
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
-- Each line waits for HSYNC falling edge, skips 178 PIXCLK cycles, then samples 512 bits.
+- Each line waits for the selected HSYNC edge, skips 178 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.
@@ -24,7 +24,7 @@ Macintosh Classic KVM:
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
-  - Edge testing: `H` toggles HSYNC edge, `V` toggles VSYNC edge (stops capture + clears queue).
+  - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 
 ## Host tooling
