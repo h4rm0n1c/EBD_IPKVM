@@ -30,7 +30,7 @@
 #define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
 
 /* TX queue: power-of-two depth so we can mask wrap. */
-#define TXQ_DEPTH 32
+#define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
 
 static uint32_t line_a[WORDS_PER_LINE];
@@ -65,11 +65,20 @@ static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
 static uint8_t probe_buf[PKT_BYTES];
 static volatile uint8_t probe_pending = 0;
+static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 
 static int dma_chan;
 static PIO pio = pio0;
 static uint sm = 0;
+static uint offset_fall_pixrise = 0;
+static uint offset_fall_pixfall = 0;
+static uint offset_rise_pixrise = 0;
+static uint offset_rise_pixfall = 0;
+static bool hsync_fall_edge = false;
+static bool vsync_fall_edge = true;
+static bool pixclk_rise_edge = true;
+static void gpio_irq(uint gpio, uint32_t events);
 
 /* Ring buffer of complete line packets (72 bytes each). */
 static uint8_t txq[TXQ_DEPTH][PKT_BYTES];
@@ -135,34 +144,51 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
 
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_connected()) return false;
-    if (tud_cdc_write_available() < (int)PKT_BYTES) return false;
 
-    probe_buf[0] = 0xEB;
-    probe_buf[1] = 0xD1;
-    probe_buf[2] = 0xAA;
-    probe_buf[3] = 0x55;
-    probe_buf[4] = 0x34;
-    probe_buf[5] = 0x12;
-    probe_buf[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
-    probe_buf[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
-    memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
+    if (probe_offset == 0) {
+        probe_buf[0] = 0xEB;
+        probe_buf[1] = 0xD1;
+        probe_buf[2] = 0xAA;
+        probe_buf[3] = 0x55;
+        probe_buf[4] = 0x34;
+        probe_buf[5] = 0x12;
+        probe_buf[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
+        probe_buf[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
+        memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
+    }
 
-    tud_cdc_write(probe_buf, PKT_BYTES);
+    while (probe_offset < PKT_BYTES) {
+        int avail = tud_cdc_write_available();
+        if (avail <= 0) return false;
+        uint32_t to_write = (uint32_t)avail;
+        uint32_t remain = (uint32_t)(PKT_BYTES - probe_offset);
+        if (to_write > remain) {
+            to_write = remain;
+        }
+        uint32_t wrote = tud_cdc_write(&probe_buf[probe_offset], to_write);
+        if (wrote == 0) return false;
+        probe_offset = (uint16_t)(probe_offset + wrote);
+    }
+
     tud_cdc_write_flush();
     return true;
 }
 
 static inline void request_probe_packet(void) {
+    probe_offset = 0;
     probe_pending = 1;
 }
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
            armed ? 1 : 0,
            capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
            probe_pending ? 1 : 0,
+           hsync_fall_edge ? "fall" : "rise",
+           vsync_fall_edge ? "fall" : "rise",
+           pixclk_rise_edge ? "rise" : "fall",
            (unsigned)txq_r,
            (unsigned)txq_w,
            tud_cdc_write_available(),
@@ -197,6 +223,32 @@ static inline void stop_capture(void) {
     pio_sm_clear_fifos(pio, sm);
     pio_sm_restart(pio, sm);
     using_a = true;
+}
+
+static void configure_pio_program(void) {
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+    pio_sm_restart(pio, sm);
+    if (hsync_fall_edge) {
+        if (pixclk_rise_edge) {
+            classic_line_fall_pixrise_program_init(pio, sm, offset_fall_pixrise, PIN_VIDEO);
+        } else {
+            classic_line_fall_pixfall_program_init(pio, sm, offset_fall_pixfall, PIN_VIDEO);
+        }
+    } else {
+        if (pixclk_rise_edge) {
+            classic_line_rise_pixrise_program_init(pio, sm, offset_rise_pixrise, PIN_VIDEO);
+        } else {
+            classic_line_rise_pixfall_program_init(pio, sm, offset_rise_pixfall, PIN_VIDEO);
+        }
+    }
+    using_a = true;
+}
+
+static void configure_vsync_irq(void) {
+    uint32_t edge = vsync_fall_edge ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
+    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
+    gpio_set_irq_enabled_with_callback(PIN_VSYNC, edge, true, &gpio_irq);
 }
 
 static inline void start_capture_window(void) {
@@ -243,7 +295,11 @@ static void __isr dma_irq0_handler(void) {
 
 static void gpio_irq(uint gpio, uint32_t events) {
     if (gpio != PIN_VSYNC) return;
-    if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+    if (vsync_fall_edge) {
+        if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+    } else {
+        if (!(events & GPIO_IRQ_EDGE_RISE)) return;
+    }
 
     vsync_edges++;
 
@@ -439,6 +495,36 @@ static void poll_cdc_commands(void) {
             if (can_emit_text()) {
                 run_gpio_diag();
             }
+        } else if (ch == 'H' || ch == 'h') {
+            hsync_fall_edge = !hsync_fall_edge;
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            configure_pio_program();
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] hsync_edge=%s\n", hsync_fall_edge ? "fall" : "rise");
+            }
+        } else if (ch == 'K' || ch == 'k') {
+            pixclk_rise_edge = !pixclk_rise_edge;
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            configure_pio_program();
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] pixclk_edge=%s\n", pixclk_rise_edge ? "rise" : "fall");
+            }
+        } else if (ch == 'V' || ch == 'v') {
+            vsync_fall_edge = !vsync_fall_edge;
+            armed = false;
+            want_frame = false;
+            stop_capture();
+            txq_reset();
+            configure_vsync_irq();
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] vsync_edge=%s\n", vsync_fall_edge ? "fall" : "rise");
+            }
         }
     }
 }
@@ -447,6 +533,7 @@ static inline void service_txq(void) {
     if (!tud_cdc_connected()) return;
 
     bool wrote_any = false;
+    static uint16_t txq_offset = 0;
 
     while (true) {
         uint16_t r, w;
@@ -457,20 +544,30 @@ static inline void service_txq(void) {
 
         if (r == w) break; /* empty */
 
-        /* Need room for one whole packet so we never partial-write a packet */
-        if (tud_cdc_write_available() < (int)PKT_BYTES) break;
+        int avail = tud_cdc_write_available();
+        if (avail <= 0) break;
 
-        uint32_t n = tud_cdc_write(txq[r], PKT_BYTES);
-        if (n != PKT_BYTES) {
+        uint32_t remain = (uint32_t)(PKT_BYTES - txq_offset);
+        uint32_t to_write = (uint32_t)avail;
+        if (to_write > remain) {
+            to_write = remain;
+        }
+
+        uint32_t n = tud_cdc_write(&txq[r][txq_offset], to_write);
+        if (n == 0) {
             usb_drops++;
             break;
         }
 
-        s = save_and_disable_interrupts();
-        txq_r = (uint16_t)((r + 1) & TXQ_MASK);
-        restore_interrupts(s);
-
+        txq_offset = (uint16_t)(txq_offset + n);
         wrote_any = true;
+
+        if (txq_offset >= PKT_BYTES) {
+            txq_offset = 0;
+            s = save_and_disable_interrupts();
+            txq_r = (uint16_t)((r + 1) & TXQ_MASK);
+            restore_interrupts(s);
+        }
     }
 
     if (wrote_any) {
@@ -486,24 +583,20 @@ int main(void) {
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
+    printf("[EBD_IPKVM] Edge toggles: 'H' HSYNC edge, 'K' PIXCLK edge, 'V' VSYNC edge.\n");
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
-    gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_pull_down(PIN_PIXCLK);
-    gpio_init(PIN_VIDEO);  gpio_set_dir(PIN_VIDEO,  GPIO_IN); gpio_pull_down(PIN_VIDEO);
-    gpio_init(PIN_HSYNC);  gpio_set_dir(PIN_HSYNC,  GPIO_IN); gpio_pull_up(PIN_HSYNC);
+    gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_disable_pulls(PIN_PIXCLK);
+    gpio_init(PIN_VIDEO);  gpio_set_dir(PIN_VIDEO,  GPIO_IN); gpio_disable_pulls(PIN_VIDEO);
+    gpio_init(PIN_HSYNC);  gpio_set_dir(PIN_HSYNC,  GPIO_IN); gpio_disable_pulls(PIN_HSYNC);
 
     // VSYNC must remain SIO GPIO for IRQ to work
-    gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_pull_up(PIN_VSYNC);
+    gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_disable_pulls(PIN_VSYNC);
     gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
 
     // Clear any stale IRQ state, then enable callback
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL);
-    gpio_set_irq_enabled_with_callback(
-        PIN_VSYNC,
-        GPIO_IRQ_EDGE_FALL,
-        true,
-        &gpio_irq
-    );
+    configure_vsync_irq();
 
     // Hand ONLY the pins PIO needs to PIO0
     gpio_set_function(PIN_PIXCLK, GPIO_FUNC_PIO0);
@@ -514,8 +607,11 @@ int main(void) {
     pio_sm_set_consecutive_pindirs(pio, sm, PIN_HSYNC,  1, false);
     pio_sm_set_consecutive_pindirs(pio, sm, PIN_VIDEO,  1, false);
 
-    uint offset = pio_add_program(pio, &classic_line_program);
-    classic_line_program_init(pio, sm, offset, PIN_VIDEO);
+    offset_fall_pixrise = pio_add_program(pio, &classic_line_fall_pixrise_program);
+    offset_fall_pixfall = pio_add_program(pio, &classic_line_fall_pixfall_program);
+    offset_rise_pixrise = pio_add_program(pio, &classic_line_rise_pixrise_program);
+    offset_rise_pixfall = pio_add_program(pio, &classic_line_rise_pixfall_program);
+    configure_pio_program();
 
     dma_chan = dma_claim_unused_channel(true);
     dma_channel_set_irq0_enabled(dma_chan, true);

@@ -38,6 +38,9 @@ The firmware is host-controlled over the same CDC channel:
 | `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
+| `H` | Toggle HSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `K` | Toggle PIXCLK edge (rise↔fall), stop capture, and reset the line queue. |
+| `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.
@@ -49,6 +52,7 @@ The firmware is host-controlled over the same CDC channel:
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
+- Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling
