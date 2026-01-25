@@ -65,6 +65,7 @@ static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
 static uint8_t probe_buf[PKT_BYTES];
 static volatile uint8_t probe_pending = 0;
+static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 
 static int dma_chan;
@@ -135,24 +136,38 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
 
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_connected()) return false;
-    if (tud_cdc_write_available() < (int)PKT_BYTES) return false;
 
-    probe_buf[0] = 0xEB;
-    probe_buf[1] = 0xD1;
-    probe_buf[2] = 0xAA;
-    probe_buf[3] = 0x55;
-    probe_buf[4] = 0x34;
-    probe_buf[5] = 0x12;
-    probe_buf[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
-    probe_buf[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
-    memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
+    if (probe_offset == 0) {
+        probe_buf[0] = 0xEB;
+        probe_buf[1] = 0xD1;
+        probe_buf[2] = 0xAA;
+        probe_buf[3] = 0x55;
+        probe_buf[4] = 0x34;
+        probe_buf[5] = 0x12;
+        probe_buf[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
+        probe_buf[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
+        memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
+    }
 
-    tud_cdc_write(probe_buf, PKT_BYTES);
+    while (probe_offset < PKT_BYTES) {
+        int avail = tud_cdc_write_available();
+        if (avail <= 0) return false;
+        uint32_t to_write = (uint32_t)avail;
+        uint32_t remain = (uint32_t)(PKT_BYTES - probe_offset);
+        if (to_write > remain) {
+            to_write = remain;
+        }
+        uint32_t wrote = tud_cdc_write(&probe_buf[probe_offset], to_write);
+        if (wrote == 0) return false;
+        probe_offset = (uint16_t)(probe_offset + wrote);
+    }
+
     tud_cdc_write_flush();
     return true;
 }
 
 static inline void request_probe_packet(void) {
+    probe_offset = 0;
     probe_pending = 1;
 }
 
@@ -447,6 +462,7 @@ static inline void service_txq(void) {
     if (!tud_cdc_connected()) return;
 
     bool wrote_any = false;
+    static uint16_t txq_offset = 0;
 
     while (true) {
         uint16_t r, w;
@@ -457,20 +473,30 @@ static inline void service_txq(void) {
 
         if (r == w) break; /* empty */
 
-        /* Need room for one whole packet so we never partial-write a packet */
-        if (tud_cdc_write_available() < (int)PKT_BYTES) break;
+        int avail = tud_cdc_write_available();
+        if (avail <= 0) break;
 
-        uint32_t n = tud_cdc_write(txq[r], PKT_BYTES);
-        if (n != PKT_BYTES) {
+        uint32_t remain = (uint32_t)(PKT_BYTES - txq_offset);
+        uint32_t to_write = (uint32_t)avail;
+        if (to_write > remain) {
+            to_write = remain;
+        }
+
+        uint32_t n = tud_cdc_write(&txq[r][txq_offset], to_write);
+        if (n == 0) {
             usb_drops++;
             break;
         }
 
-        s = save_and_disable_interrupts();
-        txq_r = (uint16_t)((r + 1) & TXQ_MASK);
-        restore_interrupts(s);
-
+        txq_offset = (uint16_t)(txq_offset + n);
         wrote_any = true;
+
+        if (txq_offset >= PKT_BYTES) {
+            txq_offset = 0;
+            s = save_and_disable_interrupts();
+            txq_r = (uint16_t)((r + 1) & TXQ_MASK);
+            restore_interrupts(s);
+        }
     }
 
     if (wrote_any) {
