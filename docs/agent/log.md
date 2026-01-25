@@ -22,3 +22,4 @@
 - 2026-01-26: Queue probe packets until CDC write space is available to avoid missing probes.
 - 2026-01-26: Add a debug CDC command to report internal streaming state on demand.
 - 2026-01-25: Stream USB CDC packets in chunks so 72-byte line packets transmit on 64-byte endpoints.
+- 2026-01-25: Increase line TX queue depth to buffer a full frame and avoid drops on full-speed USB.

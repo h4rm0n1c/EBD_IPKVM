@@ -30,7 +30,7 @@
 #define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
 
 /* TX queue: power-of-two depth so we can mask wrap. */
-#define TXQ_DEPTH 32
+#define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
 
 static uint32_t line_a[WORDS_PER_LINE];
