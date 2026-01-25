@@ -65,6 +65,7 @@ static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
 static uint8_t probe_buf[PKT_BYTES];
 static volatile uint8_t probe_pending = 0;
+static volatile bool debug_requested = false;
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -153,6 +154,22 @@ static bool try_send_probe_packet(void) {
 
 static inline void request_probe_packet(void) {
     probe_pending = 1;
+}
+
+static void emit_debug_state(void) {
+    if (!tud_cdc_connected()) return;
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
+           armed ? 1 : 0,
+           capture_enabled ? 1 : 0,
+           test_frame_active ? 1 : 0,
+           probe_pending ? 1 : 0,
+           (unsigned)txq_r,
+           (unsigned)txq_w,
+           tud_cdc_write_available(),
+           (unsigned long)frames_done,
+           (unsigned long)lines_ok,
+           (unsigned long)lines_drop,
+           (unsigned long)usb_drops);
 }
 
 static inline void arm_dma(uint32_t *dst) {
@@ -416,6 +433,8 @@ static void poll_cdc_commands(void) {
             request_probe_packet();
         } else if (ch == 'U' || ch == 'u') {
             request_probe_packet();
+        } else if (ch == 'I' || ch == 'i') {
+            debug_requested = true;
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();
@@ -516,6 +535,10 @@ int main(void) {
         /* Send queued binary packets from thread context (NOT IRQ). */
         if (probe_pending && try_send_probe_packet()) {
             probe_pending = 0;
+        }
+        if (debug_requested && can_emit_text()) {
+            debug_requested = false;
+            emit_debug_state();
         }
         service_test_frame();
         service_txq();

@@ -37,6 +37,7 @@ The firmware is host-controlled over the same CDC channel:
 | `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
 | `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
+| `I` | Emit a one-line debug summary of internal CDC/capture state. |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.
