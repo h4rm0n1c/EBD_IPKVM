@@ -23,3 +23,4 @@
 - 2026-01-26: Add a debug CDC command to report internal streaming state on demand.
 - 2026-01-25: Stream USB CDC packets in chunks so 72-byte line packets transmit on 64-byte endpoints.
 - 2026-01-25: Increase line TX queue depth to buffer a full frame and avoid drops on full-speed USB.
+- 2026-01-25: Adjust capture offsets to match RGB2HDMI measurements (H offset 172, V offset 22).

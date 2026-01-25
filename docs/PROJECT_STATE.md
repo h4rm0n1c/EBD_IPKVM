@@ -15,13 +15,13 @@ Macintosh Classic KVM:
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
-  - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
-  - Each line skips 182 PIXCLK cycles (horizontal offset) then samples 512 bits.
+- Skips 22 HSYNC lines (vertical blank), captures 342 active lines.
+- Each line skips 172 PIXCLK cycles (horizontal offset) then samples 512 bits.
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.
 - USB CDC streaming:
-  - Lines buffered in a 32-entry ring buffer (72 bytes/packet).
+  - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
