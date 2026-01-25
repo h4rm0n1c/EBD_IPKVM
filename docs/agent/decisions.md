@@ -11,3 +11,4 @@
 - 2026-01-26: Add an on-demand debug command to expose CDC/queue state without a scope.
 - 2026-01-25: Switch line-capture trigger to HSYNC falling edge to validate sync polarity.
 - 2026-01-25: Set horizontal skip to 178 PIXCLK cycles after HSYNC falling edge based on VCD sweep results.
+- 2026-01-25: Add runtime CDC toggles for HSYNC/VSYNC edge selection to speed capture validation.

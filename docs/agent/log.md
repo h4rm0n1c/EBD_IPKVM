@@ -25,3 +25,4 @@
 - 2026-01-25: Increase line TX queue depth to buffer a full frame and avoid drops on full-speed USB.
 - 2026-01-25: Trigger line capture on HSYNC falling edge to test polarity alignment.
 - 2026-01-25: Tune horizontal skip to 178 PIXCLK cycles based on VCD reconstruction sweep.
+- 2026-01-25: Add CDC commands to toggle HSYNC/VSYNC edges at runtime for capture testing.

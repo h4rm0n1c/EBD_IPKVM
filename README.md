@@ -51,6 +51,7 @@ This test script:
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale).
+- Edge toggles for testing: send `H` to flip HSYNC edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)
