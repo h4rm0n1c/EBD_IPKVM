@@ -77,7 +77,8 @@ static uint offset_rise_pixrise = 0;
 static uint offset_rise_pixfall = 0;
 static bool hsync_fall_edge = false;
 static bool vsync_fall_edge = true;
-static bool pixclk_rise_edge = true;
+static bool pixclk_rise_edge = false;
+static bool video_inverted = true;
 static void gpio_irq(uint gpio, uint32_t events);
 
 /* Ring buffer of complete line packets (72 bytes each). */
@@ -181,7 +182,7 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s video_inv=%d txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
            armed ? 1 : 0,
            capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
@@ -189,6 +190,7 @@ static void emit_debug_state(void) {
            hsync_fall_edge ? "fall" : "rise",
            vsync_fall_edge ? "fall" : "rise",
            pixclk_rise_edge ? "rise" : "fall",
+           video_inverted ? 1 : 0,
            (unsigned)txq_r,
            (unsigned)txq_w,
            tud_cdc_write_available(),
@@ -273,6 +275,11 @@ static void __isr dma_irq0_handler(void) {
 
     if (want_frame && this_raw >= YOFF_LINES && this_raw < (YOFF_LINES + ACTIVE_H)) {
         uint16_t line_id = (uint16_t)(this_raw - YOFF_LINES);
+        if (video_inverted) {
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                buf[i] = ~buf[i];
+            }
+        }
 
         if (!txq_enqueue(frame_id, line_id, buf)) {
             lines_drop++; /* queue overflow */
