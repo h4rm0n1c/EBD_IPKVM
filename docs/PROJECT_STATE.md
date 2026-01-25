@@ -34,4 +34,5 @@ Macintosh Classic KVM:
 
 ## Host tooling
 - `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PGM frames.
-- Script expects 512×342 frames and writes `frames/frame_###.pgm` by default.
+- Script expects 512×342 frames and writes `frames/frame_###.pgm` by default (`--max-frames=N` limits output).
+- `scripts/ab_capture.py` runs an A/B capture with VIDEO inversion toggled between runs.

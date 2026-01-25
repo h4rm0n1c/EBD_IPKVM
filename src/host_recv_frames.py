@@ -11,6 +11,7 @@ FORCE_START = False
 TEST_AFTER = 0.0
 TEST_START = False
 PROBE_ONLY = False
+MAX_FRAMES = 100
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -39,6 +40,16 @@ for arg in sys.argv[1:]:
         TEST_START = True
     elif arg == "--probe":
         PROBE_ONLY = True
+    elif arg.startswith("--max-frames="):
+        value = arg.split("=", 1)[1]
+        try:
+            MAX_FRAMES = int(value)
+        except ValueError:
+            print(f"[host] invalid --max-frames value: {value}")
+            sys.exit(2)
+        if MAX_FRAMES <= 0:
+            print(f"[host] invalid --max-frames value: {value}")
+            sys.exit(2)
     elif arg == "--no-force":
         FORCE_AFTER = 0.0
     elif arg == "--no-test":
@@ -62,7 +73,6 @@ for arg in sys.argv[1:]:
 
 DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = 100
 
 W = 512
 H = 342
@@ -194,7 +204,7 @@ else:
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s, max_frames={MAX_FRAMES})")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -269,9 +279,9 @@ try:
             if frames:
                 newest = max(frames.keys())
                 have = len(frames[newest])
-                print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
+                print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/{MAX_FRAMES}")
             else:
-                print(f"[host] done={done_count}/100 (waiting for packets)")
+                print(f"[host] done={done_count}/{MAX_FRAMES} (waiting for packets)")
 finally:
     if SEND_STOP:
         try:

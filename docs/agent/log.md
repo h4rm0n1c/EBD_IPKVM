@@ -3,6 +3,7 @@
 - 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
 - 2026-01-26: Default PIXCLK edge selection and VIDEO polarity to account for 74HC14 inversion.
 - 2026-01-26: Added CDC toggle for VIDEO inversion to help stabilize capture with 74HC14/74LVC245 path.
+- 2026-01-26: Added A/B capture helper script and max-frames option for host frame capture.
 - 2026-01-26: Documented PIXCLK/VIDEO buffering through a 74HC14 before Pico inputs.
 - 2026-01-26: Defaulted host test helper to send ATX power-on before capture, wait with diagnostics, and request ATX shutdown on exit.
 - 2026-01-26: Adjusted host helper defaults to 12s boot wait with diagnostics during boot.
