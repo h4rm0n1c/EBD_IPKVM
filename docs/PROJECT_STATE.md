@@ -15,8 +15,8 @@ Macintosh Classic KVM:
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
-- Skips 22 HSYNC lines (vertical blank), captures 342 active lines.
-- Each line skips 172 PIXCLK cycles (horizontal offset) then samples 512 bits.
+  - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
+  - Each line skips 182 PIXCLK cycles (horizontal offset) then samples 512 bits.
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.

@@ -48,7 +48,7 @@ The firmware is host-controlled over the same CDC channel:
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
-- Capture window is 364 HSYNCs total (22 VBL + 342 active).
+- Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling

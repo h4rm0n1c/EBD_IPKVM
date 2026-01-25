@@ -20,8 +20,8 @@
 #define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
 
 #define ACTIVE_H    342
-#define YOFF_LINES  22
-#define CAP_LINES   (YOFF_LINES + ACTIVE_H)   // 364 HSYNCs after VSYNC fall
+#define YOFF_LINES  28
+#define CAP_LINES   (YOFF_LINES + ACTIVE_H)   // 370 HSYNCs after VSYNC fall
 
 #define BYTES_PER_LINE 64
 #define WORDS_PER_LINE (BYTES_PER_LINE / 4)

@@ -19,9 +19,9 @@ Tap raw 1-bpp video + sync, capture with PIO+DMA, and stream to a host UI.
 
 ## Capture geometry
 - Active video: 512×342 (1 bpp)
-- Horizontal offset: 172 PIXCLK cycles after HSYNC rising edge (PIO skip loop)
-- Vertical offset: 22 HSYNCs after VSYNC fall
-- Capture window: 364 HSYNCs total (22 VBL + 342 active)
+- Horizontal offset: 182 PIXCLK cycles after HSYNC rising edge (PIO skip loop)
+- Vertical offset: 28 HSYNCs after VSYNC fall
+- Capture window: 370 HSYNCs total (28 VBL + 342 active)
 
 ## USB stream (CDC)
 Each line is emitted as a 72-byte packet:

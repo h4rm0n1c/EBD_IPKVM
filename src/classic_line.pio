@@ -2,7 +2,7 @@
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
-;   skip XOFF (172 PIXCLK cycles on GPIO0)
+;   skip XOFF (182 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
@@ -11,7 +11,7 @@ start:
     wait 0 gpio 2
     wait 1 gpio 2
 
-    ; XOFF: 5*31 + 17 clocks
+    ; XOFF: 5*31 + 27 clocks
     set y, 4
 xoff_b31:
     set x, 30
@@ -21,11 +21,11 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 16
-xoff17:
+    set x, 26
+xoff27:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff17
+    jmp x-- xoff27
 
     ; Capture 512 bits as 16*32
     set y, 15
