@@ -3,7 +3,7 @@ GP pins are on U1
 U1 - Raspberry Pi Pico W
 U2 - 74LVC245
 U3 - ULN2803APG
-U4 - 74HC14 (PIXCLK + VIDEO buffer/inverter)
+U4 - 74HC14 (HSYNC + VSYNC buffer/inverter)
 
 C1 - ceramic cap "104"
 
@@ -39,8 +39,8 @@ U3 4,5,6,7,8 connected to pin 9/GND via 6 pin 10k resistor pack,
 
 U1 VSYS TO +5VSB from ATX PSU
 
-PIXCLK and VIDEO are now routed through U4 (74HC14 Schmitt-trigger inverter),
-then into U2 (74LVC245), before reaching U1 GP0 (PIXCLK) and U1 GP3 (VIDEO).
+HSYNC and VSYNC are now routed through U4 (74HC14 Schmitt-trigger inverter),
+then into U2 (74LVC245), before reaching U1 GP2 (HSYNC) and U1 GP1 (VSYNC).
 
 this arrangement allowed me to sit the chips next to eachother on veroboard and let the tracks make most of the connections, its also why the ordering seems weird where I've had to cut tracks to skip ground lines and then bodge in a gpio from further along to go to places.
 

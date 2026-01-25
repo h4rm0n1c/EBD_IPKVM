@@ -3,6 +3,7 @@
 - 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
 - 2026-01-26: Default PIXCLK edge selection and VIDEO polarity to account for 74HC14 inversion.
 - 2026-01-26: Added CDC toggle for VIDEO inversion to help stabilize capture with 74HC14/74LVC245 path.
+- 2026-01-26: Moved 74HC14 buffering to HSYNC/VSYNC and updated wiring docs accordingly.
 - 2026-01-26: Set default capture edges to HSYNC fall / VSYNC fall / PIXCLK rise with VIDEO inversion off.
 - 2026-01-26: Added CDC commands to explicitly clear/set VIDEO inversion (0/1) to avoid toggle ambiguity.
 - 2026-01-26: Added A/B capture helper script and max-frames option for host frame capture.

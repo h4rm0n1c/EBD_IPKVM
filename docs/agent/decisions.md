@@ -11,6 +11,7 @@
 - 2026-01-26: Add an on-demand debug command to expose CDC/queue state without a scope.
 - 2026-01-26: Default PIXCLK sampling to the falling edge and invert VIDEO bits in firmware to compensate for 74HC14 inversion.
 - 2026-01-26: Default HSYNC/VSYNC to falling edges, PIXCLK to rising edge, and VIDEO inversion off based on stable capture.
+- 2026-01-26: Buffer HSYNC/VSYNC (not PIXCLK/VIDEO) through the 74HC14 before the 74LVC245.
 - 2026-01-26: Add a CDC command to toggle VIDEO inversion so capture polarity can be adjusted without reflashing.
 - 2026-01-26: Buffer PIXCLK and VIDEO through a 74HC14 Schmitt-trigger inverter before the Pico inputs.
 - 2026-01-25: Switch line-capture trigger to HSYNC falling edge to validate sync polarity.

@@ -14,9 +14,9 @@ Macintosh Classic KVM:
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 - Signal conditioning:
-  - PIXCLK and VIDEO are buffered through a 74HC14 Schmitt-trigger inverter before reaching the Pico inputs.
+  - HSYNC and VSYNC are buffered through a 74HC14 Schmitt-trigger inverter before reaching the Pico inputs.
   - Firmware defaults: HSYNC fall, VSYNC fall, PIXCLK rise, VIDEO inversion off.
-  - Signal path is Mac → 74HC14 → 74LVC245 → Pico for PIXCLK/VIDEO.
+  - Signal path is Mac → 74HC14 → 74LVC245 → Pico for HSYNC/VSYNC.
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
