@@ -29,10 +29,30 @@ The firmware is host-controlled over the same CDC channel:
 | `X` | Stop capture, clear TX queue. |
 | `R` | Reset counters and internal state. |
 | `Q` | Park (stop capture and idle forever until reset). |
+| `P` | Assert ATX `PS_ON` (power on; GPIO9 high via ULN2803). |
+| `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
+| `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
+| `Z` | Reboot the RP2040 firmware (watchdog reset). |
+| `G` | Report GPIO input states and edge counts over a short sampling window. |
+| `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
+| `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
+| `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
+| `I` | Emit a one-line debug summary of internal CDC/capture state. |
+| `H` | Toggle HSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `K` | Toggle PIXCLK edge (rise↔fall), stop capture, and reset the line queue. |
+| `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+
+### GPIO diagnostic output (`G`)
+- Only emitted while capture is stopped and the TX queue is empty.
+- Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
+- Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
+- Output format:
+  - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
+- Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling

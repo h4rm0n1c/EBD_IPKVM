@@ -3,14 +3,22 @@ import os, sys, time, struct, fcntl, termios, select
 
 SEND_RESET = True
 SEND_STOP = True
-BOOT_WAIT = 0.25
-DIAG_SECS = 0.0
+SEND_BOOT = True
+BOOT_WAIT = 12.0
+DIAG_SECS = 12.0
+FORCE_AFTER = 2.0
+FORCE_START = False
+TEST_AFTER = 0.0
+TEST_START = False
+PROBE_ONLY = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
         SEND_RESET = False
     elif arg == "--no-stop":
         SEND_STOP = False
+    elif arg == "--no-boot":
+        SEND_BOOT = False
     elif arg.startswith("--boot-wait="):
         value = arg.split("=", 1)[1]
         try:
@@ -24,6 +32,30 @@ for arg in sys.argv[1:]:
             DIAG_SECS = float(value)
         except ValueError:
             print(f"[host] invalid --diag-secs value: {value}")
+            sys.exit(2)
+    elif arg == "--force-start":
+        FORCE_START = True
+    elif arg == "--test-frame":
+        TEST_START = True
+    elif arg == "--probe":
+        PROBE_ONLY = True
+    elif arg == "--no-force":
+        FORCE_AFTER = 0.0
+    elif arg == "--no-test":
+        TEST_AFTER = 0.0
+    elif arg.startswith("--force-after="):
+        value = arg.split("=", 1)[1]
+        try:
+            FORCE_AFTER = float(value)
+        except ValueError:
+            print(f"[host] invalid --force-after value: {value}")
+            sys.exit(2)
+    elif arg.startswith("--test-after="):
+        value = arg.split("=", 1)[1]
+        try:
+            TEST_AFTER = float(value)
+        except ValueError:
+            print(f"[host] invalid --test-after value: {value}")
             sys.exit(2)
     else:
         ARGS.append(arg)
@@ -100,9 +132,8 @@ def pop_one_packet(buf: bytearray):
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
 set_raw_and_dtr(fd)
 
-# Give Pico time to reboot after opening the CDC port (if applicable).
-if BOOT_WAIT > 0:
-    time.sleep(BOOT_WAIT)
+if SEND_BOOT:
+    os.write(fd, b"P")
 
 if SEND_STOP:
     os.write(fd, b"X")
@@ -129,14 +160,41 @@ if DIAG_SECS > 0:
                 text = repr(line)
             print(f"[host][diag] {text}")
 
+if BOOT_WAIT > 0:
+    remaining = BOOT_WAIT - DIAG_SECS
+    if remaining > 0:
+        time.sleep(remaining)
+
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
     os.write(fd, b"R")
     time.sleep(0.05)
-os.write(fd, b"S")
+if PROBE_ONLY:
+    os.write(fd, b"U")
+    time.sleep(0.2)
+    probe_deadline = time.time() + 1.0
+    probe_bytes = 0
+    while time.time() < probe_deadline:
+        r, _, _ = select.select([fd], [], [], 0.25)
+        if not r:
+            continue
+        chunk = os.read(fd, 8192)
+        if chunk:
+            probe_bytes += len(chunk)
+    print(f"[host] probe bytes received: {probe_bytes}")
+    sys.exit(0)
+if TEST_START:
+    os.write(fd, b"T")
+    FORCE_AFTER = 0.0
+    FORCE_START = False
+elif FORCE_START:
+    os.write(fd, b"F")
+else:
+    os.write(fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
+boot_note = "boot" if SEND_BOOT else "no-boot"
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -145,14 +203,26 @@ last_print = time.time()
 
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
+start_rx = last_rx
+force_sent = FORCE_START or TEST_START
+test_sent = TEST_START
 
 try:
     while done_count < MAX_FRAMES:
         r, _, _ = select.select([fd], [], [], 0.25)
         if not r:
-            if time.time() - last_rx > 2.0:
+            now = time.time()
+            if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
+                os.write(fd, b"F")
+                force_sent = True
+                print(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
+            if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
+                os.write(fd, b"T")
+                test_sent = True
+                print(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
+            if now - last_rx > 2.0:
                 print("[host] no data yet (is Pico armed + Mac running?)")
-                last_rx = time.time()
+                last_rx = now
             continue
 
         chunk = os.read(fd, 8192)
@@ -208,5 +278,9 @@ finally:
             os.write(fd, b"X")
         except OSError:
             pass
+    try:
+        os.write(fd, b"p")
+    except OSError:
+        pass
 
 print("[host] complete.")

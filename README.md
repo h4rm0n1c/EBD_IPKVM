@@ -13,14 +13,16 @@ Tap raw 1-bpp video + sync, capture with PIO+DMA, and stream to a host UI.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
+- `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
 
 ## Capture geometry
 - Active video: 512×342 (1 bpp)
-- Horizontal offset: 182 PIXCLK cycles after HSYNC rising edge (PIO skip loop)
+- Horizontal offset: 178 PIXCLK cycles after the selected HSYNC edge (PIO skip loop)
 - Vertical offset: 28 HSYNCs after VSYNC fall
 - Capture window: 370 HSYNCs total (28 VBL + 342 active)
+- Line capture begins on the selected HSYNC edge.
 
 ## USB stream (CDC)
 Each line is emitted as a 72-byte packet:
@@ -49,6 +51,7 @@ This test script:
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale).
+- Edge toggles for testing: send `H` to flip HSYNC edge, `K` to flip PIXCLK edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)

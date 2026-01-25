@@ -12,17 +12,20 @@ Macintosh Classic KVM:
   - `GPIO1` VSYNC (SIO GPIO input, active-low, IRQ on falling edge)
   - `GPIO2` HSYNC (PIO input, active-low)
   - `GPIO3` VIDEO (PIO input)
+  - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
-  - Each line skips 182 PIXCLK cycles (horizontal offset) then samples 512 bits.
+- Each line waits for the selected HSYNC edge, skips 178 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.
 - USB CDC streaming:
-  - Lines buffered in a 32-entry ring buffer (72 bytes/packet).
+  - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
+  - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
+  - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 
 ## Host tooling
 - `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PGM frames.

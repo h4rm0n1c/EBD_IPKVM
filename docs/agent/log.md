@@ -1,5 +1,8 @@
 # Log (running)
 
+- 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
+- 2026-01-26: Defaulted host test helper to send ATX power-on before capture, wait with diagnostics, and request ATX shutdown on exit.
+- 2026-01-26: Adjusted host helper defaults to 12s boot wait with diagnostics during boot.
 - 2026-01-25: Initial repo scaffolding (README, agents.md, docs/*, .gitignore).
 - 2026-01-25: Documented availability of `/opt/MacDevDocs` as a local reference source.
 - 2026-01-24: Expanded documentation with current capture behavior, pin map, and USB CDC packet format for host tooling.
@@ -10,3 +13,19 @@
 - 2026-01-26: Allow status output to continue after 100-frame completion and avoid parking the main loop.
 - 2026-01-26: Stop capture on host exit and pre-stop before arming in `host_recv_frames.py`.
 - 2026-01-26: Stop re-arming DMA after a capture window completes to avoid stale DMA activity between runs.
+- 2026-01-26: Adjusted GPIO diagnostic command to use polling-based edge sampling to avoid IRQ overload on PIXCLK.
+- 2026-01-26: Added a force-capture CDC command and host fallback to trigger capture when VSYNC gating stalls.
+- 2026-01-26: Added a synthetic test-frame CDC command and host option to isolate USB streaming from capture issues.
+- 2026-01-26: Prevented force-capture fallback from firing during synthetic test-frame runs.
+- 2026-01-26: Added a probe packet command and host probe option to sanity-check CDC raw bytes.
+- 2026-01-26: Emit a probe packet when starting a synthetic test frame to confirm CDC output immediately.
+- 2026-01-26: Queue probe packets until CDC write space is available to avoid missing probes.
+- 2026-01-26: Add a debug CDC command to report internal streaming state on demand.
+- 2026-01-25: Stream USB CDC packets in chunks so 72-byte line packets transmit on 64-byte endpoints.
+- 2026-01-25: Increase line TX queue depth to buffer a full frame and avoid drops on full-speed USB.
+- 2026-01-25: Trigger line capture on HSYNC falling edge to test polarity alignment.
+- 2026-01-25: Tune horizontal skip to 178 PIXCLK cycles based on VCD reconstruction sweep.
+- 2026-01-25: Add CDC commands to toggle HSYNC/VSYNC edges at runtime for capture testing.
+- 2026-01-25: Fix missing gpio_irq forward declaration after adding runtime edge toggles.
+- 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.
+- 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
