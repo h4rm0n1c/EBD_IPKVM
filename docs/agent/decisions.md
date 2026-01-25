@@ -9,3 +9,4 @@
 - 2026-01-26: Add a probe packet command to verify CDC byte delivery independently of framing.
 - 2026-01-26: Emit a probe packet alongside synthetic test frames for immediate CDC verification.
 - 2026-01-26: Add an on-demand debug command to expose CDC/queue state without a scope.
+- 2026-01-25: Switch line-capture trigger to HSYNC falling edge to validate sync polarity.

@@ -1,15 +1,15 @@
 .program classic_line
 
 ; One line capture:
-;   wait HSYNC (GPIO2 low->high)
+;   wait HSYNC (GPIO2 high->low)
 ;   skip XOFF (182 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
 .wrap_target
 start:
-    wait 0 gpio 2
     wait 1 gpio 2
+    wait 0 gpio 2
 
     ; XOFF: 5*31 + 27 clocks
     set y, 4
