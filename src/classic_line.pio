@@ -2,7 +2,7 @@
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 high->low)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (162 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
@@ -26,10 +26,10 @@ xoff31:
     jmp y-- xoff_b31
 
     set x, 6
-xoff23:
+xoff7:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff7
 
     ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
     wait 0 gpio 0
@@ -52,7 +52,7 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 high->low)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (162 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
@@ -76,10 +76,10 @@ xoff31:
     jmp y-- xoff_b31
 
     set x, 6
-xoff23:
+xoff7:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff7
 
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
@@ -99,7 +99,7 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (162 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
@@ -123,10 +123,10 @@ xoff31:
     jmp y-- xoff_b31
 
     set x, 6
-xoff23:
+xoff7:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff7
 
     ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
     wait 0 gpio 0
@@ -149,7 +149,7 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (162 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
@@ -173,10 +173,10 @@ xoff31:
     jmp y-- xoff_b31
 
     set x, 6
-xoff23:
+xoff7:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff7
 
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
