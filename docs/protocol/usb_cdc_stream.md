@@ -55,16 +55,17 @@ The firmware is host-controlled over the same CDC channel:
 - Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC ends the current capture immediately; the next frame capture window starts right after the VSYNC edge if armed.
-- Each frame is captured into a ping-pong framebuffer; line packets are assembled from that buffer in the main loop (outside IRQ).
+- Each frame is captured into a ping-pong framebuffer via a single DMA transfer (no per-line DMA IRQs); line packets are assembled from that buffer in the main loop (outside IRQ).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).
-- DMA has a guard limit (`CAP_LINES_GUARD`) to stop capture if VSYNC is missing or lines run long; VSYNC still defines the real frame end.
+- Capture DMA is sized for `CAP_MAX_LINES` and is aborted on VSYNC; host payloads use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer.
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling
 - If the TX queue is full, line packets are dropped and `lines_drop` increments.
 - If USB write fails or buffer is full, `usb_drops` increments.
 - If a frame finishes while the previous frame is still queued for transmit, the older ready frame is dropped and `frame_overrun` increments (see debug/status output).
+- If a frame contains fewer than `CAP_YOFF_LINES + CAP_ACTIVE_H` captured lines, the frame is skipped and `frame_short` increments.
 
 For concrete host-side parsing and reassembly, refer to
 `src/host_recv_frames.py`.

@@ -57,13 +57,13 @@ static volatile uint8_t probe_pending = 0;
 static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 
-static uint32_t framebuf_a[CAP_ACTIVE_H][CAP_WORDS_PER_LINE];
-static uint32_t framebuf_b[CAP_ACTIVE_H][CAP_WORDS_PER_LINE];
-static uint32_t line_sink[CAP_WORDS_PER_LINE];
+static uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
+static uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
 static video_capture_t capture = {0};
 static uint32_t (*frame_tx_buf)[CAP_WORDS_PER_LINE] = NULL;
 static uint16_t frame_tx_id = 0;
 static uint16_t frame_tx_line = 0;
+static uint16_t frame_tx_lines = 0;
 static uint32_t frame_tx_line_buf[CAP_WORDS_PER_LINE];
 
 static int dma_chan;
@@ -94,7 +94,9 @@ static inline void reset_frame_tx_state(void) {
     frame_tx_buf = NULL;
     frame_tx_line = 0;
     frame_tx_id = 0;
+    frame_tx_lines = 0;
     capture.frame_ready = false;
+    capture.frame_ready_lines = 0;
     capture.ready_buf = NULL;
     video_capture_set_inflight(&capture, NULL);
 }
@@ -196,7 +198,7 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu guard=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
            armed ? 1 : 0,
            capture.capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
@@ -212,7 +214,7 @@ static void emit_debug_state(void) {
            (unsigned long)lines_drop,
            (unsigned long)usb_drops,
            (unsigned long)capture.frame_overrun,
-           (unsigned long)capture.guard_trips);
+           (unsigned long)capture.frame_short);
 }
 
 static inline void reorder_line_words(uint32_t *buf) {
@@ -244,10 +246,6 @@ static void configure_vsync_irq(void) {
     uint32_t edge = vsync_fall_edge ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
     gpio_set_irq_enabled_with_callback(PIN_VSYNC, edge, true, &gpio_irq);
-}
-
-static void __isr dma_irq0_handler(void) {
-    video_capture_dma_irq(&capture);
 }
 
 static void gpio_irq(uint gpio, uint32_t events) {
@@ -376,20 +374,36 @@ static void service_frame_tx(void) {
     if (!frame_tx_buf) {
         uint32_t (*buf)[CAP_WORDS_PER_LINE] = NULL;
         uint16_t fid = 0;
-        if (video_capture_take_ready(&capture, &buf, &fid)) {
+        uint16_t lines = 0;
+        if (video_capture_take_ready(&capture, &buf, &fid, &lines)) {
             frame_tx_buf = buf;
             frame_tx_id = fid;
             frame_tx_line = 0;
+            frame_tx_lines = lines;
             video_capture_set_inflight(&capture, buf);
         }
     }
 
     if (!frame_tx_buf) return;
 
+    if (frame_tx_lines < (CAP_YOFF_LINES + CAP_ACTIVE_H)) {
+        capture.frame_short++;
+        frame_tx_buf = NULL;
+        video_capture_set_inflight(&capture, NULL);
+        return;
+    }
+
     while (frame_tx_line < CAP_ACTIVE_H) {
         if (!txq_has_space()) break;
 
-        memcpy(frame_tx_line_buf, frame_tx_buf[frame_tx_line], sizeof(frame_tx_line_buf));
+        uint16_t src_line = (uint16_t)(frame_tx_line + CAP_YOFF_LINES);
+        if (src_line >= frame_tx_lines) {
+            capture.frame_short++;
+            frame_tx_buf = NULL;
+            video_capture_set_inflight(&capture, NULL);
+            return;
+        }
+        memcpy(frame_tx_line_buf, frame_tx_buf[src_line], sizeof(frame_tx_line_buf));
         reorder_line_words(frame_tx_line_buf);
 
         if (!txq_enqueue(frame_tx_id, frame_tx_line, frame_tx_line_buf)) {
@@ -431,7 +445,7 @@ static void poll_cdc_commands(void) {
             frame_id = 0;
             capture.lines_ok = 0;
             capture.frame_overrun = 0;
-            capture.guard_trips = 0;
+            capture.frame_short = 0;
             lines_drop = 0;
             usb_drops = 0;
             vsync_edges = 0;
@@ -629,13 +643,9 @@ int main(void) {
     configure_pio_program();
 
     dma_chan = dma_claim_unused_channel(true);
-    dma_channel_set_irq0_enabled(dma_chan, true);
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_irq0_handler);
-    irq_set_priority(DMA_IRQ_0, 0);
     irq_set_priority(USBCTRL_IRQ, 1);
-    irq_set_enabled(DMA_IRQ_0, true);
 
-    video_capture_init(&capture, pio, sm, dma_chan, framebuf_a, framebuf_b, line_sink);
+    video_capture_init(&capture, pio, sm, dma_chan, framebuf_a, framebuf_b);
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
