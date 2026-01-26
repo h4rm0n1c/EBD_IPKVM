@@ -29,6 +29,9 @@
 #define PKT_HDR_BYTES 8
 #define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
 
+/* Abort capture if HSYNC/PIO stalls for too long (us). */
+#define CAPTURE_TIMEOUT_US 50000
+
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
@@ -55,6 +58,8 @@ static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t vsync_rejects = 0;
 static uint32_t last_good_vsync_us = 0;
 static uint32_t last_capture_us = 0;
+static volatile uint32_t capture_timeouts = 0;
+static uint32_t capture_start_us = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
@@ -183,7 +188,7 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu vsync_rejects=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu vsync_rejects=%lu cap_timeouts=%lu\n",
            armed ? 1 : 0,
            capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
@@ -198,7 +203,8 @@ static void emit_debug_state(void) {
            (unsigned long)lines_ok,
            (unsigned long)lines_drop,
            (unsigned long)usb_drops,
-           (unsigned long)vsync_rejects);
+           (unsigned long)vsync_rejects,
+           (unsigned long)capture_timeouts);
 }
 
 static inline void arm_dma(uint32_t *dst) {
@@ -262,6 +268,7 @@ static void configure_vsync_irq(void) {
 
 static inline void start_capture_window(void) {
     capture_enabled = true;
+    capture_start_us = time_us_32();
     pio_sm_clear_fifos(pio, sm);
     pio_sm_restart(pio, sm);
     using_a = true;
@@ -464,6 +471,8 @@ static void poll_cdc_commands(void) {
             vsync_rejects = 0;
             last_good_vsync_us = 0;
             last_capture_us = 0;
+            capture_timeouts = 0;
+            capture_start_us = 0;
             want_frame = false;
             done_latched = false;
             stop_capture();
@@ -664,6 +673,15 @@ int main(void) {
         tud_task();
         poll_cdc_commands();
 
+        if (capture_enabled) {
+            uint32_t now = time_us_32();
+            if ((uint32_t)(now - capture_start_us) > CAPTURE_TIMEOUT_US) {
+                stop_capture();
+                want_frame = false;
+                capture_timeouts++;
+            }
+        }
+
         /* Send queued binary packets from thread context (NOT IRQ). */
         if (probe_pending && try_send_probe_packet()) {
             probe_pending = 0;
@@ -691,7 +709,10 @@ int main(void) {
                 uint32_t vr = vsync_rejects;
                 vsync_rejects = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu vsync_rejects/s=%lu frames=%lu/100\n",
+                uint32_t ct = capture_timeouts;
+                capture_timeouts = 0;
+
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu vsync_rejects/s=%lu cap_timeouts/s=%lu frames=%lu/100\n",
                        armed ? 1 : 0,
                        capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
@@ -701,6 +722,7 @@ int main(void) {
                        (unsigned long)usb_drops,
                        (unsigned long)ve,
                        (unsigned long)vr,
+                       (unsigned long)ct,
                        (unsigned long)frames_done);
             }
 
