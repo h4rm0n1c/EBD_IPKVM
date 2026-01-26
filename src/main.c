@@ -64,6 +64,7 @@ static uint32_t (*frame_tx_buf)[CAP_WORDS_PER_LINE] = NULL;
 static uint16_t frame_tx_id = 0;
 static uint16_t frame_tx_line = 0;
 static uint16_t frame_tx_lines = 0;
+static uint16_t frame_tx_start = 0;
 static uint32_t frame_tx_line_buf[CAP_WORDS_PER_LINE];
 
 static int dma_chan;
@@ -95,6 +96,7 @@ static inline void reset_frame_tx_state(void) {
     frame_tx_line = 0;
     frame_tx_id = 0;
     frame_tx_lines = 0;
+    frame_tx_start = 0;
     capture.frame_ready = false;
     capture.frame_ready_lines = 0;
     capture.ready_buf = NULL;
@@ -380,13 +382,18 @@ static void service_frame_tx(void) {
             frame_tx_id = fid;
             frame_tx_line = 0;
             frame_tx_lines = lines;
+            if (lines >= (CAP_YOFF_LINES + CAP_ACTIVE_H)) {
+                frame_tx_start = CAP_YOFF_LINES;
+            } else {
+                frame_tx_start = (lines >= CAP_ACTIVE_H) ? (uint16_t)(lines - CAP_ACTIVE_H) : 0;
+            }
             video_capture_set_inflight(&capture, buf);
         }
     }
 
     if (!frame_tx_buf) return;
 
-    if (frame_tx_lines < (CAP_YOFF_LINES + CAP_ACTIVE_H)) {
+    if (frame_tx_lines < CAP_ACTIVE_H) {
         capture.frame_short++;
         frame_tx_buf = NULL;
         video_capture_set_inflight(&capture, NULL);
@@ -396,7 +403,7 @@ static void service_frame_tx(void) {
     while (frame_tx_line < CAP_ACTIVE_H) {
         if (!txq_has_space()) break;
 
-        uint16_t src_line = (uint16_t)(frame_tx_line + CAP_YOFF_LINES);
+        uint16_t src_line = (uint16_t)(frame_tx_line + frame_tx_start);
         if (src_line >= frame_tx_lines) {
             capture.frame_short++;
             frame_tx_buf = NULL;
