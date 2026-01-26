@@ -3,6 +3,7 @@
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
 - 2026-01-27: End frames on VSYNC and use ping-pong framebuffers so capture timing stays locked while USB packetization runs in the main loop.
+- 2026-01-27: Debounce VSYNC edges and only mark frames for transmit when the USB TX path is idle to prevent backpressure skips.
 - 2026-01-25: Repository initialised with docs-first workflow and agent documentation scaffold.
 - 2026-01-26: Use GPIO9 (via ULN2803) as an active-high ATX PS_ON output; add CDC commands for PS_ON control, BOOTSEL, and watchdog reset.
 - 2026-01-26: Use polling-based edge sampling for GPIO diagnostics to avoid interrupt overload on PIXCLK while still confirming activity.

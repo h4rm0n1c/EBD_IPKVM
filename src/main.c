@@ -49,6 +49,7 @@ static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
 static volatile uint32_t diag_video_edges = 0;
 static volatile bool test_frame_active = false;
+static volatile uint32_t last_vsync_us = 0;
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
 static uint8_t probe_buf[PKT_BYTES];
@@ -257,6 +258,12 @@ static void gpio_irq(uint gpio, uint32_t events) {
         if (!(events & GPIO_IRQ_EDGE_RISE)) return;
     }
 
+    uint32_t now_us = time_us_32();
+    if ((uint32_t)(now_us - last_vsync_us) < 8000u) {
+        return;
+    }
+    last_vsync_us = now_us;
+
     vsync_edges++;
 
     if (capture.capture_enabled) {
@@ -270,8 +277,9 @@ static void gpio_irq(uint gpio, uint32_t events) {
     }
     if (frames_done >= 100) return;
 
+    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
     take_toggle = !take_toggle;          // every other VSYNC => ~30fps
-    want_frame = take_toggle;
+    want_frame = take_toggle && !tx_busy;
 
     video_capture_start(&capture, want_frame);
 }

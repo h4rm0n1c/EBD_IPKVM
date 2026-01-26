@@ -52,6 +52,8 @@ The firmware is host-controlled over the same CDC channel:
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
+- Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
+- VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC ends the current capture immediately; the next frame capture window starts right after the VSYNC edge if armed.
 - Each frame is captured into a ping-pong framebuffer; line packets are assembled from that buffer in the main loop (outside IRQ).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
