@@ -56,10 +56,13 @@ static volatile uint32_t usb_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t vsync_rejects = 0;
+static volatile uint32_t vsync_resyncs = 0;
 static uint32_t last_good_vsync_us = 0;
 static uint32_t last_capture_us = 0;
 static volatile uint32_t capture_timeouts = 0;
 static uint32_t capture_start_us = 0;
+static volatile bool vsync_resync_pending = false;
+static uint32_t pending_vsync_us = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
@@ -188,7 +191,7 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu vsync_rejects=%lu cap_timeouts=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu vsync_rejects=%lu vsync_resyncs=%lu cap_timeouts=%lu\n",
            armed ? 1 : 0,
            capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
@@ -204,6 +207,7 @@ static void emit_debug_state(void) {
            (unsigned long)lines_drop,
            (unsigned long)usb_drops,
            (unsigned long)vsync_rejects,
+           (unsigned long)vsync_resyncs,
            (unsigned long)capture_timeouts);
 }
 
@@ -339,7 +343,12 @@ static void gpio_irq(uint gpio, uint32_t events) {
     vsync_edges++;
 
     if (!armed) return;
-    if (capture_enabled) return; // ignore if we’re mid-frame
+    if (capture_enabled) {
+        vsync_resyncs++;
+        vsync_resync_pending = true;
+        pending_vsync_us = now;
+        return;
+    }
     if (frames_done >= 100) return;
 
     if (last_capture_us) {
@@ -469,10 +478,13 @@ static void poll_cdc_commands(void) {
             usb_drops = 0;
             vsync_edges = 0;
             vsync_rejects = 0;
+            vsync_resyncs = 0;
             last_good_vsync_us = 0;
             last_capture_us = 0;
             capture_timeouts = 0;
             capture_start_us = 0;
+            vsync_resync_pending = false;
+            pending_vsync_us = 0;
             want_frame = false;
             done_latched = false;
             stop_capture();
@@ -673,6 +685,25 @@ int main(void) {
         tud_task();
         poll_cdc_commands();
 
+        if (vsync_resync_pending && capture_enabled) {
+            stop_capture();
+            want_frame = false;
+        }
+
+        if (vsync_resync_pending && !capture_enabled) {
+            uint32_t now = pending_vsync_us;
+            vsync_resync_pending = false;
+            pending_vsync_us = 0;
+            if (armed && frames_done < 100) {
+                if (!last_capture_us || (uint32_t)(now - last_capture_us) >= 32000) {
+                    last_capture_us = now;
+                    want_frame = true;
+                    raw_line = 0;
+                    start_capture_window();
+                }
+            }
+        }
+
         if (capture_enabled) {
             uint32_t now = time_us_32();
             if ((uint32_t)(now - capture_start_us) > CAPTURE_TIMEOUT_US) {
@@ -709,10 +740,13 @@ int main(void) {
                 uint32_t vr = vsync_rejects;
                 vsync_rejects = 0;
 
+                uint32_t vrs = vsync_resyncs;
+                vsync_resyncs = 0;
+
                 uint32_t ct = capture_timeouts;
                 capture_timeouts = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu vsync_rejects/s=%lu cap_timeouts/s=%lu frames=%lu/100\n",
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu vsync_rejects/s=%lu vsync_resyncs/s=%lu cap_timeouts/s=%lu frames=%lu/100\n",
                        armed ? 1 : 0,
                        capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
@@ -722,6 +756,7 @@ int main(void) {
                        (unsigned long)usb_drops,
                        (unsigned long)ve,
                        (unsigned long)vr,
+                       (unsigned long)vrs,
                        (unsigned long)ct,
                        (unsigned long)frames_done);
             }

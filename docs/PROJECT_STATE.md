@@ -20,6 +20,7 @@ Macintosh Classic KVM:
 - Throughput controls:
   - Time-based gating limits captures to ~30 fps.
   - Capture auto-aborts if a line window stalls longer than ~50 ms.
+  - VSYNC during capture forces a resync to avoid vertical drift.
   - Stops after 100 transmitted frames until reset.
 - USB CDC streaming:
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).

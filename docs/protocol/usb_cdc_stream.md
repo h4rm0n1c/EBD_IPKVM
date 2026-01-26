@@ -55,6 +55,7 @@ The firmware is host-controlled over the same CDC channel:
 - Long gaps reset the VSYNC baseline so capture can recover after missed edges.
 - Frames are gated by time so captures occur no more often than ~32 ms (~30 fps).
 - Capture automatically aborts if a line window stalls longer than ~50 ms, allowing recovery on the next VSYNC.
+- If a VSYNC arrives mid-capture, the firmware aborts and restarts on that edge to resync vertical alignment.
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).
