@@ -1,6 +1,6 @@
 # Decisions (running)
 
-- 2026-01-27: Deglitch VSYNC using an interval filter (~12–23 ms) and gate capture by time (~32 ms) instead of alternating edges.
+- 2026-01-27: Deglitch VSYNC using an interval filter (~12–23 ms), resync after long gaps, and gate capture by time (~32 ms) instead of alternating edges.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
 - 2026-01-25: Repository initialised with docs-first workflow and agent documentation scaffold.

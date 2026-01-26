@@ -315,12 +315,19 @@ static void gpio_irq(uint gpio, uint32_t events) {
     uint32_t now = time_us_32();
     if (last_good_vsync_us) {
         uint32_t dt = now - last_good_vsync_us;
-        if (dt < 12000 || dt > 23000) {
+        if (dt < 12000) {
             vsync_rejects++;
             return;
         }
+        if (dt > 23000) {
+            vsync_rejects++;
+            last_good_vsync_us = now;
+        } else {
+            last_good_vsync_us = now;
+        }
+    } else {
+        last_good_vsync_us = now;
     }
-    last_good_vsync_us = now;
 
     vsync_edges++;
 
