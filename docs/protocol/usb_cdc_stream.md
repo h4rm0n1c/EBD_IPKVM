@@ -54,6 +54,7 @@ The firmware is host-controlled over the same CDC channel:
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
+- PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling
