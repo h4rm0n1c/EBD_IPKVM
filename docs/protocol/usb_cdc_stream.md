@@ -18,6 +18,7 @@ compact header for framing.
 ### Payload format
 - Each line is 512 pixels → 512 bits → 64 bytes.
 - Bits are packed MSB-first; bit 7 is leftmost within each byte.
+- Firmware byte-swaps each 32-bit word from the PIO RX FIFO before enqueueing, so the payload is already in byte order for host unpacking.
 - Host expansion examples: see `src/host_recv_frames.py` (`bytes_to_row64`).
 
 ## Host control commands

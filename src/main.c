@@ -215,6 +215,12 @@ static inline void arm_dma(uint32_t *dst) {
     );
 }
 
+static inline void reorder_line_words(uint32_t *buf) {
+    for (size_t i = 0; i < WORDS_PER_LINE; i++) {
+        buf[i] = __builtin_bswap32(buf[i]);
+    }
+}
+
 static inline void stop_capture(void) {
     capture_enabled = false;
     pio_sm_set_enabled(pio, sm, false);
@@ -273,6 +279,8 @@ static void __isr dma_irq0_handler(void) {
 
     if (want_frame && this_raw >= YOFF_LINES && this_raw < (YOFF_LINES + ACTIVE_H)) {
         uint16_t line_id = (uint16_t)(this_raw - YOFF_LINES);
+
+        reorder_line_words(buf);
 
         if (!txq_enqueue(frame_id, line_id, buf)) {
             lines_drop++; /* queue overflow */
