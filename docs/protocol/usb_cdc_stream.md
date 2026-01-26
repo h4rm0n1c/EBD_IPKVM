@@ -56,8 +56,8 @@ The firmware is host-controlled over the same CDC channel:
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC arms the next capture window; the current capture finishes when the fixed-length DMA transfer completes (not on the VSYNC edge).
 - Each frame is captured into a ping-pong framebuffer via a single fixed-length DMA transfer (no per-line DMA IRQs); line packets are assembled from that buffer in the main loop (outside IRQ).
-- Line capture begins on the selected HSYNC edge before the horizontal skip window.
-- PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips); rising-edge capture waits for PIXCLK low before the first `wait 1`, and falling-edge capture uses a `wait 1` → `wait 0` → sample sequence per bit.
+- Line capture begins on the selected HSYNC edge before the horizontal skip window; default HSYNC edge is falling for classic capture timing.
+- PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips); rising-edge capture waits for PIXCLK low before the first `wait 1`, and falling-edge capture uses a `wait 1` → `wait 0` → sample sequence per bit, with a small post-edge delay before sampling.
 - Capture DMA is sized for `CAP_MAX_LINES` (YOFF+ACTIVE) and runs to completion; payloads normally use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer, but if the captured frame is short the firmware falls back to the last `CAP_ACTIVE_H` lines.
 - Streaming stops after 100 complete frames unless reset.
 
