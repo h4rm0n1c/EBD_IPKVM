@@ -28,6 +28,9 @@ xoff23:
     wait 0 gpio 0
     jmp x-- xoff23
 
+    ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
+    wait 0 gpio 0
+
     ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
 cap_block:
@@ -72,16 +75,14 @@ xoff23:
     wait 0 gpio 0
     jmp x-- xoff23
 
-    wait 1 gpio 0
-
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
 cap_block:
     set x, 31
 cap32:
+    wait 1 gpio 0
     wait 0 gpio 0
     in  pins, 1
-    wait 1 gpio 0
     jmp x-- cap32
     jmp y-- cap_block
 
@@ -117,6 +118,9 @@ xoff23:
     wait 1 gpio 0
     wait 0 gpio 0
     jmp x-- xoff23
+
+    ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
+    wait 0 gpio 0
 
     ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
@@ -162,16 +166,14 @@ xoff23:
     wait 0 gpio 0
     jmp x-- xoff23
 
-    wait 1 gpio 0
-
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
 cap_block:
     set x, 31
 cap32:
+    wait 1 gpio 0
     wait 0 gpio 0
     in  pins, 1
-    wait 1 gpio 0
     jmp x-- cap32
     jmp y-- cap_block
 

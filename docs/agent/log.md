@@ -6,6 +6,7 @@
 - 2026-01-27: Align active-line extraction to the end of short frames so captures still transmit when total lines dip below the nominal VBL+active count.
 - 2026-01-27: Byte-swapped 32-bit PIO RX FIFO words before enqueueing USB line packets to fix 16/32-pixel block ordering artifacts.
 - 2026-01-27: Phase-locked PIXCLK after HSYNC in PIO capture to eliminate intermittent 1-pixel horizontal slips.
+- 2026-01-27: Forced PIXCLK phase alignment in PIO capture loops so the first sample always follows a real edge.
 - 2026-01-26: Restored missing helper scripts for CDC command output and A/B capture testing; documented their usage.
 - 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
 - 2026-01-26: Defaulted host test helper to send ATX power-on before capture, wait with diagnostics, and request ATX shutdown on exit.
