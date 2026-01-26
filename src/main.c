@@ -53,6 +53,7 @@ static volatile uint32_t lines_drop = 0;
 static volatile uint32_t usb_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
+static uint32_t last_vsync_us = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
@@ -308,6 +309,12 @@ static void gpio_irq(uint gpio, uint32_t events) {
     } else {
         if (!(events & GPIO_IRQ_EDGE_RISE)) return;
     }
+
+    uint32_t now = time_us_32();
+    if ((uint32_t)(now - last_vsync_us) < 3000) {
+        return;
+    }
+    last_vsync_us = now;
 
     vsync_edges++;
 

@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-01-27: Debounce VSYNC IRQs with a short (~3 ms) guard window to ignore spurious double-triggers before starting a capture.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
 - 2026-01-25: Repository initialised with docs-first workflow and agent documentation scaffold.

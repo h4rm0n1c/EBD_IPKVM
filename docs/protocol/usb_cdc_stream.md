@@ -52,6 +52,7 @@ The firmware is host-controlled over the same CDC channel:
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
+- VSYNC IRQs are debounced with a ~3 ms guard window to ignore spurious double-triggers.
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).

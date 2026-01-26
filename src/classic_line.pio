@@ -10,6 +10,7 @@
 start:
     wait 1 gpio 2
     wait 0 gpio 2
+    wait 1 gpio 0
     wait 0 gpio 0
 
     ; XOFF: 5*31 + 23 clocks
@@ -54,6 +55,7 @@ cap32:
 start:
     wait 1 gpio 2
     wait 0 gpio 2
+    wait 1 gpio 0
     wait 0 gpio 0
 
     ; XOFF: 5*31 + 23 clocks
@@ -100,6 +102,7 @@ cap32:
 start:
     wait 0 gpio 2
     wait 1 gpio 2
+    wait 1 gpio 0
     wait 0 gpio 0
 
     ; XOFF: 5*31 + 23 clocks
@@ -144,6 +147,7 @@ cap32:
 start:
     wait 0 gpio 2
     wait 1 gpio 2
+    wait 1 gpio 0
     wait 0 gpio 0
 
     ; XOFF: 5*31 + 23 clocks
