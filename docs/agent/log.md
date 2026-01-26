@@ -1,6 +1,6 @@
 # Log (running)
 
-- 2026-01-27: Debounced VSYNC IRQs with a ~3 ms guard window and phase-locked PIXCLK on a post-HSYNC falling edge in all PIO line programs.
+- 2026-01-27: Deglitched VSYNC with interval filtering and time-based ~30 fps gating; phase-locked PIXCLK on a post-HSYNC falling edge in all PIO line programs.
 - 2026-01-27: Byte-swapped 32-bit PIO RX FIFO words before enqueueing USB line packets to fix 16/32-pixel block ordering artifacts.
 - 2026-01-27: Phase-locked PIXCLK after HSYNC in PIO capture to eliminate intermittent 1-pixel horizontal slips.
 - 2026-01-26: Restored missing helper scripts for CDC command output and A/B capture testing; documented their usage.

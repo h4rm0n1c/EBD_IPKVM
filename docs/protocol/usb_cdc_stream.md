@@ -51,8 +51,8 @@ The firmware is host-controlled over the same CDC channel:
   - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
-- Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
-- VSYNC IRQs are debounced with a ~3 ms guard window to ignore spurious double-triggers.
+- Firmware deglitches VSYNC by accepting only intervals in the ~12–23 ms range.
+- Frames are gated by time so captures occur no more often than ~32 ms (~30 fps).
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).

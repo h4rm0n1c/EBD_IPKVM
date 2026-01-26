@@ -41,7 +41,6 @@ static volatile bool using_a = true;
 static volatile bool armed = false;            // host says start/stop
 static volatile bool capture_enabled = false;  // SM+DMA running right now
 static volatile bool want_frame = false;       // transmit this frame or skip
-static volatile bool take_toggle = false;      // every other frame => ~30fps
 
 static volatile uint16_t frame_id = 0;         // increments per transmitted frame
 static volatile uint16_t raw_line = 0;         // 0..CAP_LINES-1
@@ -53,7 +52,9 @@ static volatile uint32_t lines_drop = 0;
 static volatile uint32_t usb_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
-static uint32_t last_vsync_us = 0;
+static volatile uint32_t vsync_rejects = 0;
+static uint32_t last_good_vsync_us = 0;
+static uint32_t last_capture_us = 0;
 static volatile uint32_t frames_done = 0;
 static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
@@ -182,7 +183,7 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu vsync_rejects=%lu\n",
            armed ? 1 : 0,
            capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
@@ -196,7 +197,8 @@ static void emit_debug_state(void) {
            (unsigned long)frames_done,
            (unsigned long)lines_ok,
            (unsigned long)lines_drop,
-           (unsigned long)usb_drops);
+           (unsigned long)usb_drops,
+           (unsigned long)vsync_rejects);
 }
 
 static inline void arm_dma(uint32_t *dst) {
@@ -311,10 +313,14 @@ static void gpio_irq(uint gpio, uint32_t events) {
     }
 
     uint32_t now = time_us_32();
-    if ((uint32_t)(now - last_vsync_us) < 3000) {
-        return;
+    if (last_good_vsync_us) {
+        uint32_t dt = now - last_good_vsync_us;
+        if (dt < 12000 || dt > 23000) {
+            vsync_rejects++;
+            return;
+        }
     }
-    last_vsync_us = now;
+    last_good_vsync_us = now;
 
     vsync_edges++;
 
@@ -322,9 +328,15 @@ static void gpio_irq(uint gpio, uint32_t events) {
     if (capture_enabled) return; // ignore if we’re mid-frame
     if (frames_done >= 100) return;
 
-    take_toggle = !take_toggle;          // every other VSYNC => ~30fps
-    want_frame = take_toggle;
+    if (last_capture_us) {
+        uint32_t since = now - last_capture_us;
+        if (since < 32000) {
+            return;
+        }
+    }
+    last_capture_us = now;
 
+    want_frame = true;
     raw_line = 0;
     start_capture_window();
 }
@@ -442,7 +454,9 @@ static void poll_cdc_commands(void) {
             lines_drop = 0;
             usb_drops = 0;
             vsync_edges = 0;
-            take_toggle = false;
+            vsync_rejects = 0;
+            last_good_vsync_us = 0;
+            last_capture_us = 0;
             want_frame = false;
             done_latched = false;
             stop_capture();
@@ -667,7 +681,10 @@ int main(void) {
                 uint32_t ve = vsync_edges;
                 vsync_edges = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu frames=%lu/100\n",
+                uint32_t vr = vsync_rejects;
+                vsync_rejects = 0;
+
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu vsync_edges/s=%lu vsync_rejects/s=%lu frames=%lu/100\n",
                        armed ? 1 : 0,
                        capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
@@ -676,6 +693,7 @@ int main(void) {
                        (unsigned long)lines_drop,
                        (unsigned long)usb_drops,
                        (unsigned long)ve,
+                       (unsigned long)vr,
                        (unsigned long)frames_done);
             }
 
