@@ -54,8 +54,8 @@ The firmware is host-controlled over the same CDC channel:
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
 - Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
-- VSYNC ends the current capture immediately; the next frame capture window starts right after the VSYNC edge if armed.
-- Each frame is captured into a ping-pong framebuffer via a single DMA transfer (no per-line DMA IRQs); line packets are assembled from that buffer in the main loop (outside IRQ).
+- VSYNC arms the next capture window; the current capture finishes when the fixed-length DMA transfer completes (not on the VSYNC edge).
+- Each frame is captured into a ping-pong framebuffer via a single fixed-length DMA transfer (no per-line DMA IRQs); line packets are assembled from that buffer in the main loop (outside IRQ).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips); rising-edge capture waits for PIXCLK low before the first `wait 1`, and falling-edge capture uses a `wait 1` → `wait 0` → sample sequence per bit.
 - Capture DMA is sized for `CAP_MAX_LINES` and is aborted on VSYNC; payloads normally use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer, but if the captured frame is short the firmware falls back to the last `CAP_ACTIVE_H` lines.

@@ -3,6 +3,8 @@
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
 - 2026-01-27: For PIXCLK rising-edge capture, force PIXCLK low before the first `wait 1`; for falling-edge capture, wait high→low before sampling each bit to prevent phase-dependent jitter.
+- 2026-01-27: Capture a fixed (YOFF+ACTIVE) number of lines and finalize frames on DMA completion instead of VSYNC to avoid variable line counts.
+- 2026-01-27: Anchor HSYNC with a full high→low→high sequence and reduce XOFF by 16 PIXCLKs to align horizontal sampling.
 - 2026-01-27: End frames on VSYNC and use ping-pong framebuffers so capture timing stays locked while USB packetization runs in the main loop.
 - 2026-01-27: Debounce VSYNC edges and only mark frames for transmit when the USB TX path is idle to prevent backpressure skips.
 - 2026-01-27: Capture each frame with a single DMA transfer into a contiguous buffer and abort on VSYNC to avoid per-line DMA timing hazards.

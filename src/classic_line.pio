@@ -8,11 +8,14 @@
 
 .wrap_target
 start:
+    ; Robust HSYNC sync: always anchor at end-of-sync pulse
     wait 1 gpio 2
     wait 0 gpio 2
+    wait 1 gpio 2
+
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 7 clocks
     set y, 4
 xoff_b31:
     set x, 30
@@ -22,7 +25,7 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
+    set x, 6
 xoff23:
     wait 1 gpio 0
     wait 0 gpio 0
@@ -55,11 +58,14 @@ cap32:
 
 .wrap_target
 start:
+    ; Robust HSYNC sync: always anchor at end-of-sync pulse
     wait 1 gpio 2
     wait 0 gpio 2
+    wait 1 gpio 2
+
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 7 clocks
     set y, 4
 xoff_b31:
     set x, 30
@@ -69,7 +75,7 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
+    set x, 6
 xoff23:
     wait 1 gpio 0
     wait 0 gpio 0
@@ -99,11 +105,14 @@ cap32:
 
 .wrap_target
 start:
+    ; Robust HSYNC sync: always anchor at end-of-sync pulse
+    wait 1 gpio 2
     wait 0 gpio 2
     wait 1 gpio 2
+
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 7 clocks
     set y, 4
 xoff_b31:
     set x, 30
@@ -113,7 +122,7 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
+    set x, 6
 xoff23:
     wait 1 gpio 0
     wait 0 gpio 0
@@ -146,11 +155,14 @@ cap32:
 
 .wrap_target
 start:
+    ; Robust HSYNC sync: always anchor at end-of-sync pulse
+    wait 1 gpio 2
     wait 0 gpio 2
     wait 1 gpio 2
+
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 7 clocks
     set y, 4
 xoff_b31:
     set x, 30
@@ -160,7 +172,7 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
+    set x, 6
 xoff23:
     wait 1 gpio 0
     wait 0 gpio 0
