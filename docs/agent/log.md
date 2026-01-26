@@ -24,6 +24,7 @@
 - 2026-01-26: Emit a probe packet when starting a synthetic test frame to confirm CDC output immediately.
 - 2026-01-26: Queue probe packets until CDC write space is available to avoid missing probes.
 - 2026-01-26: Add a debug CDC command to report internal streaming state on demand.
+- 2026-01-26: Added a consolidated Macintosh Classic video timing/sync summary and expanded the source index for mac_classic_video_protocol references.
 - 2026-01-25: Stream USB CDC packets in chunks so 72-byte line packets transmit on 64-byte endpoints.
 - 2026-01-25: Increase line TX queue depth to buffer a full frame and avoid drops on full-speed USB.
 - 2026-01-25: Trigger line capture on HSYNC falling edge to test polarity alignment.
