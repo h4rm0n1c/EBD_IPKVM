@@ -55,6 +55,7 @@ The firmware is host-controlled over the same CDC channel:
 - Capture window is 370 HSYNCs total (28 VBL + 342 active).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).
+- Horizontal skip window is 175 PIXCLK cycles (~11.2 µs at 15.6672 MHz) before the 512-pixel capture.
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling
