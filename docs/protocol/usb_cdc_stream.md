@@ -52,14 +52,17 @@ The firmware is host-controlled over the same CDC channel:
 
 ## Capture cadence
 - Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
-- Capture window is 370 HSYNCs total (28 VBL + 342 active).
+- VSYNC ends the current capture immediately; the next frame capture window starts right after the VSYNC edge if armed.
+- Each frame is captured into a ping-pong framebuffer; line packets are assembled from that buffer in the main loop (outside IRQ).
 - Line capture begins on the selected HSYNC edge before the horizontal skip window.
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips).
+- DMA has a guard limit (`CAP_LINES_GUARD`) to stop capture if VSYNC is missing or lines run long; VSYNC still defines the real frame end.
 - Streaming stops after 100 complete frames unless reset.
 
 ## Error handling
 - If the TX queue is full, line packets are dropped and `lines_drop` increments.
 - If USB write fails or buffer is full, `usb_drops` increments.
+- If a frame finishes while the previous frame is still queued for transmit, the older ready frame is dropped and `frame_overrun` increments (see debug/status output).
 
 For concrete host-side parsing and reassembly, refer to
 `src/host_recv_frames.py`.

@@ -11,6 +11,7 @@ pico_sdk_init()
 
 add_executable(EBD_IPKVM
     src/main.c
+    src/video_capture.c
 )
 
 pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/classic_line.pio)
@@ -28,4 +29,3 @@ target_link_libraries(EBD_IPKVM
 )
 
 pico_add_extra_outputs(EBD_IPKVM)
-

@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.
 - 2026-01-27: Byte-swapped 32-bit PIO RX FIFO words before enqueueing USB line packets to fix 16/32-pixel block ordering artifacts.
 - 2026-01-27: Phase-locked PIXCLK after HSYNC in PIO capture to eliminate intermittent 1-pixel horizontal slips.
 - 2026-01-26: Restored missing helper scripts for CDC command output and A/B capture testing; documented their usage.
