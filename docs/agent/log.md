@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-27: Byte-swapped 32-bit PIO RX FIFO words before enqueueing USB line packets to fix 16/32-pixel block ordering artifacts.
 - 2026-01-26: Restored missing helper scripts for CDC command output and A/B capture testing; documented their usage.
 - 2026-01-26: Added ATX soft-power, BOOTSEL, and watchdog reset CDC commands; documented GPIO9 PS_ON output.
 - 2026-01-26: Defaulted host test helper to send ATX power-on before capture, wait with diagnostics, and request ATX shutdown on exit.
