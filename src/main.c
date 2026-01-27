@@ -74,7 +74,7 @@ static uint offset_fall_pixrise = 0;
 static uint offset_fall_pixfall = 0;
 static uint offset_rise_pixrise = 0;
 static uint offset_rise_pixfall = 0;
-static bool hsync_fall_edge = false;
+static bool hsync_fall_edge = true;
 static bool vsync_fall_edge = true;
 static bool pixclk_rise_edge = true;
 static void gpio_irq(uint gpio, uint32_t events);
@@ -267,10 +267,7 @@ static void gpio_irq(uint gpio, uint32_t events) {
     vsync_edges++;
 
     if (capture.capture_enabled) {
-        if (video_capture_finalize_frame(&capture, frame_id)) {
-            frames_done++;
-            frame_id++;
-        }
+        return;
     }
     if (!armed) {
         return;
@@ -281,7 +278,9 @@ static void gpio_irq(uint gpio, uint32_t events) {
     take_toggle = !take_toggle;          // every other VSYNC => ~30fps
     want_frame = take_toggle && !tx_busy;
 
-    video_capture_start(&capture, want_frame);
+    if (want_frame) {
+        video_capture_start(&capture, true);
+    }
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -661,6 +660,15 @@ int main(void) {
     uint32_t last_lines = 0;
 
     while (true) {
+        if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
+            if (video_capture_finalize_frame(&capture, frame_id)) {
+                frame_id++;
+                frames_done++;
+            } else {
+                frame_id++;
+            }
+        }
+
         tud_task();
         poll_cdc_commands();
 

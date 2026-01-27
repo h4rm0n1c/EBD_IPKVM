@@ -2,17 +2,22 @@
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 high->low)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (157 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
 .wrap_target
 start:
+    ; HSYNC falling edge (active-low HSYNC): high -> low
     wait 1 gpio 2
     wait 0 gpio 2
+
+    ; Phase-lock to a known PIXCLK edge (end on PIXCLK low)
+    wait 0 gpio 0
+    wait 1 gpio 0
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 2 clocks = 157 PIXCLK cycles
     set y, 4
 xoff_b31:
     set x, 30
@@ -22,11 +27,14 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
-xoff23:
+    set x, 1
+xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff2
+
+    ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
+    wait 0 gpio 0
 
     ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
@@ -34,6 +42,7 @@ cap_block:
     set x, 31
 cap32:
     wait 1 gpio 0
+    nop [2]
     in  pins, 1
     wait 0 gpio 0
     jmp x-- cap32
@@ -46,17 +55,22 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 high->low)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (157 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
 .wrap_target
 start:
+    ; HSYNC falling edge (active-low HSYNC): high -> low
     wait 1 gpio 2
     wait 0 gpio 2
+
+    ; Phase-lock to a known PIXCLK edge (end on PIXCLK low)
+    wait 0 gpio 0
+    wait 1 gpio 0
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 2 clocks = 157 PIXCLK cycles
     set y, 4
 xoff_b31:
     set x, 30
@@ -66,22 +80,21 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
-xoff23:
+    set x, 1
+xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
-
-    wait 1 gpio 0
+    jmp x-- xoff2
 
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
 cap_block:
     set x, 31
 cap32:
-    wait 0 gpio 0
-    in  pins, 1
     wait 1 gpio 0
+    wait 0 gpio 0
+    nop [2]
+    in  pins, 1
     jmp x-- cap32
     jmp y-- cap_block
 
@@ -92,17 +105,22 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (157 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
 .wrap_target
 start:
+    ; HSYNC rising edge (active-low HSYNC): low -> high
     wait 0 gpio 2
     wait 1 gpio 2
+
+    ; Phase-lock to a known PIXCLK edge (end on PIXCLK low)
+    wait 0 gpio 0
+    wait 1 gpio 0
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 2 clocks = 157 PIXCLK cycles
     set y, 4
 xoff_b31:
     set x, 30
@@ -112,11 +130,14 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
-xoff23:
+    set x, 1
+xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
+    jmp x-- xoff2
+
+    ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
+    wait 0 gpio 0
 
     ; Capture 512 bits as 16*32 (PIXCLK rising edge)
     set y, 15
@@ -124,6 +145,7 @@ cap_block:
     set x, 31
 cap32:
     wait 1 gpio 0
+    nop [2]
     in  pins, 1
     wait 0 gpio 0
     jmp x-- cap32
@@ -136,17 +158,22 @@ cap32:
 
 ; One line capture:
 ;   wait HSYNC (GPIO2 low->high)
-;   skip XOFF (178 PIXCLK cycles on GPIO0)
+;   skip XOFF (157 PIXCLK cycles on GPIO0)
 ;   capture 512 VIDEO bits from IN base (GPIO3)
 ;   autopush 32-bit words => 16 words = 64 bytes into RX FIFO
 
 .wrap_target
 start:
+    ; HSYNC rising edge (active-low HSYNC): low -> high
     wait 0 gpio 2
     wait 1 gpio 2
+
+    ; Phase-lock to a known PIXCLK edge (end on PIXCLK low)
+    wait 0 gpio 0
+    wait 1 gpio 0
     wait 0 gpio 0
 
-    ; XOFF: 5*31 + 23 clocks
+    ; XOFF: 5*31 + 2 clocks = 157 PIXCLK cycles
     set y, 4
 xoff_b31:
     set x, 30
@@ -156,22 +183,21 @@ xoff31:
     jmp x-- xoff31
     jmp y-- xoff_b31
 
-    set x, 22
-xoff23:
+    set x, 1
+xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
-    jmp x-- xoff23
-
-    wait 1 gpio 0
+    jmp x-- xoff2
 
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
 cap_block:
     set x, 31
 cap32:
-    wait 0 gpio 0
-    in  pins, 1
     wait 1 gpio 0
+    wait 0 gpio 0
+    nop [2]
+    in  pins, 1
     jmp x-- cap32
     jmp y-- cap_block
 

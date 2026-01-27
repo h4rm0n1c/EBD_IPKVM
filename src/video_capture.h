@@ -7,9 +7,10 @@
 
 #define CAP_ACTIVE_H 342
 #define CAP_YOFF_LINES 28
+#define CAP_FRAME_LINES (CAP_YOFF_LINES + CAP_ACTIVE_H)
 #define CAP_BYTES_PER_LINE 64
 #define CAP_WORDS_PER_LINE (CAP_BYTES_PER_LINE / 4)
-#define CAP_MAX_LINES 512
+#define CAP_MAX_LINES CAP_FRAME_LINES
 
 typedef struct video_capture {
     PIO pio;

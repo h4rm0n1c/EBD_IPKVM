@@ -16,7 +16,7 @@ Macintosh Classic KVM:
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
-- Each line waits for the selected HSYNC edge, skips 178 PIXCLK cycles, then samples 512 bits.
+- Each line waits for the selected HSYNC edge, skips 157 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
   - Alternates frames on each VSYNC to target ~30 fps.
   - Stops after 100 transmitted frames until reset.
