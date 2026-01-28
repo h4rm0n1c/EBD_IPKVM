@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <strings.h>
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -86,7 +88,7 @@
 #define PORTAL_IP_OCT4 1
 #define PORTAL_LEASE_OCT4 2
 #define PORTAL_MAX_SCAN 12
-#define PORTAL_MAX_REQ 768
+#define PORTAL_MAX_REQ 4096
 
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
@@ -474,6 +476,100 @@ static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location
     tcp_output(tpcb);
 }
 
+typedef struct {
+    char buf[PORTAL_MAX_REQ];
+    size_t len;
+    size_t parse_pos;
+    size_t body_offset;
+    int content_length;
+    bool request_line_done;
+    bool headers_done;
+    bool is_post;
+    bool content_length_seen;
+    char path[64];
+} portal_http_state_t;
+
+static void portal_http_state_cleanup(struct tcp_pcb *tpcb, portal_http_state_t *state) {
+    if (state) {
+        free(state);
+    }
+    if (tpcb) {
+        tcp_arg(tpcb, NULL);
+        tcp_recv(tpcb, NULL);
+        tcp_err(tpcb, NULL);
+    }
+}
+
+static void portal_http_err(void *arg, err_t err) {
+    (void)err;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
+    if (state) {
+        free(state);
+    }
+}
+
+static bool portal_find_line_end(const char *buf, size_t len, size_t *line_len, size_t *eol_len) {
+    for (size_t i = 0; i < len; i++) {
+        if (buf[i] == '\n') {
+            if (i > 0 && buf[i - 1] == '\r') {
+                *line_len = i - 1;
+                *eol_len = 2;
+            } else {
+                *line_len = i;
+                *eol_len = 1;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static int portal_parse_content_length_line(const char *line, size_t len) {
+    const char header[] = "Content-Length:";
+    size_t header_len = sizeof(header) - 1;
+    if (len < header_len || strncasecmp(line, header, header_len) != 0) {
+        return -1;
+    }
+    const char *val = line + header_len;
+    while ((size_t)(val - line) < len && (*val == ' ' || *val == '\t')) {
+        val++;
+    }
+    return atoi(val);
+}
+
+static bool portal_parse_request_line(portal_http_state_t *state, const char *line, size_t len) {
+    const char *space1 = memchr(line, ' ', len);
+    if (!space1) return false;
+    const char *space2 = memchr(space1 + 1, ' ', len - (size_t)(space1 + 1 - line));
+    if (!space2) return false;
+    size_t method_len = (size_t)(space1 - line);
+    state->is_post = (method_len == 4 && strncmp(line, "POST", 4) == 0);
+    size_t path_len = (size_t)(space2 - (space1 + 1));
+    if (path_len >= sizeof(state->path)) {
+        path_len = sizeof(state->path) - 1;
+    }
+    memcpy(state->path, space1 + 1, path_len);
+    state->path[path_len] = '\0';
+    if (strncmp(state->path, "http://", 7) == 0 || strncmp(state->path, "https://", 8) == 0) {
+        const char *p = strstr(state->path, "://");
+        if (p) {
+            p += 3;
+            const char *slash = strchr(p, '/');
+            if (slash) {
+                size_t new_len = strlen(slash);
+                memmove(state->path, slash, new_len + 1);
+            } else {
+                strcpy(state->path, "/");
+            }
+        }
+    }
+    char *q = strchr(state->path, '?');
+    if (q) {
+        *q = '\0';
+    }
+    return true;
+}
+
 static void portal_send_index(struct tcp_pcb *tpcb) {
     char page[2048];
     int n = snprintf(page, sizeof(page),
@@ -488,10 +584,8 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
                      "<div class=\"row\">"
-                     "<button type=\"button\" id=\"scan_btn\">Scan Wi-Fi</button>"
-                     "<span id=\"scan_status\"></span>"
+                     "<a href=\"/scan\">Scan Wi-Fi</a>"
                      "</div>"
-                     "<ul id=\"scan_list\"></ul>"
                      "<form method=\"POST\" action=\"/save\">"
                      "<label>SSID</label><input name=\"ssid\" value=\"%s\" />"
                      "<label>Password</label><input name=\"pass\" type=\"password\" value=\"%s\" />"
@@ -499,59 +593,18 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<button type=\"submit\">Save &amp; Reboot</button>"
                      "</form>"
                      "<div class=\"row\">"
-                     "<button type=\"button\" id=\"ps_on_btn\">Power On</button>"
-                     "<button type=\"button\" id=\"ps_off_btn\">Power Off</button>"
+                     "<form method=\"POST\" action=\"/ps_on\" id=\"ps_on_form\">"
+                     "<button type=\"submit\" id=\"ps_on_btn\">Power On</button>"
+                     "</form>"
+                     "<form method=\"POST\" action=\"/ps_off\" id=\"ps_off_form\">"
+                     "<button type=\"submit\" id=\"ps_off_btn\">Power Off</button>"
+                     "</form>"
                      "<span id=\"power_status\"></span>"
                      "</div>"
                      "<script>"
-                     "const scanBtn=document.getElementById('scan_btn');"
-                     "const scanList=document.getElementById('scan_list');"
-                     "const scanStatus=document.getElementById('scan_status');"
                      "const powerStatus=document.getElementById('power_status');"
-                     "const ssidInput=document.querySelector('input[name=\"ssid\"]');"
-                     "async function scan(){"
-                     "scanStatus.textContent='scanning...';"
-                     "scanBtn.disabled=true;"
-                     "try{"
-                     "const res=await fetch('/scan');"
-                     "const data=await res.json();"
-                     "scanList.innerHTML='';"
-                     "if(Array.isArray(data.results)){"
-                     "data.results.forEach((r)=>{"
-                     "const li=document.createElement('li');"
-                     "const btn=document.createElement('button');"
-                     "btn.type='button';"
-                     "btn.textContent=`${r.ssid} (rssi ${r.rssi})`;"
-                     "btn.addEventListener('click',()=>{ssidInput.value=r.ssid;});"
-                     "li.appendChild(btn);"
-                     "scanList.appendChild(li);"
-                     "});"
-                     "}"
-                     "if(data.scanning){"
-                     "scanStatus.textContent='scanning...';"
-                     "setTimeout(scan,1000);"
-                     "}else{"
-                     "scanStatus.textContent='done';"
-                     "scanBtn.disabled=false;"
-                     "}"
-                     "}catch(e){"
-                     "scanStatus.textContent=`error: ${e.message}`;"
-                     "scanBtn.disabled=false;"
-                     "}"
-                     "}"
-                     "scanBtn.addEventListener('click',scan);"
-                     "async function power(path){"
-                     "powerStatus.textContent='...';"
-                     "try{"
-                     "await fetch(path,{method:'POST'});"
-                     "powerStatus.textContent=path==='\\/ps_on'?'on':'off';"
-                     "}catch(e){"
-                     "powerStatus.textContent=`error: ${e.message}`;"
-                     "}"
-                     "}"
-                     "document.getElementById('ps_on_btn').addEventListener('click',()=>power('/ps_on'));"
-                     "document.getElementById('ps_off_btn').addEventListener('click',()=>power('/ps_off'));"
-                     "window.addEventListener('error',(e)=>{scanStatus.textContent=`error: ${e.message}`;});"
+                     "document.getElementById('ps_on_form').addEventListener('submit',()=>{powerStatus.textContent='on';});"
+                     "document.getElementById('ps_off_form').addEventListener('submit',()=>{powerStatus.textContent='off';});"
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
@@ -619,6 +672,41 @@ static void portal_send_scan(struct tcp_pcb *tpcb) {
     portal_http_send(tpcb, "application/json", json);
 }
 
+static void portal_send_scan_page(struct tcp_pcb *tpcb) {
+    if (!portal.scan_in_progress) {
+        portal_start_scan();
+    }
+    char page[2048];
+    int n = snprintf(page, sizeof(page),
+                     "<!doctype html><html><head><meta charset=\"utf-8\">"
+                     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                     "<title>EBD IPKVM Wi-Fi Scan</title>"
+                     "%s"
+                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>"
+                     "</head><body>"
+                     "<h2>Wi-Fi Scan</h2>"
+                     "<p>Status: <strong>%s</strong></p>"
+                     "<ul>",
+                     portal.scan_in_progress ? "<meta http-equiv=\"refresh\" content=\"2\">" : "",
+                     portal.scan_in_progress ? "scanning" : "done");
+    if (n > 0) {
+        for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
+            portal_scan_result_t *r = &portal.scan_results[i];
+            int wrote = snprintf(page + n, sizeof(page) - (size_t)n,
+                                 "<li>%s (rssi %ld)</li>",
+                                 r->ssid,
+                                 (long)r->rssi);
+            if (wrote < 0) break;
+            n += wrote;
+        }
+    }
+    if (n > 0 && (size_t)n < sizeof(page)) {
+        snprintf(page + n, sizeof(page) - (size_t)n,
+                 "</ul><p><a href=\"/\">Back to setup</a></p></body></html>");
+    }
+    portal_http_send(tpcb, "text/html", page);
+}
+
 static void portal_handle_save(const char *body) {
     char ssid[WIFI_CFG_MAX_SSID + 1] = {0};
     char pass[WIFI_CFG_MAX_PASS + 1] = {0};
@@ -649,63 +737,51 @@ static void portal_handle_ps_on(bool on) {
     set_ps_on(on);
 }
 
-static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
+static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post,
+                                              const char *path, const char *body) {
     cyw43_arch_lwip_begin();
-    if (!req) {
+    if (!path || path[0] == '\0') {
         portal_http_send(tpcb, "text/plain", "bad request");
         goto out;
     }
-    const char *line_end = strstr(req, "\r\n");
-    if (!line_end) {
-        portal_http_send(tpcb, "text/plain", "bad request");
-        goto out;
-    }
-    char method[8] = {0};
-    char path[64] = {0};
-    sscanf(req, "%7s %63s", method, path);
-    const char *body = strstr(req, "\r\n\r\n");
-    if (body) body += 4;
-
-    bool is_get = strcmp(method, "GET") == 0;
-    bool is_post = strcmp(method, "POST") == 0;
-    if (is_get) {
+    if (!is_post) {
         if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
             portal_send_index(tpcb);
         } else if (strcmp(path, "/scan") == 0) {
-            portal_send_scan(tpcb);
+            portal_send_scan_page(tpcb);
         } else if (strcmp(path, "/ps_on") == 0) {
             portal_handle_ps_on(true);
-            portal_http_send(tpcb, "text/plain", "ps_on");
+            portal_http_send_redirect(tpcb, "/");
         } else if (strcmp(path, "/ps_off") == 0) {
             portal_handle_ps_on(false);
-            portal_http_send(tpcb, "text/plain", "ps_off");
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send_redirect(tpcb, "/");
         }
         goto out;
     }
 
-    if (is_post && strcmp(path, "/save") == 0) {
+    if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
-            portal_http_send(tpcb, "text/plain", "saved");
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
         }
         goto out;
     }
-    if (is_post && strcmp(path, "/ps_on") == 0) {
+    if (strcmp(path, "/ps_on") == 0) {
         portal_handle_ps_on(true);
-        portal_http_send(tpcb, "text/plain", "ps_on");
+        portal_http_send_redirect(tpcb, "/");
         goto out;
     }
-    if (is_post && strcmp(path, "/ps_off") == 0) {
+    if (strcmp(path, "/ps_off") == 0) {
         portal_handle_ps_on(false);
-        portal_http_send(tpcb, "text/plain", "ps_off");
+        portal_http_send_redirect(tpcb, "/");
         goto out;
     }
-    if (is_post && strcmp(path, "/scan") == 0) {
-        portal_send_scan(tpcb);
+    if (strcmp(path, "/scan") == 0) {
+        portal_send_scan_page(tpcb);
         goto out;
     }
 
@@ -715,27 +791,118 @@ out:
 }
 
 static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
-    (void)arg;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
     if (err != ERR_OK) {
         if (p) pbuf_free(p);
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return err;
     }
     if (!p) {
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return ERR_OK;
     }
 
-    static char req_buf[PORTAL_MAX_REQ];
+    if (!state) {
+        pbuf_free(p);
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+        return ERR_VAL;
+    }
+
+    size_t space = sizeof(state->buf) - state->len - 1;
     size_t total = p->tot_len;
-    if (total >= sizeof(req_buf)) total = sizeof(req_buf) - 1;
-    pbuf_copy_partial(p, req_buf, total, 0);
-    req_buf[total] = '\0';
+    if (total > space) {
+        total = space;
+    }
+    if (total > 0) {
+        pbuf_copy_partial(p, state->buf + state->len, total, 0);
+        state->len += total;
+        state->buf[state->len] = '\0';
+    }
     tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
 
-    portal_handle_http_request(tpcb, req_buf);
-    tcp_close(tpcb);
+    for (;;) {
+        if (!state->request_line_done) {
+            size_t line_len = 0;
+            size_t eol_len = 0;
+            if (!portal_find_line_end(state->buf + state->parse_pos,
+                                      state->len - state->parse_pos,
+                                      &line_len, &eol_len)) {
+                break;
+            }
+            if (!portal_parse_request_line(state, state->buf + state->parse_pos, line_len)) {
+                portal_http_send(tpcb, "text/plain", "bad request");
+                portal_http_state_cleanup(tpcb, state);
+                tcp_close(tpcb);
+                return ERR_OK;
+            }
+            state->parse_pos += line_len + eol_len;
+            state->request_line_done = true;
+            continue;
+        }
+        if (!state->headers_done) {
+            size_t line_len = 0;
+            size_t eol_len = 0;
+            if (!portal_find_line_end(state->buf + state->parse_pos,
+                                      state->len - state->parse_pos,
+                                      &line_len, &eol_len)) {
+                break;
+            }
+            if (line_len == 0) {
+                state->headers_done = true;
+                state->body_offset = state->parse_pos + eol_len;
+                if (!state->content_length_seen && state->is_post) {
+                    size_t available_now = state->len - state->body_offset;
+                    if (available_now > INT_MAX) {
+                        portal_http_send(tpcb, "text/plain", "request too large");
+                        portal_http_state_cleanup(tpcb, state);
+                        tcp_close(tpcb);
+                        return ERR_OK;
+                    }
+                    state->content_length = (int)available_now;
+                }
+                size_t max_body = sizeof(state->buf) - state->body_offset - 1;
+                if (state->content_length < 0 || (size_t)state->content_length > max_body) {
+                    portal_http_send(tpcb, "text/plain", "request too large");
+                    portal_http_state_cleanup(tpcb, state);
+                    tcp_close(tpcb);
+                    return ERR_OK;
+                }
+                state->parse_pos += eol_len;
+                continue;
+            }
+            int parsed = portal_parse_content_length_line(state->buf + state->parse_pos,
+                                                          line_len);
+            if (parsed >= 0) {
+                state->content_length = parsed;
+                state->content_length_seen = true;
+            }
+            state->parse_pos += line_len + eol_len;
+            continue;
+        }
+        size_t available = state->len - state->body_offset;
+        if (available < (size_t)state->content_length) {
+            break;
+        }
+        const char *body = NULL;
+        if (state->content_length > 0) {
+            body = state->buf + state->body_offset;
+            state->buf[state->body_offset + (size_t)state->content_length] = '\0';
+        }
+        portal_handle_http_request_parsed(tpcb, state->is_post, state->path, body);
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+        return ERR_OK;
+    }
+
+    if (space == 0) {
+        portal_http_send(tpcb, "text/plain", "request too large");
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+    }
     return ERR_OK;
 }
 
@@ -744,7 +911,14 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
         return ERR_VAL;
     }
+    portal_http_state_t *state = calloc(1, sizeof(*state));
+    if (!state) {
+        tcp_abort(newpcb);
+        return ERR_MEM;
+    }
+    tcp_arg(newpcb, state);
     tcp_recv(newpcb, portal_http_recv);
+    tcp_err(newpcb, portal_http_err);
     return ERR_OK;
 }
 
