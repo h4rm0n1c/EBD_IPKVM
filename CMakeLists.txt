@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
 
+# Default to Pico W unless the caller overrides PICO_BOARD.
+if(NOT DEFINED PICO_BOARD)
+    set(PICO_BOARD pico_w)
+endif()
+
 # Pull in the Pico SDK (must have PICO_SDK_PATH set in the environment)
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
