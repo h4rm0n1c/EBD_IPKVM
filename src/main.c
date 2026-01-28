@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <strings.h>
 
 #include "pico/stdlib.h"
@@ -484,6 +485,7 @@ typedef struct {
     bool request_line_done;
     bool headers_done;
     bool is_post;
+    bool content_length_seen;
     char path[64];
 } portal_http_state_t;
 
@@ -848,6 +850,16 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
             if (line_len == 0) {
                 state->headers_done = true;
                 state->body_offset = state->parse_pos + 2;
+                if (!state->content_length_seen && state->is_post) {
+                    size_t available_now = state->len - state->body_offset;
+                    if (available_now > INT_MAX) {
+                        portal_http_send(tpcb, "text/plain", "request too large");
+                        portal_http_state_cleanup(tpcb, state);
+                        tcp_close(tpcb);
+                        return ERR_OK;
+                    }
+                    state->content_length = (int)available_now;
+                }
                 size_t max_body = sizeof(state->buf) - state->body_offset - 1;
                 if (state->content_length < 0 || (size_t)state->content_length > max_body) {
                     portal_http_send(tpcb, "text/plain", "request too large");
@@ -862,6 +874,7 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
                                                           line_len);
             if (parsed >= 0) {
                 state->content_length = parsed;
+                state->content_length_seen = true;
             }
             state->parse_pos += line_len + 2;
             continue;
