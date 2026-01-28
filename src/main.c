@@ -413,7 +413,7 @@ static void portal_set_identity(void) {
                  "%02X:%02X:%02X:%02X:%02X:%02X",
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         snprintf(portal.hostname, sizeof(portal.hostname),
-                 "ebd-ipkvm-%02x%02x%02x", mac[3], mac[4], mac[5]);
+                 "EBDIPKVM-%02X%02X%02X", mac[3], mac[4], mac[5]);
     } else {
         strncpy(portal.mac_str, "unknown", sizeof(portal.mac_str));
         portal.mac_str[sizeof(portal.mac_str) - 1] = '\0';
