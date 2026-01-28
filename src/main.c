@@ -483,6 +483,25 @@ typedef struct {
     bool header_done;
 } portal_http_state_t;
 
+static void portal_http_state_cleanup(struct tcp_pcb *tpcb, portal_http_state_t *state) {
+    if (state) {
+        free(state);
+    }
+    if (tpcb) {
+        tcp_arg(tpcb, NULL);
+        tcp_recv(tpcb, NULL);
+        tcp_err(tpcb, NULL);
+    }
+}
+
+static void portal_http_err(void *arg, err_t err) {
+    (void)err;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
+    if (state) {
+        free(state);
+    }
+}
+
 static int portal_parse_content_length(const char *req, size_t len) {
     size_t i = 0;
     while (i + 2 <= len) {
@@ -753,22 +772,19 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
     portal_http_state_t *state = (portal_http_state_t *)arg;
     if (err != ERR_OK) {
         if (p) pbuf_free(p);
-        if (state) {
-            free(state);
-        }
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return err;
     }
     if (!p) {
-        if (state) {
-            free(state);
-        }
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return ERR_OK;
     }
 
     if (!state) {
         pbuf_free(p);
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return ERR_VAL;
     }
@@ -799,7 +815,7 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         size_t needed = state->header_len + (size_t)state->content_length;
         if (state->len >= needed) {
             portal_handle_http_request(tpcb, state->buf);
-            free(state);
+            portal_http_state_cleanup(tpcb, state);
             tcp_close(tpcb);
             return ERR_OK;
         }
@@ -807,7 +823,7 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
 
     if (space == 0) {
         portal_http_send(tpcb, "text/plain", "request too large");
-        free(state);
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
     }
     return ERR_OK;
@@ -825,6 +841,7 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     }
     tcp_arg(newpcb, state);
     tcp_recv(newpcb, portal_http_recv);
+    tcp_err(newpcb, portal_http_err);
     return ERR_OK;
 }
 
