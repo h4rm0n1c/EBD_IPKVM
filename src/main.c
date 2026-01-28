@@ -530,6 +530,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "scanBtn.addEventListener('click',scan);"
                      "document.getElementById('ps_on_btn').addEventListener('click',()=>fetch('/ps_on',{method:'POST'}));"
                      "document.getElementById('ps_off_btn').addEventListener('click',()=>fetch('/ps_off',{method:'POST'}));"
+                     "window.addEventListener('error',(e)=>{scanStatus.textContent=`error: ${e.message}`;});"
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
@@ -628,14 +629,15 @@ static void portal_handle_ps_on(bool on) {
 }
 
 static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
+    cyw43_arch_lwip_begin();
     if (!req) {
         portal_http_send(tpcb, "text/plain", "bad request");
-        return;
+        goto out;
     }
     const char *line_end = strstr(req, "\r\n");
     if (!line_end) {
         portal_http_send(tpcb, "text/plain", "bad request");
-        return;
+        goto out;
     }
     char method[8] = {0};
     char path[64] = {0};
@@ -643,7 +645,9 @@ static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
     const char *body = strstr(req, "\r\n\r\n");
     if (body) body += 4;
 
-    if (strcmp(method, "GET") == 0) {
+    bool is_get = strcmp(method, "GET") == 0;
+    bool is_post = strcmp(method, "POST") == 0;
+    if (is_get) {
         if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
             portal_send_index(tpcb);
         } else if (strcmp(path, "/scan") == 0) {
@@ -651,30 +655,36 @@ static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
         } else {
             portal_http_send_redirect(tpcb, "/");
         }
-        return;
+        goto out;
     }
 
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/save") == 0) {
+    if (is_post && strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
             portal_http_send(tpcb, "text/plain", "saved");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
         }
-        return;
+        goto out;
     }
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_on") == 0) {
+    if ((is_get || is_post) && strcmp(path, "/ps_on") == 0) {
         portal_handle_ps_on(true);
         portal_http_send(tpcb, "text/plain", "ps_on");
-        return;
+        goto out;
     }
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_off") == 0) {
+    if ((is_get || is_post) && strcmp(path, "/ps_off") == 0) {
         portal_handle_ps_on(false);
         portal_http_send(tpcb, "text/plain", "ps_off");
-        return;
+        goto out;
+    }
+    if ((is_get || is_post) && strcmp(path, "/scan") == 0) {
+        portal_send_scan(tpcb);
+        goto out;
     }
 
     portal_http_send_redirect(tpcb, "/");
+out:
+    cyw43_arch_lwip_end();
 }
 
 static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
