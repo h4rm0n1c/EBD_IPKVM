@@ -542,6 +542,23 @@ static bool portal_parse_request_line(portal_http_state_t *state, const char *li
     }
     memcpy(state->path, space1 + 1, path_len);
     state->path[path_len] = '\0';
+    if (strncmp(state->path, "http://", 7) == 0 || strncmp(state->path, "https://", 8) == 0) {
+        const char *p = strstr(state->path, "://");
+        if (p) {
+            p += 3;
+            const char *slash = strchr(p, '/');
+            if (slash) {
+                size_t new_len = strlen(slash);
+                memmove(state->path, slash, new_len + 1);
+            } else {
+                strcpy(state->path, "/");
+            }
+        }
+    }
+    char *q = strchr(state->path, '?');
+    if (q) {
+        *q = '\0';
+    }
     return true;
 }
 

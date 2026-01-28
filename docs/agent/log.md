@@ -6,6 +6,7 @@
 - 2026-01-30: Clean up portal HTTP connection state on close/error to avoid dangling pointers.
 - 2026-01-30: Expand portal HTTP request buffer and cap body size to accommodate full mobile headers.
 - 2026-01-30: Parse portal HTTP requests line-by-line in the PicoHTTPServer style to stabilize POST handling.
+- 2026-01-30: Normalize absolute-URI and query-string request paths in portal HTTP parsing.
 - 2026-01-30: Aligned portal scan callback signature with cyw43 scan API to avoid pointer-type warnings.
 - 2026-01-30: Updated portal DNS/DHCP UDP receive callbacks to match lwIP udp_recv_fn signatures and silence build warnings.
 - 2026-01-30: Pin AP IP configuration to the cyw43 AP netif and bring it up explicitly to improve captive portal DHCP behavior.
