@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -86,7 +87,7 @@
 #define PORTAL_IP_OCT4 1
 #define PORTAL_LEASE_OCT4 2
 #define PORTAL_MAX_SCAN 12
-#define PORTAL_MAX_REQ 768
+#define PORTAL_MAX_REQ 1024
 
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
@@ -474,6 +475,40 @@ static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location
     tcp_output(tpcb);
 }
 
+typedef struct {
+    char buf[PORTAL_MAX_REQ];
+    size_t len;
+    size_t header_len;
+    int content_length;
+    bool header_done;
+} portal_http_state_t;
+
+static int portal_parse_content_length(const char *req, size_t len) {
+    size_t i = 0;
+    while (i + 2 <= len) {
+        const char *line = req + i;
+        const char *line_end = strstr(line, "\r\n");
+        if (!line_end) break;
+        size_t line_len = (size_t)(line_end - line);
+        if (line_len == 0) {
+            break;
+        }
+        if (line_len >= 15 && strncasecmp(line, "Content-Length:", 15) == 0) {
+            const char *val = line + 15;
+            while (*val == ' ' || *val == '\t') {
+                val++;
+            }
+            int parsed = atoi(val);
+            if (parsed > 0) {
+                return parsed;
+            }
+            return 0;
+        }
+        i += line_len + 2;
+    }
+    return 0;
+}
+
 static void portal_send_index(struct tcp_pcb *tpcb) {
     char page[2048];
     int n = snprintf(page, sizeof(page),
@@ -715,27 +750,66 @@ out:
 }
 
 static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
-    (void)arg;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
     if (err != ERR_OK) {
         if (p) pbuf_free(p);
+        if (state) {
+            free(state);
+        }
         tcp_close(tpcb);
         return err;
     }
     if (!p) {
+        if (state) {
+            free(state);
+        }
         tcp_close(tpcb);
         return ERR_OK;
     }
 
-    static char req_buf[PORTAL_MAX_REQ];
+    if (!state) {
+        pbuf_free(p);
+        tcp_close(tpcb);
+        return ERR_VAL;
+    }
+
+    size_t space = sizeof(state->buf) - state->len - 1;
     size_t total = p->tot_len;
-    if (total >= sizeof(req_buf)) total = sizeof(req_buf) - 1;
-    pbuf_copy_partial(p, req_buf, total, 0);
-    req_buf[total] = '\0';
+    if (total > space) {
+        total = space;
+    }
+    if (total > 0) {
+        pbuf_copy_partial(p, state->buf + state->len, total, 0);
+        state->len += total;
+        state->buf[state->len] = '\0';
+    }
     tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
 
-    portal_handle_http_request(tpcb, req_buf);
-    tcp_close(tpcb);
+    if (!state->header_done) {
+        char *header_end = strstr(state->buf, "\r\n\r\n");
+        if (header_end) {
+            state->header_done = true;
+            state->header_len = (size_t)(header_end - state->buf) + 4;
+            state->content_length = portal_parse_content_length(state->buf, state->header_len);
+        }
+    }
+
+    if (state->header_done) {
+        size_t needed = state->header_len + (size_t)state->content_length;
+        if (state->len >= needed) {
+            portal_handle_http_request(tpcb, state->buf);
+            free(state);
+            tcp_close(tpcb);
+            return ERR_OK;
+        }
+    }
+
+    if (space == 0) {
+        portal_http_send(tpcb, "text/plain", "request too large");
+        free(state);
+        tcp_close(tpcb);
+    }
     return ERR_OK;
 }
 
@@ -744,6 +818,12 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
         return ERR_VAL;
     }
+    portal_http_state_t *state = calloc(1, sizeof(*state));
+    if (!state) {
+        tcp_abort(newpcb);
+        return ERR_MEM;
+    }
+    tcp_arg(newpcb, state);
     tcp_recv(newpcb, portal_http_recv);
     return ERR_OK;
 }
