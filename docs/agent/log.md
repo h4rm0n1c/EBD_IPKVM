@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-29: Lock classic line capture to HSYNC falling + PIXCLK rising and remove runtime edge toggles/program variants to simplify the PIO program set.
 - 2026-01-28: Delayed line capture start by 18 PIXCLKs after XOFF to shift sampling into active video and preserve the rightmost pixels.
 - 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.
 - 2026-01-27: Added VSYNC debounce and TX-idle gating so frame delivery stays monotonic under backpressure.
