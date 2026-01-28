@@ -478,9 +478,13 @@ static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location
 typedef struct {
     char buf[PORTAL_MAX_REQ];
     size_t len;
-    size_t header_len;
+    size_t parse_pos;
+    size_t body_offset;
     int content_length;
-    bool header_done;
+    bool request_line_done;
+    bool headers_done;
+    bool is_post;
+    char path[64];
 } portal_http_state_t;
 
 static void portal_http_state_cleanup(struct tcp_pcb *tpcb, portal_http_state_t *state) {
@@ -502,30 +506,43 @@ static void portal_http_err(void *arg, err_t err) {
     }
 }
 
-static int portal_parse_content_length(const char *req, size_t len) {
-    size_t i = 0;
-    while (i + 2 <= len) {
-        const char *line = req + i;
-        const char *line_end = strstr(line, "\r\n");
-        if (!line_end) break;
-        size_t line_len = (size_t)(line_end - line);
-        if (line_len == 0) {
-            break;
+static int portal_find_crlf(const char *buf, size_t len) {
+    if (len < 2) return -1;
+    for (size_t i = 0; i + 1 < len; i++) {
+        if (buf[i] == '\r' && buf[i + 1] == '\n') {
+            return (int)i;
         }
-        if (line_len >= 15 && strncasecmp(line, "Content-Length:", 15) == 0) {
-            const char *val = line + 15;
-            while (*val == ' ' || *val == '\t') {
-                val++;
-            }
-            int parsed = atoi(val);
-            if (parsed > 0) {
-                return parsed;
-            }
-            return 0;
-        }
-        i += line_len + 2;
     }
-    return 0;
+    return -1;
+}
+
+static int portal_parse_content_length_line(const char *line, size_t len) {
+    const char header[] = "Content-Length:";
+    size_t header_len = sizeof(header) - 1;
+    if (len < header_len || strncasecmp(line, header, header_len) != 0) {
+        return -1;
+    }
+    const char *val = line + header_len;
+    while ((size_t)(val - line) < len && (*val == ' ' || *val == '\t')) {
+        val++;
+    }
+    return atoi(val);
+}
+
+static bool portal_parse_request_line(portal_http_state_t *state, const char *line, size_t len) {
+    const char *space1 = memchr(line, ' ', len);
+    if (!space1) return false;
+    const char *space2 = memchr(space1 + 1, ' ', len - (size_t)(space1 + 1 - line));
+    if (!space2) return false;
+    size_t method_len = (size_t)(space1 - line);
+    state->is_post = (method_len == 4 && strncmp(line, "POST", 4) == 0);
+    size_t path_len = (size_t)(space2 - (space1 + 1));
+    if (path_len >= sizeof(state->path)) {
+        path_len = sizeof(state->path) - 1;
+    }
+    memcpy(state->path, space1 + 1, path_len);
+    state->path[path_len] = '\0';
+    return true;
 }
 
 static void portal_send_index(struct tcp_pcb *tpcb) {
@@ -703,26 +720,14 @@ static void portal_handle_ps_on(bool on) {
     set_ps_on(on);
 }
 
-static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
+static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post,
+                                              const char *path, const char *body) {
     cyw43_arch_lwip_begin();
-    if (!req) {
+    if (!path || path[0] == '\0') {
         portal_http_send(tpcb, "text/plain", "bad request");
         goto out;
     }
-    const char *line_end = strstr(req, "\r\n");
-    if (!line_end) {
-        portal_http_send(tpcb, "text/plain", "bad request");
-        goto out;
-    }
-    char method[8] = {0};
-    char path[64] = {0};
-    sscanf(req, "%7s %63s", method, path);
-    const char *body = strstr(req, "\r\n\r\n");
-    if (body) body += 4;
-
-    bool is_get = strcmp(method, "GET") == 0;
-    bool is_post = strcmp(method, "POST") == 0;
-    if (is_get) {
+    if (!is_post) {
         if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
             portal_send_index(tpcb);
         } else if (strcmp(path, "/scan") == 0) {
@@ -739,7 +744,7 @@ static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
         goto out;
     }
 
-    if (is_post && strcmp(path, "/save") == 0) {
+    if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
             portal_http_send(tpcb, "text/plain", "saved");
@@ -748,17 +753,17 @@ static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
         }
         goto out;
     }
-    if (is_post && strcmp(path, "/ps_on") == 0) {
+    if (strcmp(path, "/ps_on") == 0) {
         portal_handle_ps_on(true);
         portal_http_send(tpcb, "text/plain", "ps_on");
         goto out;
     }
-    if (is_post && strcmp(path, "/ps_off") == 0) {
+    if (strcmp(path, "/ps_off") == 0) {
         portal_handle_ps_on(false);
         portal_http_send(tpcb, "text/plain", "ps_off");
         goto out;
     }
-    if (is_post && strcmp(path, "/scan") == 0) {
+    if (strcmp(path, "/scan") == 0) {
         portal_send_scan(tpcb);
         goto out;
     }
@@ -802,30 +807,61 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
     tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
 
-    if (!state->header_done) {
-        char *header_end = strstr(state->buf, "\r\n\r\n");
-        if (header_end) {
-            state->header_done = true;
-            state->header_len = (size_t)(header_end - state->buf) + 4;
-            state->content_length = portal_parse_content_length(state->buf, state->header_len);
-            size_t max_body = sizeof(state->buf) - state->header_len - 1;
-            if (state->content_length < 0 || (size_t)state->content_length > max_body) {
-                portal_http_send(tpcb, "text/plain", "request too large");
+    for (;;) {
+        if (!state->request_line_done) {
+            int idx = portal_find_crlf(state->buf + state->parse_pos,
+                                       state->len - state->parse_pos);
+            if (idx < 0) break;
+            size_t line_len = (size_t)idx;
+            if (!portal_parse_request_line(state, state->buf + state->parse_pos, line_len)) {
+                portal_http_send(tpcb, "text/plain", "bad request");
                 portal_http_state_cleanup(tpcb, state);
                 tcp_close(tpcb);
                 return ERR_OK;
             }
+            state->parse_pos += line_len + 2;
+            state->request_line_done = true;
+            continue;
         }
-    }
-
-    if (state->header_done) {
-        size_t needed = state->header_len + (size_t)state->content_length;
-        if (state->len >= needed) {
-            portal_handle_http_request(tpcb, state->buf);
-            portal_http_state_cleanup(tpcb, state);
-            tcp_close(tpcb);
-            return ERR_OK;
+        if (!state->headers_done) {
+            int idx = portal_find_crlf(state->buf + state->parse_pos,
+                                       state->len - state->parse_pos);
+            if (idx < 0) break;
+            size_t line_len = (size_t)idx;
+            if (line_len == 0) {
+                state->headers_done = true;
+                state->body_offset = state->parse_pos + 2;
+                size_t max_body = sizeof(state->buf) - state->body_offset - 1;
+                if (state->content_length < 0 || (size_t)state->content_length > max_body) {
+                    portal_http_send(tpcb, "text/plain", "request too large");
+                    portal_http_state_cleanup(tpcb, state);
+                    tcp_close(tpcb);
+                    return ERR_OK;
+                }
+                state->parse_pos += 2;
+                continue;
+            }
+            int parsed = portal_parse_content_length_line(state->buf + state->parse_pos,
+                                                          line_len);
+            if (parsed >= 0) {
+                state->content_length = parsed;
+            }
+            state->parse_pos += line_len + 2;
+            continue;
         }
+        size_t available = state->len - state->body_offset;
+        if (available < (size_t)state->content_length) {
+            break;
+        }
+        const char *body = NULL;
+        if (state->content_length > 0) {
+            body = state->buf + state->body_offset;
+            state->buf[state->body_offset + (size_t)state->content_length] = '\0';
+        }
+        portal_handle_http_request_parsed(tpcb, state->is_post, state->path, body);
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+        return ERR_OK;
     }
 
     if (space == 0) {
