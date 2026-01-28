@@ -795,7 +795,9 @@ static void dhcp_send_reply(struct udp_pcb *pcb, const ip_addr_t *addr, u16_t po
     memcpy(out->payload, dhcp_buf, opt);
     ip_addr_t dst;
     ip_addr_set_ip4_u32(&dst, PP_HTONL(0xFFFFFFFFu));
-    udp_sendto(pcb, out, &dst, port);
+    (void)addr;
+    (void)port;
+    udp_sendto(pcb, out, &dst, PORTAL_CLIENT_PORT);
     pbuf_free(out);
 }
 
