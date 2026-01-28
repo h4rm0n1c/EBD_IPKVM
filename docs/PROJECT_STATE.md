@@ -25,6 +25,8 @@ Macintosh Classic KVM:
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park (CDC control channel).
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
   - Edge testing: `V` toggles VSYNC edge (stops capture + clears state).
+  - Wi-Fi configuration defaults to a captive portal AP (`EBD-IPKVM-Setup`) until credentials are saved.
+  - `W` clears stored Wi-Fi settings and reboots into portal mode.
 
 ## Host tooling
 - `src/host_recv_udp.py` is the host-side test program; it reads UDP RLE packets and emits PGM frames (or relays to VLC).

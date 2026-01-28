@@ -1,6 +1,7 @@
 # Decisions (running)
 
 - 2026-01-30: Move video transport to UDP on Pico W Wi-Fi with per-line RLE compression; keep CDC for control/diagnostic commands and add a host-side relay for VLC rawvideo testing.
+- 2026-01-30: Store Wi-Fi credentials in flash and use a captive-portal AP (with DNS/DHCP/HTTP) when unconfigured so setup works from a phone without hardcoded credentials.
 - 2026-01-28: Insert an 18-PIXCLK delay after XOFF before sampling each line so the captured window starts in active video instead of the left porch.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).

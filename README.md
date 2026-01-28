@@ -10,6 +10,7 @@ Above output is current project output as of PR #17.
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
 - Lines are RLE-compressed and streamed over UDP on Pico W Wi-Fi.
+- Wi-Fi configuration is handled by a built-in captive portal (AP mode) when unconfigured.
 - Host test helpers reconstruct frames into PGM images or relay them into VLC.
 
 ## Signal/pin map (current firmware)
@@ -44,6 +45,16 @@ Each line is emitted as a UDP datagram containing a compact header and RLE paylo
 See `docs/protocol/udp_rle_stream.md` for the full description and host framing notes.
 USB CDC remains available for control commands (start/stop/reset/power).
 
+## Wi-Fi setup (captive portal)
+On first boot (or after clearing settings), the Pico W starts an AP named
+`EBD-IPKVM-Setup`. Connect with a phone/laptop and open any page to reach the
+setup portal (DNS redirects to the config page). Use the form to set:
+- Wi-Fi SSID/password
+- UDP target IP/port for video streaming
+
+To factory-reset the stored Wi-Fi settings, send `W` over the CDC control
+channel (the device reboots into portal mode).
+
 ## Host capture helper
 
 ```bash
@@ -77,6 +88,7 @@ This test script:
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`.
 
-Wi-Fi settings are compile-time definitions:
+Wi-Fi settings are stored in flash. Compile-time defaults can still be provided
+to prefill the portal:
 - `WIFI_SSID` / `WIFI_PASSWORD`
 - `VIDEO_UDP_ADDR` / `VIDEO_UDP_PORT`

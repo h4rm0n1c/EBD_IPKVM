@@ -41,6 +41,7 @@ The firmware is host-controlled over the same CDC channel:
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
 | `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `W` | Clear stored Wi-Fi settings and reboot into portal mode. |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.

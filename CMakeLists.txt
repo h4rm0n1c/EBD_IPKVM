@@ -12,6 +12,7 @@ pico_sdk_init()
 add_executable(EBD_IPKVM
     src/main.c
     src/video_capture.c
+    src/wifi_config.c
 )
 
 pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/classic_line.pio)
@@ -24,6 +25,7 @@ target_compile_options(EBD_IPKVM PRIVATE -O3)
 target_link_libraries(EBD_IPKVM
     pico_stdlib
     pico_cyw43_arch_lwip_poll
+    hardware_flash
     hardware_pio
     hardware_dma
     hardware_irq

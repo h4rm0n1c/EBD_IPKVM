@@ -38,6 +38,12 @@ vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
     --rawvid-chroma GREY udp://@:6000
 ```
 
+## Wi-Fi configuration
+- On boot, if no saved Wi-Fi credentials are present, the device starts an AP
+  named `EBD-IPKVM-Setup` and serves a captive portal for configuration.
+- The portal lets you set SSID, password, and UDP target IP/port.
+- Send CDC command `W` to clear saved credentials and return to portal mode.
+
 ## Capture cadence
 - Frames are gated to prevent backpressure (capture only starts when the transmit path is idle).
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
