@@ -87,7 +87,7 @@
 #define PORTAL_IP_OCT4 1
 #define PORTAL_LEASE_OCT4 2
 #define PORTAL_MAX_SCAN 12
-#define PORTAL_MAX_REQ 1024
+#define PORTAL_MAX_REQ 4096
 
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
@@ -808,6 +808,13 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
             state->header_done = true;
             state->header_len = (size_t)(header_end - state->buf) + 4;
             state->content_length = portal_parse_content_length(state->buf, state->header_len);
+            size_t max_body = sizeof(state->buf) - state->header_len - 1;
+            if (state->content_length < 0 || (size_t)state->content_length > max_body) {
+                portal_http_send(tpcb, "text/plain", "request too large");
+                portal_http_state_cleanup(tpcb, state);
+                tcp_close(tpcb);
+                return ERR_OK;
+            }
         }
     }
 
