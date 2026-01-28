@@ -92,7 +92,8 @@ This test script:
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`. The project now
 defaults to `PICO_BOARD=pico_w` so Wi-Fi headers/libs are available without
-extra flags.
+extra flags. If you already configured a build dir targeting `pico`, wipe the
+build folder or re-run CMake so the cached board updates.
 
 Wi-Fi settings are stored in flash. Compile-time defaults can still be provided
 to prefill the portal:

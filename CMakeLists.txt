@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Default to Pico W unless the caller overrides PICO_BOARD.
-if(NOT DEFINED PICO_BOARD)
-    set(PICO_BOARD pico_w)
+# Default to Pico W unless the caller overrides PICO_BOARD. If a cached build
+# still targets the plain Pico, promote it to Pico W to keep Wi-Fi enabled.
+if(NOT DEFINED PICO_BOARD OR PICO_BOARD STREQUAL "pico")
+    set(PICO_BOARD pico_w CACHE STRING "Target board" FORCE)
 endif()
 
 # Pull in the Pico SDK (must have PICO_SDK_PATH set in the environment)

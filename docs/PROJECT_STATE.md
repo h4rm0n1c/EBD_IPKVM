@@ -28,7 +28,7 @@ Macintosh Classic KVM:
   - Wi-Fi configuration defaults to a captive portal AP (`EBD-IPKVM-Setup`) until credentials are saved.
   - The HTTP config server remains available in station mode for live tweaks and power control (DNS/DHCP stay AP-only).
   - `W` clears stored Wi-Fi settings and reboots into portal mode.
-  - Wi-Fi features default to `PICO_BOARD=pico_w` unless overridden.
+  - Wi-Fi features default to `PICO_BOARD=pico_w` unless overridden (clean the build dir if a cached `pico` board persists).
 
 ## Host tooling
 - `src/host_recv_udp.py` is the host-side test program; it reads UDP RLE packets and emits PGM frames (or relays to VLC).
