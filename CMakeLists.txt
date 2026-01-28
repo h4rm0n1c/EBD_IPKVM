@@ -23,6 +23,7 @@ target_compile_options(EBD_IPKVM PRIVATE -O3)
 
 target_link_libraries(EBD_IPKVM
     pico_stdlib
+    pico_cyw43_arch_lwip_poll
     hardware_pio
     hardware_dma
     hardware_irq

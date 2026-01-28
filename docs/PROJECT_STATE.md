@@ -18,17 +18,16 @@ Macintosh Classic KVM:
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
 - Each line waits for the selected HSYNC edge, skips 157 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
-  - Alternates frames on each VSYNC to target ~30 fps.
+  - Captures every VSYNC to target ~60 fps.
   - Stops after 100 transmitted frames until reset.
-- USB CDC streaming:
-  - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
-  - Packets are fixed-size and headered (`0xEB 0xD1`).
-  - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
-  - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
+- UDP RLE streaming:
+  - Each line is RLE-compressed and sent as a UDP datagram (`0xEB 0xD1` header).
+  - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park (CDC control channel).
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
+  - Edge testing: `V` toggles VSYNC edge (stops capture + clears state).
 
 ## Host tooling
-- `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PGM frames.
+- `src/host_recv_udp.py` is the host-side test program; it reads UDP RLE packets and emits PGM frames (or relays to VLC).
 - Script expects 512×342 frames and writes `frames/frame_###.pgm` by default.
 - `scripts/cdc_cmd.py` sends CDC command bytes (for example, `I` or `G`) and prints ASCII responses.
-- `scripts/ab_capture.py` runs two capture passes, toggling VIDEO inversion between runs (requires firmware support for the `O` command).
+- `scripts/ab_capture.py` runs two capture passes over CDC (legacy), toggling VIDEO inversion between runs (requires firmware support for the `O` command).

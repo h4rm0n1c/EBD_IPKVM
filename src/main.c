@@ -9,6 +9,7 @@
 #include "hardware/watchdog.h"
 #include "hardware/sync.h"
 #include "pico/bootrom.h"
+#include "pico/cyw43_arch.h"
 
 #include "tusb.h"
 #include "classic_line.pio.h"
@@ -26,19 +27,55 @@
 #define PKT_HDR_BYTES 8
 #define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
 
+#ifndef VIDEO_STREAM_UDP
+#define VIDEO_STREAM_UDP 1
+#endif
+
+#ifndef VIDEO_STREAM_USB
+#define VIDEO_STREAM_USB 0
+#endif
+
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD ""
+#endif
+
+#ifndef VIDEO_UDP_ADDR
+#define VIDEO_UDP_ADDR "192.168.1.100"
+#endif
+
+#ifndef VIDEO_UDP_PORT
+#define VIDEO_UDP_PORT 5004
+#endif
+
+#if VIDEO_STREAM_UDP
+#include "lwip/pbuf.h"
+#include "lwip/udp.h"
+#include "lwip/ip_addr.h"
+#endif
+
+#define UDP_MAGIC0 0xEB
+#define UDP_MAGIC1 0xD1
+#define UDP_VERSION 1
+#define UDP_FORMAT_RLE8 1
+#define UDP_HDR_BYTES 10
+#define UDP_RLE_MAX_BYTES (CAP_BYTES_PER_LINE * 2)
+
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
 
 static volatile bool armed = false;            // host says start/stop
 static volatile bool want_frame = false;       // transmit this frame or skip
-static volatile bool take_toggle = false;      // every other frame => ~30fps
 
 static volatile uint16_t frame_id = 0;         // increments per transmitted frame
 /* repurpose as: queue overflows (we couldn't enqueue a line packet fast enough) */
 static volatile uint32_t lines_drop = 0;
-/* repurpose as: usb send failures (no space / disconnected / short write) */
-static volatile uint32_t usb_drops = 0;
+/* repurpose as: stream send failures (no space / disconnected / short write) */
+static volatile uint32_t stream_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
@@ -78,6 +115,16 @@ static void gpio_irq(uint gpio, uint32_t events);
 static uint8_t txq[TXQ_DEPTH][PKT_BYTES];
 static volatile uint16_t txq_w = 0;
 static volatile uint16_t txq_r = 0;
+
+#if VIDEO_STREAM_UDP
+typedef struct udp_stream_state {
+    struct udp_pcb *pcb;
+    ip_addr_t dest;
+    bool ready;
+} udp_stream_state_t;
+
+static udp_stream_state_t udp_stream = {0};
+#endif
 
 static inline void txq_reset(void) {
     uint32_t s = save_and_disable_interrupts();
@@ -124,8 +171,16 @@ static inline bool txq_has_space(void) {
     return ((uint16_t)((w + 1) & TXQ_MASK)) != r;
 }
 
+static inline bool stream_is_idle(void) {
+    bool idle = !capture.capture_enabled && !test_frame_active && !capture.frame_ready && (frame_tx_buf == NULL);
+#if VIDEO_STREAM_USB
+    idle = idle && txq_is_empty();
+#endif
+    return idle;
+}
+
 static inline bool can_emit_text(void) {
-    return !capture.capture_enabled && !test_frame_active && txq_is_empty() && (!armed || frames_done >= 100);
+    return stream_is_idle() && (!armed || frames_done >= 100);
 }
 
 static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
@@ -154,6 +209,128 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
     /* publish write index last so reader never sees a half-filled packet */
     txq_w = next;
     return true;
+}
+
+#if VIDEO_STREAM_UDP
+static bool udp_stream_init(void) {
+    if (WIFI_SSID[0] == '\0') {
+        printf("[EBD_IPKVM] wifi disabled: WIFI_SSID not set\n");
+        return false;
+    }
+
+    if (cyw43_arch_init()) {
+        printf("[EBD_IPKVM] wifi init failed\n");
+        return false;
+    }
+
+    cyw43_arch_enable_sta_mode();
+    int auth = (WIFI_PASSWORD[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
+    int err = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, auth, 30000);
+    if (err) {
+        printf("[EBD_IPKVM] wifi connect failed: %d\n", err);
+        cyw43_arch_deinit();
+        return false;
+    }
+
+    if (!ipaddr_aton(VIDEO_UDP_ADDR, &udp_stream.dest)) {
+        printf("[EBD_IPKVM] udp target parse failed: %s\n", VIDEO_UDP_ADDR);
+        cyw43_arch_deinit();
+        return false;
+    }
+
+    udp_stream.pcb = udp_new_ip_type(IPADDR_TYPE_V4);
+    if (!udp_stream.pcb) {
+        printf("[EBD_IPKVM] udp pcb alloc failed\n");
+        cyw43_arch_deinit();
+        return false;
+    }
+
+    err = udp_connect(udp_stream.pcb, &udp_stream.dest, VIDEO_UDP_PORT);
+    if (err != ERR_OK) {
+        printf("[EBD_IPKVM] udp connect failed: %d\n", err);
+        udp_remove(udp_stream.pcb);
+        udp_stream.pcb = NULL;
+        cyw43_arch_deinit();
+        return false;
+    }
+
+    udp_stream.ready = true;
+    printf("[EBD_IPKVM] udp video -> %s:%u\n", VIDEO_UDP_ADDR, (unsigned)VIDEO_UDP_PORT);
+    return true;
+}
+
+static bool udp_stream_send(const uint8_t *payload, size_t len) {
+    if (!udp_stream.ready || !udp_stream.pcb) return false;
+
+    bool ok = false;
+    cyw43_arch_lwip_begin();
+    struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, (uint16_t)len, PBUF_RAM);
+    if (p) {
+        memcpy(p->payload, payload, len);
+        err_t err = udp_send(udp_stream.pcb, p);
+        ok = (err == ERR_OK);
+        pbuf_free(p);
+    }
+    cyw43_arch_lwip_end();
+    return ok;
+}
+#endif
+
+static bool rle_encode_bytes(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap, size_t *out_len) {
+    size_t out = 0;
+    size_t i = 0;
+    while (i < src_len) {
+        uint8_t value = src[i];
+        size_t run = 1;
+        while ((i + run) < src_len && src[i + run] == value && run < 255) {
+            run++;
+        }
+        if ((out + 2) > dst_cap) {
+            return false;
+        }
+        dst[out++] = (uint8_t)run;
+        dst[out++] = value;
+        i += run;
+    }
+    *out_len = out;
+    return true;
+}
+
+static bool stream_send_line(uint16_t fid, uint16_t lid, const uint8_t *data64) {
+#if VIDEO_STREAM_USB
+    if (!txq_enqueue(fid, lid, data64)) {
+        return false;
+    }
+    return true;
+#elif VIDEO_STREAM_UDP
+    uint8_t rle_buf[UDP_RLE_MAX_BYTES];
+    uint8_t packet[UDP_HDR_BYTES + UDP_RLE_MAX_BYTES];
+    size_t rle_len = 0;
+    if (!rle_encode_bytes(data64, BYTES_PER_LINE, rle_buf, sizeof(rle_buf), &rle_len)) {
+        return false;
+    }
+    packet[0] = UDP_MAGIC0;
+    packet[1] = UDP_MAGIC1;
+    packet[2] = UDP_VERSION;
+    packet[3] = UDP_FORMAT_RLE8;
+    packet[4] = (uint8_t)(fid & 0xFF);
+    packet[5] = (uint8_t)((fid >> 8) & 0xFF);
+    packet[6] = (uint8_t)(lid & 0xFF);
+    packet[7] = (uint8_t)((lid >> 8) & 0xFF);
+    packet[8] = (uint8_t)(rle_len & 0xFF);
+    packet[9] = (uint8_t)((rle_len >> 8) & 0xFF);
+    memcpy(&packet[UDP_HDR_BYTES], rle_buf, rle_len);
+    bool ok = udp_stream_send(packet, UDP_HDR_BYTES + rle_len);
+    if (!ok) {
+        stream_drops++;
+    }
+    return ok;
+#else
+    (void)fid;
+    (void)lid;
+    (void)data64;
+    return false;
+#endif
 }
 
 static bool try_send_probe_packet(void) {
@@ -207,7 +384,7 @@ static void emit_debug_state(void) {
            (unsigned long)frames_done,
            (unsigned long)capture.lines_ok,
            (unsigned long)lines_drop,
-           (unsigned long)usb_drops,
+           (unsigned long)stream_drops,
            (unsigned long)capture.frame_overrun,
            (unsigned long)capture.frame_short);
 }
@@ -255,9 +432,11 @@ static void gpio_irq(uint gpio, uint32_t events) {
     }
     if (frames_done >= 100) return;
 
-    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
-    take_toggle = !take_toggle;          // every other VSYNC => ~30fps
-    want_frame = take_toggle && !tx_busy;
+    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready;
+#if VIDEO_STREAM_USB
+    tx_busy = tx_busy || !txq_is_empty();
+#endif
+    want_frame = !tx_busy;
 
     if (want_frame) {
         video_capture_start(&capture, true);
@@ -337,7 +516,8 @@ static void service_test_frame(void) {
     while (test_frame_active) {
         uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
         memset(test_line_buf, fill, BYTES_PER_LINE);
-        if (!txq_enqueue(frame_id, test_line, test_line_buf)) {
+        if (!stream_send_line(frame_id, test_line, test_line_buf)) {
+            lines_drop++;
             break;
         }
 
@@ -380,8 +560,17 @@ static void service_frame_tx(void) {
         return;
     }
 
+    uint16_t lines_sent = 0;
+    uint16_t line_budget = CAP_ACTIVE_H;
+#if VIDEO_STREAM_UDP && !VIDEO_STREAM_USB
+    line_budget = 16;
+#endif
+
     while (frame_tx_line < CAP_ACTIVE_H) {
+        if (lines_sent >= line_budget) break;
+#if VIDEO_STREAM_USB
         if (!txq_has_space()) break;
+#endif
 
         uint16_t src_line = (uint16_t)(frame_tx_line + frame_tx_start);
         if (src_line >= frame_tx_lines) {
@@ -393,12 +582,13 @@ static void service_frame_tx(void) {
         memcpy(frame_tx_line_buf, frame_tx_buf[src_line], sizeof(frame_tx_line_buf));
         reorder_line_words(frame_tx_line_buf);
 
-        if (!txq_enqueue(frame_tx_id, frame_tx_line, frame_tx_line_buf)) {
+        if (!stream_send_line(frame_tx_id, frame_tx_line, (uint8_t *)frame_tx_line_buf)) {
             lines_drop++;
             break;
         }
 
         frame_tx_line++;
+        lines_sent++;
     }
 
     if (frame_tx_line >= CAP_ACTIVE_H) {
@@ -434,9 +624,8 @@ static void poll_cdc_commands(void) {
             capture.frame_overrun = 0;
             capture.frame_short = 0;
             lines_drop = 0;
-            usb_drops = 0;
+            stream_drops = 0;
             vsync_edges = 0;
-            take_toggle = false;
             want_frame = false;
             done_latched = false;
             video_capture_stop(&capture);
@@ -524,6 +713,7 @@ static void poll_cdc_commands(void) {
 }
 
 static inline void service_txq(void) {
+#if VIDEO_STREAM_USB
     if (!tud_cdc_connected()) return;
 
     bool wrote_any = false;
@@ -549,7 +739,7 @@ static inline void service_txq(void) {
 
         uint32_t n = tud_cdc_write(&txq[r][txq_offset], to_write);
         if (n == 0) {
-            usb_drops++;
+            stream_drops++;
             break;
         }
 
@@ -567,13 +757,16 @@ static inline void service_txq(void) {
     if (wrote_any) {
         tud_cdc_write_flush();
     }
+#else
+    (void)stream_drops;
+#endif
 }
 
 int main(void) {
     stdio_init_all();
     sleep_ms(1200);
 
-    printf("\n[EBD_IPKVM] USB packet stream @ ~30fps, capture 100 frames\n");
+    printf("\n[EBD_IPKVM] UDP RLE video stream @ ~60fps, capture 100 frames\n");
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
@@ -612,6 +805,10 @@ int main(void) {
     txq_reset();
     reset_frame_tx_state();
 
+#if VIDEO_STREAM_UDP
+    udp_stream_init();
+#endif
+
     absolute_time_t next = make_timeout_time_ms(1000);
     uint32_t last_lines = 0;
 
@@ -627,6 +824,12 @@ int main(void) {
 
         tud_task();
         poll_cdc_commands();
+
+#if VIDEO_STREAM_UDP
+        if (udp_stream.ready) {
+            cyw43_arch_poll();
+        }
+#endif
 
         /* Send queued binary packets from thread context (NOT IRQ). */
         if (probe_pending && try_send_probe_packet()) {
@@ -653,14 +856,14 @@ int main(void) {
                 uint32_t ve = vsync_edges;
                 vsync_edges = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu/100\n",
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu stream_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu/100\n",
                        armed ? 1 : 0,
                        capture.capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
                        (unsigned long)per_s,
                        (unsigned long)l,
                        (unsigned long)lines_drop,
-                       (unsigned long)usb_drops,
+                       (unsigned long)stream_drops,
                        (unsigned long)capture.frame_overrun,
                        (unsigned long)ve,
                        (unsigned long)frames_done);

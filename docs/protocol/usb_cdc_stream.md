@@ -1,8 +1,9 @@
-# USB CDC line stream protocol
+# USB CDC control protocol (legacy line stream)
 
-The firmware streams captured Macintosh Classic video as fixed-size packets over
-USB CDC. Each packet contains a single scanline of 512 pixels (1 bpp) and a
-compact header for framing.
+The firmware uses USB CDC for control commands and optional diagnostic output.
+Video transport has moved to UDP; the fixed-size CDC line stream documented
+below is retained as a legacy reference and may be re-enabled for bring-up
+testing.
 
 ## Packet layout (72 bytes)
 
@@ -49,8 +50,7 @@ The firmware is host-controlled over the same CDC channel:
   - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
-- Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
-- Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
+- Firmware targets ~60 fps and only marks frames for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC arms the next capture window; the current capture finishes when the fixed-length DMA transfer completes (not on the VSYNC edge).
 - Each frame is captured into a ping-pong framebuffer via a single fixed-length DMA transfer (no per-line DMA IRQs); line packets are assembled from that buffer in the main loop (outside IRQ).
@@ -62,7 +62,7 @@ The firmware is host-controlled over the same CDC channel:
 
 ## Error handling
 - If the TX queue is full, line packets are dropped and `lines_drop` increments.
-- If USB write fails or buffer is full, `usb_drops` increments.
+- If USB write fails or buffer is full, `stream_drops` increments.
 - If a frame finishes while the previous frame is still queued for transmit, the older ready frame is dropped and `frame_overrun` increments (see debug/status output).
 - If a frame contains fewer than `CAP_ACTIVE_H` captured lines, the frame is skipped and `frame_short` increments.
 

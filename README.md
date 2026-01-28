@@ -9,8 +9,8 @@ Above output is current project output as of PR #17.
 
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
-- Lines are queued and streamed over USB CDC in fixed-size packets.
-- Host test helper (`src/host_recv_frames.py`) reconstructs frames into PGM images.
+- Lines are RLE-compressed and streamed over UDP on Pico W Wi-Fi.
+- Host test helpers reconstruct frames into PGM images or relay them into VLC.
 
 ## Signal/pin map (current firmware)
 - `GPIO0` — PIXCLK (input, PIO)
@@ -28,40 +28,46 @@ Above output is current project output as of PR #17.
 - Capture window: 370 HSYNCs total (28 VBL + 342 active)
 - Line capture begins on the selected HSYNC edge.
 
-## USB stream (CDC)
-Each line is emitted as a 72-byte packet:
+## UDP stream (RLE)
+Each line is emitted as a UDP datagram containing a compact header and RLE payload:
 
 ```
 0..1  magic      0xEB 0xD1
-2..3  frame_id   little-endian
-4..5  line_id    little-endian (0..341)
-6..7  payload_len (bytes, currently 64)
-8..71 line payload (64 bytes = 512 packed pixels)
+2     version    0x01
+3     format     0x01 (RLE over 64 packed bytes)
+4..5  frame_id   little-endian
+6..7  line_id    little-endian (0..341)
+8..9  payload_len (bytes, RLE stream)
+10..  payload    RLE pairs (count, value)
 ```
 
-See `docs/protocol/usb_cdc_stream.md` for the full description and host framing notes.
+See `docs/protocol/udp_rle_stream.md` for the full description and host framing notes.
+USB CDC remains available for control commands (start/stop/reset/power).
 
 ## Host capture helper
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames
+python3 src/host_recv_udp.py --bind 0.0.0.0 --port 5004 --outdir frames
+```
+
+Relay to VLC (rawvideo over UDP):
+
+```bash
+python3 src/host_recv_udp.py --bind 0.0.0.0 --port 5004 --vlc-host 127.0.0.1 --vlc-port 6000
+vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
+    --rawvid-chroma GREY udp://@:6000
 ```
 
 This test script:
-- Waits briefly after opening the CDC port (default 0.25s) to allow Pico boot.
-- Sends `X` to stop any prior run before arming (use `--no-stop` to skip).
-- Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
-- Adjust the boot wait with `--boot-wait=SECONDS` if needed.
-- Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
-- Reassembles lines into full 512×342 frames.
-- Writes PGM files to `frames/` (0/255 grayscale).
-- Edge toggles for testing: send `H` to flip HSYNC edge, `K` to flip PIXCLK edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
+- Listens for UDP RLE line packets and reassembles lines into full 512×342 frames.
+- Writes PGM files to `frames/` (0/255 grayscale) when `--outdir` is provided.
+- Optionally relays reconstructed frames to VLC as 8-bit grayscale rawvideo.
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)
   - `classic_line.pio`: PIO program for per-line capture.
-  - `main.c`: USB CDC streaming firmware.
-  - `host_recv_frames.py`: host-side test program for reassembling frames.
+  - `main.c`: UDP RLE streaming firmware.
+  - `host_recv_udp.py`: host-side UDP RLE receiver/relay.
 - `docs/`
   - `PROJECT_STATE.md`: living status summary.
   - `protocol/`: wire format documentation.
@@ -70,3 +76,7 @@ This test script:
 
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`.
+
+Wi-Fi settings are compile-time definitions:
+- `WIFI_SSID` / `WIFI_PASSWORD`
+- `VIDEO_UDP_ADDR` / `VIDEO_UDP_PORT`
