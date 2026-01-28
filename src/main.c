@@ -870,14 +870,14 @@ static bool wifi_start_station(const wifi_config_t *cfg) {
 static bool wifi_start_portal(void) {
     int auth = (PORTAL_AP_PASS[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, auth);
-    struct netif *netif = netif_list;
-    if (netif) {
-        ip4_addr_t ip, mask, gw;
-        IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
-        IP4_ADDR(&mask, 255, 255, 255, 0);
-        IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
-        netif_set_addr(netif, &ip, &mask, &gw);
-    }
+    struct netif *netif = &cyw43_state.netif[CYW43_ITF_AP];
+    ip4_addr_t ip, mask, gw;
+    IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
+    IP4_ADDR(&mask, 255, 255, 255, 0);
+    IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
+    netif_set_addr(netif, &ip, &mask, &gw);
+    netif_set_up(netif);
+    netif_set_link_up(netif);
     portal_start_servers(true);
     portal.active = true;
     portal.ap_mode = true;
