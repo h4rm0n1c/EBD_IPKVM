@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-28: Delayed line capture start by 18 PIXCLKs after XOFF to shift sampling into active video and preserve the rightmost pixels.
 - 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.
 - 2026-01-27: Added VSYNC debounce and TX-idle gating so frame delivery stays monotonic under backpressure.
 - 2026-01-27: Switched frame DMA to a single contiguous transfer per frame and abort on VSYNC to remove per-line DMA re-arming.

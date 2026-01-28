@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-01-28: Insert an 18-PIXCLK delay after XOFF before sampling each line so the captured window starts in active video instead of the left porch.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
 - 2026-01-27: For PIXCLK rising-edge capture, force PIXCLK low before the first `wait 1`; for falling-edge capture, wait high→low before sampling each bit to prevent phase-dependent jitter.

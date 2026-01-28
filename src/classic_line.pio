@@ -33,6 +33,13 @@ xoff2:
     wait 0 gpio 0
     jmp x-- xoff2
 
+    ; Extra delay: 18 PIXCLK cycles to enter active video
+    set x, 17
+delay18:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- delay18
+
     ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
     wait 0 gpio 0
 
@@ -86,6 +93,13 @@ xoff2:
     wait 0 gpio 0
     jmp x-- xoff2
 
+    ; Extra delay: 18 PIXCLK cycles to enter active video
+    set x, 17
+delay18:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- delay18
+
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
 cap_block:
@@ -135,6 +149,13 @@ xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
     jmp x-- xoff2
+
+    ; Extra delay: 18 PIXCLK cycles to enter active video
+    set x, 17
+delay18:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- delay18
 
     ; Align to PIXCLK low so the first `wait 1 gpio 0` always waits for a *transition*
     wait 0 gpio 0
@@ -188,6 +209,13 @@ xoff2:
     wait 1 gpio 0
     wait 0 gpio 0
     jmp x-- xoff2
+
+    ; Extra delay: 18 PIXCLK cycles to enter active video
+    set x, 17
+delay18:
+    wait 1 gpio 0
+    wait 0 gpio 0
+    jmp x-- delay18
 
     ; Capture 512 bits as 16*32 (PIXCLK falling edge)
     set y, 15
