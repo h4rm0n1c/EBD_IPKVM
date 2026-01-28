@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-30: Add scan-page SSID selection buttons that return to setup with the chosen network prefilled.
 - 2026-01-30: Switched video transport to UDP over Wi-Fi with per-line RLE compression and a new host receiver/relay helper for VLC testing.
 - 2026-01-30: Added a weak cyw43_arch_wifi_scan shim so portal scans can call the wrapper name even when the SDK omits it (fallbacks to the driver API).
 - 2026-01-30: Buffer portal HTTP requests across TCP segments so POST bodies (Save/Reboot, power controls) are parsed reliably.

@@ -682,7 +682,8 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
                      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                      "<title>EBD IPKVM Wi-Fi Scan</title>"
                      "%s"
-                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>"
+                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}"
+                     ".ssid-form{display:flex;gap:8px;align-items:center;}</style>"
                      "</head><body>"
                      "<h2>Wi-Fi Scan</h2>"
                      "<p>Status: <strong>%s</strong></p>"
@@ -693,7 +694,12 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
         for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
             portal_scan_result_t *r = &portal.scan_results[i];
             int wrote = snprintf(page + n, sizeof(page) - (size_t)n,
-                                 "<li>%s (rssi %ld)</li>",
+                                 "<li><form method=\"POST\" action=\"/select\" class=\"ssid-form\">"
+                                 "<input type=\"hidden\" name=\"ssid\" value=\"%s\" />"
+                                 "<button type=\"submit\">Use</button>"
+                                 "<span>%s (rssi %ld)</span>"
+                                 "</form></li>",
+                                 r->ssid,
                                  r->ssid,
                                  (long)r->rssi);
             if (wrote < 0) break;
@@ -733,6 +739,13 @@ static void portal_handle_save(const char *body) {
     portal.config_saved = true;
 }
 
+static void portal_handle_select_ssid(const char *body) {
+    char ssid[WIFI_CFG_MAX_SSID + 1] = {0};
+    if (portal_form_value(body, "ssid", ssid, sizeof(ssid))) {
+        strncpy(portal.config.ssid, ssid, WIFI_CFG_MAX_SSID);
+    }
+}
+
 static void portal_handle_ps_on(bool on) {
     set_ps_on(on);
 }
@@ -764,6 +777,15 @@ static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post
     if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
+            portal_http_send_redirect(tpcb, "/");
+        } else {
+            portal_http_send(tpcb, "text/plain", "missing body");
+        }
+        goto out;
+    }
+    if (strcmp(path, "/select") == 0) {
+        if (body) {
+            portal_handle_select_ssid(body);
             portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
