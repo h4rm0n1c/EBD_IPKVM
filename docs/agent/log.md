@@ -1,6 +1,8 @@
 # Log (running)
 
 - 2026-01-30: Switched video transport to UDP over Wi-Fi with per-line RLE compression and a new host receiver/relay helper for VLC testing.
+- 2026-01-30: Switched the captive portal Wi-Fi scan start to call the cyw43 driver API directly to avoid missing symbol link errors in older SDK builds.
+- 2026-01-30: Noted that pico-sdk 2.2.0 lacks the cyw43_arch_wifi_scan wrapper, so the portal scan sticks with the driver API.
 - 2026-01-30: Adjusted frame gating to transmit every VSYNC (~60 fps) instead of alternating frames.
 - 2026-01-30: Added a captive-portal Wi-Fi configuration flow with DHCP/DNS/HTTP setup and flash-stored credentials for UDP streaming.
 - 2026-01-30: Keep the HTTP configuration server available in station mode so live config/control is possible without returning to AP mode.

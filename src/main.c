@@ -528,7 +528,11 @@ static void portal_start_scan(void) {
     portal_reset_scan();
     portal.scan_in_progress = true;
     cyw43_wifi_scan_options_t opts = {0};
-    cyw43_arch_wifi_scan(&opts, portal_scan_callback, NULL);
+    /* pico-sdk 2.2.0 does not provide cyw43_arch_wifi_scan; use the driver API. */
+    int err = cyw43_wifi_scan(&cyw43_state, &opts, NULL, portal_scan_callback);
+    if (err) {
+        portal.scan_in_progress = false;
+    }
 }
 
 static void portal_send_scan(struct tcp_pcb *tpcb) {

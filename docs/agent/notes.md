@@ -11,3 +11,4 @@
 - UDP video streaming stores Wi-Fi credentials in flash; if missing, the device starts a captive portal AP (`EBD-IPKVM-Setup`) with DHCP/DNS/HTTP setup and saves SSID/password plus UDP target settings.
 - The config HTTP server stays up in station mode; only the DHCP/DNS captive-portal services are AP-only.
 - PS_ON now auto-arms capture and can be toggled from the portal UI (in both AP and station modes).
+- pico-sdk 2.2.0 does not expose `cyw43_arch_wifi_scan`; use the driver-level `cyw43_wifi_scan` when starting portal scans.
