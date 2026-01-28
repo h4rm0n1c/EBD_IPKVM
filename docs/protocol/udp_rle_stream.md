@@ -30,10 +30,13 @@ compressed with a simple byte-oriented RLE to reduce bandwidth.
 
 ## Host relay for VLC
 Use `src/host_recv_udp.py` to reconstruct frames and optionally relay them as
-8-bit grayscale rawvideo over UDP so VLC can display the stream:
+8-bit grayscale rawvideo over UDP so VLC can display the stream. The Pico now
+listens on a UDP port; send a single packet to the Pico to prime the stream and
+it will reply with video packets to the sender:
 
 ```bash
-python3 src/host_recv_udp.py --bind 0.0.0.0 --port 5004 --vlc-host 127.0.0.1 --vlc-port 6000
+python3 src/host_recv_udp.py --bind 0.0.0.0 --port 5004 --pico-host 192.168.4.1 \
+    --vlc-host 127.0.0.1 --vlc-port 6000
 vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
     --rawvid-chroma GREY udp://@:6000
 ```
@@ -41,7 +44,7 @@ vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
 ## Wi-Fi configuration
 - On boot, if no saved Wi-Fi credentials are present, the device starts an AP
   named `EBD-IPKVM-Setup` and serves a captive portal for configuration.
-- The portal lets you set SSID, password, and UDP target IP/port.
+- The portal lets you set SSID, password, and the UDP listen port.
 - In station mode, the HTTP config server stays available on the device IP
   for live tweaks (DNS/DHCP remain AP-only), including power controls.
 - Send CDC command `W` to clear saved credentials and return to portal mode.

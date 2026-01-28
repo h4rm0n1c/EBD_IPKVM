@@ -69,6 +69,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Receive UDP RLE video lines and rebuild frames.")
     parser.add_argument("--bind", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=5004, help="UDP port (default: 5004)")
+    parser.add_argument("--pico-host", default="", help="Pico W IP to prime the stream (send one UDP packet)")
     parser.add_argument("--outdir", default="", help="Output directory for PGM frames")
     parser.add_argument("--max-frames", type=int, default=100, help="Stop after N frames (default: 100)")
     parser.add_argument("--vlc-host", default="", help="Relay frames to VLC host")
@@ -95,6 +96,11 @@ def main() -> None:
     last_print = time.time()
 
     print(f"[udp] listening on {args.bind}:{args.port}")
+    if args.pico_host:
+        sock.sendto(b"EBD_IPKVM", (args.pico_host, args.port))
+        print(f"[udp] primed stream via {args.pico_host}:{args.port}")
+    else:
+        print("[udp] pico host not set; no stream prime packet sent")
 
     while done < args.max_frames:
         try:

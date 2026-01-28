@@ -11,6 +11,7 @@
 - 2026-01-30: Reworked portal DHCP handling to mirror the pico-examples DHCP server flow (fixed header/options and replies via the input netif).
 - 2026-01-30: Acknowledge HTTP request bytes with tcp_recved and note Pico SDK examples as the reference for portal networking tweaks.
 - 2026-01-30: Capture the input netif before freeing DHCP requests so replies can route over the AP interface reliably.
+- 2026-01-30: Update the portal UI to list scanned SSIDs, keep power buttons on-page, and switch UDP streaming to listen for client subscriptions.
 - 2026-01-30: Adjusted frame gating to transmit every VSYNC (~60 fps) instead of alternating frames.
 - 2026-01-30: Added a captive-portal Wi-Fi configuration flow with DHCP/DNS/HTTP setup and flash-stored credentials for UDP streaming.
 - 2026-01-30: Keep the HTTP configuration server available in station mode so live config/control is possible without returning to AP mode.

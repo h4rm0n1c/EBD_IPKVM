@@ -142,7 +142,9 @@ static volatile uint16_t txq_r = 0;
 #if VIDEO_STREAM_UDP
 typedef struct udp_stream_state {
     struct udp_pcb *pcb;
-    ip_addr_t dest;
+    ip_addr_t client_addr;
+    uint16_t client_port;
+    bool client_set;
     bool ready;
 } udp_stream_state_t;
 
@@ -270,14 +272,20 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
 }
 
 #if VIDEO_STREAM_UDP
-static bool udp_stream_init(const wifi_config_t *cfg) {
-    if (!cfg || cfg->udp_addr[0] == '\0') {
-        printf("[EBD_IPKVM] udp disabled: missing target\n");
-        return false;
-    }
+static void udp_stream_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                            const ip_addr_t *addr, u16_t port) {
+    (void)arg;
+    if (!p) return;
+    udp_stream.client_addr = *addr;
+    udp_stream.client_port = port;
+    udp_stream.client_set = true;
+    udp_stream.ready = true;
+    pbuf_free(p);
+}
 
-    if (!ipaddr_aton(cfg->udp_addr, &udp_stream.dest)) {
-        printf("[EBD_IPKVM] udp target parse failed: %s\n", cfg->udp_addr);
+static bool udp_stream_init(const wifi_config_t *cfg) {
+    if (!cfg || cfg->udp_port == 0) {
+        printf("[EBD_IPKVM] udp disabled: missing listen port\n");
         return false;
     }
 
@@ -287,28 +295,30 @@ static bool udp_stream_init(const wifi_config_t *cfg) {
         return false;
     }
 
-    err_t err = udp_connect(udp_stream.pcb, &udp_stream.dest, cfg->udp_port);
+    err_t err = udp_bind(udp_stream.pcb, IP_ADDR_ANY, cfg->udp_port);
     if (err != ERR_OK) {
-        printf("[EBD_IPKVM] udp connect failed: %d\n", err);
+        printf("[EBD_IPKVM] udp bind failed: %d\n", err);
         udp_remove(udp_stream.pcb);
         udp_stream.pcb = NULL;
         return false;
     }
+    udp_recv(udp_stream.pcb, udp_stream_recv, NULL);
 
-    udp_stream.ready = true;
-    printf("[EBD_IPKVM] udp video -> %s:%u\n", cfg->udp_addr, (unsigned)cfg->udp_port);
+    udp_stream.ready = false;
+    udp_stream.client_set = false;
+    printf("[EBD_IPKVM] udp video listening on port %u\n", (unsigned)cfg->udp_port);
     return true;
 }
 
 static bool udp_stream_send(const uint8_t *payload, size_t len) {
-    if (!udp_stream.ready || !udp_stream.pcb) return false;
+    if (!udp_stream.ready || !udp_stream.pcb || !udp_stream.client_set) return false;
 
     bool ok = false;
     cyw43_arch_lwip_begin();
     struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, (uint16_t)len, PBUF_RAM);
     if (p) {
         memcpy(p->payload, payload, len);
-        err_t err = udp_send(udp_stream.pcb, p);
+        err_t err = udp_sendto(udp_stream.pcb, p, &udp_stream.client_addr, udp_stream.client_port);
         ok = (err == ERR_OK);
         pbuf_free(p);
     }
@@ -475,35 +485,56 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      ".ssid{display:flex;gap:8px;align-items:center;}</style>"
                      "</head><body>"
                      "<h2>EBD IPKVM Wi-Fi Setup</h2>"
-                     "<p>Configure Wi-Fi and set the UDP target for video streaming.</p>"
+                     "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
-                     "<button onclick=\"scan()\">Scan Networks</button>"
-                     "<form method=\"POST\" action=\"/ps_on\">"
-                     "<button type=\"submit\">Power On Mac</button>"
-                     "</form>"
-                     "<form method=\"POST\" action=\"/ps_off\">"
-                     "<button type=\"submit\">Power Off Mac</button>"
-                     "</form>"
-                     "<pre id=\"scan\"></pre>"
+                     "<div class=\"row\">"
+                     "<button type=\"button\" id=\"scan_btn\">Scan Wi-Fi</button>"
+                     "<span id=\"scan_status\"></span>"
+                     "</div>"
+                     "<ul id=\"scan_list\"></ul>"
                      "<form method=\"POST\" action=\"/save\">"
                      "<label>SSID</label><input name=\"ssid\" value=\"%s\" />"
                      "<label>Password</label><input name=\"pass\" type=\"password\" value=\"%s\" />"
-                     "<label>UDP Target IP</label><input name=\"udp_addr\" value=\"%s\" />"
-                     "<label>UDP Target Port</label><input name=\"udp_port\" value=\"%u\" />"
+                     "<label>UDP Listen Port</label><input name=\"udp_port\" value=\"%u\" />"
                      "<button type=\"submit\">Save &amp; Reboot</button>"
                      "</form>"
+                     "<div class=\"row\">"
+                     "<button type=\"button\" id=\"ps_on_btn\">Power On</button>"
+                     "<button type=\"button\" id=\"ps_off_btn\">Power Off</button>"
+                     "</div>"
                      "<script>"
+                     "const scanBtn=document.getElementById('scan_btn');"
+                     "const scanList=document.getElementById('scan_list');"
+                     "const scanStatus=document.getElementById('scan_status');"
+                     "const ssidInput=document.querySelector('input[name=\"ssid\"]');"
                      "async function scan(){"
+                     "scanStatus.textContent='scanning...';"
+                     "scanBtn.disabled=true;"
                      "const res=await fetch('/scan');"
                      "const data=await res.json();"
-                     "document.getElementById('scan').textContent=JSON.stringify(data,null,2);"
+                     "scanList.innerHTML='';"
+                     "if(Array.isArray(data.results)){"
+                     "data.results.forEach((r)=>{"
+                     "const li=document.createElement('li');"
+                     "const btn=document.createElement('button');"
+                     "btn.type='button';"
+                     "btn.textContent=`${r.ssid} (rssi ${r.rssi})`;"
+                     "btn.addEventListener('click',()=>{ssidInput.value=r.ssid;});"
+                     "li.appendChild(btn);"
+                     "scanList.appendChild(li);"
+                     "});"
                      "}"
+                     "scanStatus.textContent=data.scanning?'scanning...':'done';"
+                     "scanBtn.disabled=false;"
+                     "}"
+                     "scanBtn.addEventListener('click',scan);"
+                     "document.getElementById('ps_on_btn').addEventListener('click',()=>fetch('/ps_on',{method:'POST'}));"
+                     "document.getElementById('ps_off_btn').addEventListener('click',()=>fetch('/ps_off',{method:'POST'}));"
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
                      portal.config.ssid,
                      portal.config.pass,
-                     portal.config.udp_addr,
                      (unsigned)portal.config.udp_port);
     if (n < 0) {
         portal_http_send(tpcb, "text/plain", "render error");
