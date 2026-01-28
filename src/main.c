@@ -70,13 +70,8 @@ static uint32_t frame_tx_line_buf[CAP_WORDS_PER_LINE];
 static int dma_chan;
 static PIO pio = pio0;
 static uint sm = 0;
-static uint offset_fall_pixrise = 0;
-static uint offset_fall_pixfall = 0;
-static uint offset_rise_pixrise = 0;
-static uint offset_rise_pixfall = 0;
-static bool hsync_fall_edge = true;
 static bool vsync_fall_edge = true;
-static bool pixclk_rise_edge = true;
+static uint offset_fall_pixrise = 0;
 static void gpio_irq(uint gpio, uint32_t events);
 
 /* Ring buffer of complete line packets (72 bytes each). */
@@ -200,14 +195,12 @@ static inline void request_probe_packet(void) {
 
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d hsync=%s vsync=%s pixclk=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
+    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d vsync=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
            armed ? 1 : 0,
            capture.capture_enabled ? 1 : 0,
            test_frame_active ? 1 : 0,
            probe_pending ? 1 : 0,
-           hsync_fall_edge ? "fall" : "rise",
            vsync_fall_edge ? "fall" : "rise",
-           pixclk_rise_edge ? "rise" : "fall",
            (unsigned)txq_r,
            (unsigned)txq_w,
            tud_cdc_write_available(),
@@ -229,19 +222,7 @@ static void configure_pio_program(void) {
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
     pio_sm_restart(pio, sm);
-    if (hsync_fall_edge) {
-        if (pixclk_rise_edge) {
-            classic_line_fall_pixrise_program_init(pio, sm, offset_fall_pixrise, PIN_VIDEO);
-        } else {
-            classic_line_fall_pixfall_program_init(pio, sm, offset_fall_pixfall, PIN_VIDEO);
-        }
-    } else {
-        if (pixclk_rise_edge) {
-            classic_line_rise_pixrise_program_init(pio, sm, offset_rise_pixrise, PIN_VIDEO);
-        } else {
-            classic_line_rise_pixfall_program_init(pio, sm, offset_rise_pixfall, PIN_VIDEO);
-        }
-    }
+    classic_line_fall_pixrise_program_init(pio, sm, offset_fall_pixrise, PIN_VIDEO);
 }
 
 static void configure_vsync_irq(void) {
@@ -527,28 +508,6 @@ static void poll_cdc_commands(void) {
             if (can_emit_text()) {
                 run_gpio_diag();
             }
-        } else if (ch == 'H' || ch == 'h') {
-            hsync_fall_edge = !hsync_fall_edge;
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            configure_pio_program();
-            if (can_emit_text()) {
-                printf("[EBD_IPKVM] hsync_edge=%s\n", hsync_fall_edge ? "fall" : "rise");
-            }
-        } else if (ch == 'K' || ch == 'k') {
-            pixclk_rise_edge = !pixclk_rise_edge;
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            configure_pio_program();
-            if (can_emit_text()) {
-                printf("[EBD_IPKVM] pixclk_edge=%s\n", pixclk_rise_edge ? "rise" : "fall");
-            }
         } else if (ch == 'V' || ch == 'v') {
             vsync_fall_edge = !vsync_fall_edge;
             armed = false;
@@ -618,7 +577,7 @@ int main(void) {
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    printf("[EBD_IPKVM] Edge toggles: 'H' HSYNC edge, 'K' PIXCLK edge, 'V' VSYNC edge.\n");
+    printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge.\n");
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
     gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_disable_pulls(PIN_PIXCLK);
@@ -643,9 +602,6 @@ int main(void) {
     pio_sm_set_consecutive_pindirs(pio, sm, PIN_VIDEO,  1, false);
 
     offset_fall_pixrise = pio_add_program(pio, &classic_line_fall_pixrise_program);
-    offset_fall_pixfall = pio_add_program(pio, &classic_line_fall_pixfall_program);
-    offset_rise_pixrise = pio_add_program(pio, &classic_line_rise_pixrise_program);
-    offset_rise_pixfall = pio_add_program(pio, &classic_line_rise_pixfall_program);
     configure_pio_program();
 
     dma_chan = dma_claim_unused_channel(true);

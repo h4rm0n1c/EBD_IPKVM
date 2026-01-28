@@ -11,6 +11,7 @@
 - 2026-01-27: Debounce VSYNC edges and only mark frames for transmit when the USB TX path is idle to prevent backpressure skips.
 - 2026-01-27: Capture each frame with a single DMA transfer into a contiguous buffer and abort on VSYNC to avoid per-line DMA timing hazards.
 - 2026-01-27: When a captured frame has fewer than `CAP_YOFF_LINES + CAP_ACTIVE_H` lines, derive the start line from the end of the capture so we still transmit a full active region.
+- 2026-01-29: Lock classic capture to HSYNC falling + PIXCLK rising and remove runtime edge toggles/alternate PIO programs to favor the proven default path.
 - 2026-01-25: Repository initialised with docs-first workflow and agent documentation scaffold.
 - 2026-01-26: Use GPIO9 (via ULN2803) as an active-high ATX PS_ON output; add CDC commands for PS_ON control, BOOTSEL, and watchdog reset.
 - 2026-01-26: Use polling-based edge sampling for GPIO diagnostics to avoid interrupt overload on PIXCLK while still confirming activity.
