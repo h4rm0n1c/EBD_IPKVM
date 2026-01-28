@@ -19,14 +19,14 @@ Macintosh Classic KVM:
 - Each line waits for the selected HSYNC edge, skips 157 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
   - Captures every VSYNC to target ~60 fps.
-  - Stops after 100 transmitted frames until reset.
+  - Runs continuously until stopped/reset.
 - UDP RLE streaming:
   - Each line is RLE-compressed and sent as a UDP datagram (`0xEB 0xD1` header).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park (CDC control channel).
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
   - Edge testing: `V` toggles VSYNC edge (stops capture + clears state).
   - Wi-Fi configuration defaults to a captive portal AP (`EBD-IPKVM-Setup`) until credentials are saved.
-  - The HTTP config server remains available in station mode for live tweaks (DNS/DHCP stay AP-only).
+  - The HTTP config server remains available in station mode for live tweaks and power control (DNS/DHCP stay AP-only).
   - `W` clears stored Wi-Fi settings and reboots into portal mode.
 
 ## Host tooling

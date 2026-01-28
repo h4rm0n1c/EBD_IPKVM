@@ -31,7 +31,7 @@ The firmware is host-controlled over the same CDC channel:
 | `X` | Stop capture, clear TX queue. |
 | `R` | Reset counters and internal state. |
 | `Q` | Park (stop capture and idle forever until reset). |
-| `P` | Assert ATX `PS_ON` (power on; GPIO9 high via ULN2803). |
+| `P` | Assert ATX `PS_ON` and arm capture (power on; GPIO9 high via ULN2803). |
 | `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
 | `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
@@ -59,7 +59,7 @@ The firmware is host-controlled over the same CDC channel:
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips); capture samples on PIXCLK rising edges with a small post-edge delay before sampling.
 - After the 157-PIXCLK horizontal skip (XOFF), the PIO waits an additional 18 PIXCLK cycles before sampling to shift the active capture window away from the left blanking porch.
 - Capture DMA is sized for `CAP_MAX_LINES` (YOFF+ACTIVE) and runs to completion; payloads normally use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer, but if the captured frame is short the firmware falls back to the last `CAP_ACTIVE_H` lines.
-- Streaming stops after 100 complete frames unless reset.
+- Streaming runs continuously until stopped/reset.
 
 ## Error handling
 - If the TX queue is full, line packets are dropped and `lines_drop` increments.

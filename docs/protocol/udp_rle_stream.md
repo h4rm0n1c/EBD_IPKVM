@@ -43,7 +43,7 @@ vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
   named `EBD-IPKVM-Setup` and serves a captive portal for configuration.
 - The portal lets you set SSID, password, and UDP target IP/port.
 - In station mode, the HTTP config server stays available on the device IP
-  for live tweaks (DNS/DHCP remain AP-only).
+  for live tweaks (DNS/DHCP remain AP-only), including power controls.
 - Send CDC command `W` to clear saved credentials and return to portal mode.
 
 ## Capture cadence

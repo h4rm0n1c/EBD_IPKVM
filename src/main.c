@@ -102,7 +102,6 @@ static volatile uint32_t stream_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
-static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
 static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
@@ -193,6 +192,13 @@ static inline void reset_frame_tx_state(void) {
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
     gpio_put(PIN_PS_ON, on ? 1 : 0);
+    if (on) {
+        armed = true;
+        if (!capture.capture_enabled) {
+            want_frame = true;
+            video_capture_start(&capture, true);
+        }
+    }
 }
 
 static inline void reset_diag_counts(void) {
@@ -225,7 +231,7 @@ static inline bool stream_is_idle(void) {
 }
 
 static inline bool can_emit_text(void) {
-    return stream_is_idle() && (!armed || frames_done >= 100);
+    return stream_is_idle() && !armed;
 }
 
 static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
@@ -465,6 +471,12 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<p>Configure Wi-Fi and set the UDP target for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
                      "<button onclick=\"scan()\">Scan Networks</button>"
+                     "<form method=\"POST\" action=\"/ps_on\">"
+                     "<button type=\"submit\">Power On Mac</button>"
+                     "</form>"
+                     "<form method=\"POST\" action=\"/ps_off\">"
+                     "<button type=\"submit\">Power Off Mac</button>"
+                     "</form>"
                      "<pre id=\"scan\"></pre>"
                      "<form method=\"POST\" action=\"/save\">"
                      "<label>SSID</label><input name=\"ssid\" value=\"%s\" />"
@@ -570,6 +582,10 @@ static void portal_handle_save(const char *body) {
     portal.config_saved = true;
 }
 
+static void portal_handle_ps_on(bool on) {
+    set_ps_on(on);
+}
+
 static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
     if (!req) {
         portal_http_send(tpcb, "text/plain", "bad request");
@@ -604,6 +620,16 @@ static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
         }
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_on") == 0) {
+        portal_handle_ps_on(true);
+        portal_http_send(tpcb, "text/plain", "ps_on");
+        return;
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_off") == 0) {
+        portal_handle_ps_on(false);
+        portal_http_send(tpcb, "text/plain", "ps_off");
         return;
     }
 
@@ -950,8 +976,6 @@ static void gpio_irq(uint gpio, uint32_t events) {
     if (!armed) {
         return;
     }
-    if (frames_done >= 100) return;
-
     bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready;
 #if VIDEO_STREAM_USB
     tx_busy = tx_busy || !txq_is_empty();
@@ -1147,7 +1171,6 @@ static void poll_cdc_commands(void) {
             stream_drops = 0;
             vsync_edges = 0;
             want_frame = false;
-            done_latched = false;
             video_capture_stop(&capture);
             txq_reset();
             reset_frame_tx_state();
@@ -1291,7 +1314,7 @@ int main(void) {
     stdio_init_all();
     sleep_ms(1200);
 
-    printf("\n[EBD_IPKVM] UDP RLE video stream @ ~60fps, capture 100 frames\n");
+    printf("\n[EBD_IPKVM] UDP RLE video stream @ ~60fps, continuous capture\n");
     printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
@@ -1387,7 +1410,7 @@ int main(void) {
         service_txq();
 
         /* Keep status text off the wire while armed/capturing or while TX path active. */
-        bool can_report = stream_is_idle() && (!armed || frames_done >= 100);
+        bool can_report = stream_is_idle() && !armed;
         if (can_report) {
             if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
                 next = delayed_by_ms(next, 1000);
@@ -1399,7 +1422,7 @@ int main(void) {
                 uint32_t ve = vsync_edges;
                 vsync_edges = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu stream_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu/100\n",
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu stream_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu\n",
                        armed ? 1 : 0,
                        capture.capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
@@ -1410,11 +1433,6 @@ int main(void) {
                        (unsigned long)capture.frame_overrun,
                        (unsigned long)ve,
                        (unsigned long)frames_done);
-            }
-
-            if (frames_done >= 100 && !done_latched) {
-                printf("[EBD_IPKVM] done (100 frames). Send 'R' then 'S' to run again.\n");
-                done_latched = true;
             }
         }
 

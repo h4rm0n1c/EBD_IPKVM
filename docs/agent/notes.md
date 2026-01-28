@@ -10,3 +10,4 @@
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
 - UDP video streaming stores Wi-Fi credentials in flash; if missing, the device starts a captive portal AP (`EBD-IPKVM-Setup`) with DHCP/DNS/HTTP setup and saves SSID/password plus UDP target settings.
 - The config HTTP server stays up in station mode; only the DHCP/DNS captive-portal services are AP-only.
+- PS_ON now auto-arms capture and can be toggled from the portal UI (in both AP and station modes).

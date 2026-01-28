@@ -4,6 +4,7 @@
 - 2026-01-30: Adjusted frame gating to transmit every VSYNC (~60 fps) instead of alternating frames.
 - 2026-01-30: Added a captive-portal Wi-Fi configuration flow with DHCP/DNS/HTTP setup and flash-stored credentials for UDP streaming.
 - 2026-01-30: Keep the HTTP configuration server available in station mode so live config/control is possible without returning to AP mode.
+- 2026-01-30: Remove the 100-frame auto-stop and tie PS_ON to auto-arming capture with portal power controls.
 - 2026-01-29: Lock classic line capture to HSYNC falling + PIXCLK rising and remove runtime edge toggles/program variants to simplify the PIO program set.
 - 2026-01-28: Delayed line capture start by 18 PIXCLKs after XOFF to shift sampling into active video and preserve the rightmost pixels.
 - 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.
