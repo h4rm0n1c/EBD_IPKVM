@@ -663,6 +663,7 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
     if (total >= sizeof(req_buf)) total = sizeof(req_buf) - 1;
     pbuf_copy_partial(p, req_buf, total, 0);
     req_buf[total] = '\0';
+    tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
 
     portal_handle_http_request(tpcb, req_buf);

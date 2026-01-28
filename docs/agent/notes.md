@@ -12,3 +12,4 @@
 - The config HTTP server stays up in station mode; only the DHCP/DNS captive-portal services are AP-only.
 - PS_ON now auto-arms capture and can be toggled from the portal UI (in both AP and station modes).
 - If the SDK doesn't export `cyw43_arch_wifi_scan`, the firmware provides a weak shim that forwards to `cyw43_wifi_scan` so portal scans can always call the wrapper name.
+- Use Pico SDK example implementations (notably `pico-examples/pico_w`) as the primary reference when adjusting portal Wi-Fi/DHCP/HTTP behavior.
