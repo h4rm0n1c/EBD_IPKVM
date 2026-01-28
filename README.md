@@ -99,3 +99,6 @@ Wi-Fi settings are stored in flash. Compile-time defaults can still be provided
 to prefill the portal:
 - `WIFI_SSID` / `WIFI_PASSWORD`
 - `VIDEO_UDP_ADDR` / `VIDEO_UDP_PORT`
+
+The repo includes a minimal `src/lwipopts.h` so lwIP can build without needing
+an external config file.

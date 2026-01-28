@@ -21,6 +21,10 @@ add_executable(EBD_IPKVM
     src/wifi_config.c
 )
 
+target_include_directories(EBD_IPKVM PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
 pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/classic_line.pio)
 
 pico_enable_stdio_usb(EBD_IPKVM 1)
