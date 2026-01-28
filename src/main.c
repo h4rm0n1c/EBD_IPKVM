@@ -165,6 +165,8 @@ typedef struct portal_state {
     bool config_saved;
     bool has_config;
     bool ap_mode;
+    char mac_str[18];
+    char hostname[32];
     wifi_config_t config;
     portal_scan_result_t scan_results[PORTAL_MAX_SCAN];
     uint8_t scan_count;
@@ -404,6 +406,21 @@ static void portal_defaults(void) {
     portal.config.udp_port = VIDEO_UDP_PORT;
 }
 
+static void portal_set_identity(void) {
+    uint8_t mac[6] = {0};
+    if (cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac) == 0) {
+        snprintf(portal.mac_str, sizeof(portal.mac_str),
+                 "%02X:%02X:%02X:%02X:%02X:%02X",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        snprintf(portal.hostname, sizeof(portal.hostname),
+                 "ebd-ipkvm-%02x%02x%02x", mac[3], mac[4], mac[5]);
+    } else {
+        strncpy(portal.mac_str, "unknown", sizeof(portal.mac_str));
+        portal.mac_str[sizeof(portal.mac_str) - 1] = '\0';
+        portal.hostname[0] = '\0';
+    }
+}
+
 static size_t portal_url_decode(char *dst, size_t dst_len, const char *src, size_t src_len) {
     size_t out = 0;
     for (size_t i = 0; i < src_len && out + 1 < dst_len; i++) {
@@ -583,6 +600,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<h2>EBD IPKVM Wi-Fi Setup</h2>"
                      "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
+                     "<p>Device MAC: <code>%s</code></p>"
                      "<div class=\"row\">"
                      "<a href=\"/scan\">Scan Wi-Fi</a>"
                      "</div>"
@@ -608,6 +626,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
+                     portal.mac_str,
                      portal.config.ssid,
                      portal.config.pass,
                      (unsigned)portal.config.udp_port);
@@ -1182,6 +1201,9 @@ static void portal_start_servers(bool enable_ap_services) {
 static bool wifi_start_station(const wifi_config_t *cfg) {
     if (!cfg || cfg->ssid[0] == '\0') return false;
     cyw43_arch_enable_sta_mode();
+    if (portal.hostname[0] != '\0') {
+        netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], portal.hostname);
+    }
     int auth = (cfg->pass[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     int err = cyw43_arch_wifi_connect_timeout_ms(cfg->ssid, cfg->pass, auth, 30000);
     if (err) {
@@ -1694,6 +1716,7 @@ int main(void) {
     if (cyw43_arch_init()) {
         printf("[EBD_IPKVM] wifi init failed\n");
     } else {
+        portal_set_identity();
         portal.has_config = wifi_config_load(&portal.config);
         if (!portal.has_config) {
             portal_defaults();
