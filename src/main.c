@@ -807,7 +807,7 @@ static void dhcp_opt_write_u32(uint8_t **opt, uint8_t code, uint32_t val) {
     *opt = o;
 }
 
-static void dhcp_send_reply(struct udp_pcb *pcb, uint8_t msg_type, const dhcp_msg_t *req) {
+static void dhcp_send_reply(struct udp_pcb *pcb, struct netif *nif, uint8_t msg_type, const dhcp_msg_t *req) {
     dhcp_msg_t resp;
     memset(&resp, 0, sizeof(resp));
     resp.op = 2;
@@ -847,7 +847,6 @@ static void dhcp_send_reply(struct udp_pcb *pcb, uint8_t msg_type, const dhcp_ms
 
     ip_addr_t dst;
     ip_addr_set_ip4_u32(&dst, PP_HTONL(0xFFFFFFFFu));
-    struct netif *nif = ip_current_input_netif();
     if (nif) {
         udp_sendto_if(pcb, out, &dst, PORTAL_CLIENT_PORT, nif);
     } else {
@@ -870,6 +869,7 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
         pbuf_free(p);
         return;
     }
+    struct netif *nif = ip_current_input_netif();
     size_t copied = pbuf_copy_partial(p, &req, sizeof(req), 0);
     pbuf_free(p);
     if (copied < min_size) {
@@ -888,9 +888,9 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     }
     uint8_t msg_type = msg[2];
     if (msg_type == 1) {
-        dhcp_send_reply(pcb, 2, &req);
+        dhcp_send_reply(pcb, nif, 2, &req);
     } else if (msg_type == 3) {
-        dhcp_send_reply(pcb, 5, &req);
+        dhcp_send_reply(pcb, nif, 5, &req);
     }
 }
 
