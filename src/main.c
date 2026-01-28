@@ -879,6 +879,7 @@ static bool wifi_start_portal(void) {
     IP4_ADDR(&mask, 255, 255, 255, 0);
     IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
     netif_set_addr(netif, &ip, &mask, &gw);
+    netif_set_default(netif);
     netif_set_up(netif);
     netif_set_link_up(netif);
     portal_start_servers(true);
