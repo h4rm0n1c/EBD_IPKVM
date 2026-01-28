@@ -165,6 +165,8 @@ typedef struct portal_state {
     bool config_saved;
     bool has_config;
     bool ap_mode;
+    char mac_str[18];
+    char hostname[32];
     wifi_config_t config;
     portal_scan_result_t scan_results[PORTAL_MAX_SCAN];
     uint8_t scan_count;
@@ -404,6 +406,21 @@ static void portal_defaults(void) {
     portal.config.udp_port = VIDEO_UDP_PORT;
 }
 
+static void portal_set_identity(uint8_t itf) {
+    uint8_t mac[6] = {0};
+    if (cyw43_wifi_get_mac(&cyw43_state, itf, mac) == 0) {
+        snprintf(portal.mac_str, sizeof(portal.mac_str),
+                 "%02X:%02X:%02X:%02X:%02X:%02X",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        snprintf(portal.hostname, sizeof(portal.hostname),
+                 "EBDIPKVM-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    } else {
+        strncpy(portal.mac_str, "unknown", sizeof(portal.mac_str));
+        portal.mac_str[sizeof(portal.mac_str) - 1] = '\0';
+        portal.hostname[0] = '\0';
+    }
+}
+
 static size_t portal_url_decode(char *dst, size_t dst_len, const char *src, size_t src_len) {
     size_t out = 0;
     for (size_t i = 0; i < src_len && out + 1 < dst_len; i++) {
@@ -583,6 +600,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<h2>EBD IPKVM Wi-Fi Setup</h2>"
                      "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
+                     "<p>Device MAC: <code>%s</code></p>"
                      "<div class=\"row\">"
                      "<a href=\"/scan\">Scan Wi-Fi</a>"
                      "</div>"
@@ -608,6 +626,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
+                     portal.mac_str,
                      portal.config.ssid,
                      portal.config.pass,
                      (unsigned)portal.config.udp_port);
@@ -682,7 +701,8 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
                      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                      "<title>EBD IPKVM Wi-Fi Scan</title>"
                      "%s"
-                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>"
+                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}"
+                     ".ssid-form{display:flex;gap:8px;align-items:center;}</style>"
                      "</head><body>"
                      "<h2>Wi-Fi Scan</h2>"
                      "<p>Status: <strong>%s</strong></p>"
@@ -693,7 +713,12 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
         for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
             portal_scan_result_t *r = &portal.scan_results[i];
             int wrote = snprintf(page + n, sizeof(page) - (size_t)n,
-                                 "<li>%s (rssi %ld)</li>",
+                                 "<li><form method=\"POST\" action=\"/select\" class=\"ssid-form\">"
+                                 "<input type=\"hidden\" name=\"ssid\" value=\"%s\" />"
+                                 "<button type=\"submit\">Use</button>"
+                                 "<span>%s (rssi %ld)</span>"
+                                 "</form></li>",
+                                 r->ssid,
                                  r->ssid,
                                  (long)r->rssi);
             if (wrote < 0) break;
@@ -733,6 +758,13 @@ static void portal_handle_save(const char *body) {
     portal.config_saved = true;
 }
 
+static void portal_handle_select_ssid(const char *body) {
+    char ssid[WIFI_CFG_MAX_SSID + 1] = {0};
+    if (portal_form_value(body, "ssid", ssid, sizeof(ssid))) {
+        strncpy(portal.config.ssid, ssid, WIFI_CFG_MAX_SSID);
+    }
+}
+
 static void portal_handle_ps_on(bool on) {
     set_ps_on(on);
 }
@@ -764,6 +796,15 @@ static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post
     if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
+            portal_http_send_redirect(tpcb, "/");
+        } else {
+            portal_http_send(tpcb, "text/plain", "missing body");
+        }
+        goto out;
+    }
+    if (strcmp(path, "/select") == 0) {
+        if (body) {
+            portal_handle_select_ssid(body);
             portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
@@ -1160,6 +1201,10 @@ static void portal_start_servers(bool enable_ap_services) {
 static bool wifi_start_station(const wifi_config_t *cfg) {
     if (!cfg || cfg->ssid[0] == '\0') return false;
     cyw43_arch_enable_sta_mode();
+    portal_set_identity(CYW43_ITF_STA);
+    if (portal.hostname[0] != '\0') {
+        netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], portal.hostname);
+    }
     int auth = (cfg->pass[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     int err = cyw43_arch_wifi_connect_timeout_ms(cfg->ssid, cfg->pass, auth, 30000);
     if (err) {
@@ -1177,6 +1222,7 @@ static bool wifi_start_portal(void) {
     int auth = (PORTAL_AP_PASS[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_arch_disable_sta_mode();
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, auth);
+    portal_set_identity(CYW43_ITF_AP);
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_AP];
     ip4_addr_t ip, mask, gw;
     IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
