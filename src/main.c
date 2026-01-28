@@ -170,6 +170,12 @@ typedef struct portal_state {
 
 static portal_state_t portal = {0};
 
+__attribute__((weak)) int cyw43_arch_wifi_scan(cyw43_wifi_scan_options_t *opts,
+                                               int (*result_cb)(void *, const cyw43_ev_scan_result_t *),
+                                               void *env) {
+    return cyw43_wifi_scan(&cyw43_state, opts, env, result_cb);
+}
+
 static inline void txq_reset(void) {
     uint32_t s = save_and_disable_interrupts();
     txq_w = 0;
@@ -528,8 +534,7 @@ static void portal_start_scan(void) {
     portal_reset_scan();
     portal.scan_in_progress = true;
     cyw43_wifi_scan_options_t opts = {0};
-    /* pico-sdk 2.2.0 does not provide cyw43_arch_wifi_scan; use the driver API. */
-    int err = cyw43_wifi_scan(&cyw43_state, &opts, NULL, portal_scan_callback);
+    int err = cyw43_arch_wifi_scan(&opts, portal_scan_callback, NULL);
     if (err) {
         portal.scan_in_progress = false;
     }
