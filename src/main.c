@@ -678,13 +678,13 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     return ERR_OK;
 }
 
-static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                             const ip_addr_t *addr, u16_t port) {
+static void portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                            const ip_addr_t *addr, u16_t port) {
     (void)arg;
-    if (!p) return ERR_OK;
+    if (!p) return;
     if (p->len < 12) {
         pbuf_free(p);
-        return ERR_OK;
+        return;
     }
 
     uint8_t buf[256];
@@ -696,7 +696,7 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     uint16_t id = (uint16_t)((buf[0] << 8) | buf[1]);
     uint16_t flags = 0x8180;
     uint16_t qdcount = (uint16_t)((buf[4] << 8) | buf[5]);
-    if (qdcount == 0) return ERR_OK;
+    if (qdcount == 0) return;
 
     uint8_t resp[256];
     size_t resp_len = 0;
@@ -713,9 +713,9 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     while (qlen < len && buf[qlen] != 0) {
         qlen += buf[qlen] + 1;
     }
-    if (qlen + 5 >= len) return ERR_OK;
+    if (qlen + 5 >= len) return;
     qlen += 5;
-    if (resp_len + qlen > sizeof(resp)) return ERR_OK;
+    if (resp_len + qlen > sizeof(resp)) return;
     memcpy(resp + resp_len, buf + 12, qlen - 12);
     resp_len += qlen - 12;
 
@@ -733,11 +733,10 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     resp[resp_len++] = PORTAL_IP_OCT4;
 
     struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)resp_len, PBUF_RAM);
-    if (!out) return ERR_MEM;
+    if (!out) return;
     memcpy(out->payload, resp, resp_len);
     udp_sendto(pcb, out, addr, port);
     pbuf_free(out);
-    return ERR_OK;
 }
 
 static uint8_t dhcp_buf[300];
@@ -800,15 +799,15 @@ static void dhcp_send_reply(struct udp_pcb *pcb, const ip_addr_t *addr, u16_t po
     pbuf_free(out);
 }
 
-static err_t portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                              const ip_addr_t *addr, u16_t port) {
+static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                             const ip_addr_t *addr, u16_t port) {
     (void)arg;
-    if (!p) return ERR_OK;
+    if (!p) return;
     size_t len = p->tot_len;
     if (len > sizeof(dhcp_buf)) len = sizeof(dhcp_buf);
     pbuf_copy_partial(p, dhcp_buf, len, 0);
     pbuf_free(p);
-    if (len < 240) return ERR_OK;
+    if (len < 240) return;
 
     uint8_t msg_type = 0;
     size_t opt = 240;
@@ -829,7 +828,6 @@ static err_t portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     } else if (msg_type == 3) {
         dhcp_send_reply(pcb, addr, PORTAL_CLIENT_PORT, dhcp_buf, len, 5);
     }
-    return ERR_OK;
 }
 
 static void portal_start_servers(bool enable_ap_services) {
