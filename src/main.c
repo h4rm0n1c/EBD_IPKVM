@@ -406,9 +406,9 @@ static void portal_defaults(void) {
     portal.config.udp_port = VIDEO_UDP_PORT;
 }
 
-static void portal_set_identity(void) {
+static void portal_set_identity(uint8_t itf) {
     uint8_t mac[6] = {0};
-    if (cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac) == 0) {
+    if (cyw43_wifi_get_mac(&cyw43_state, itf, mac) == 0) {
         snprintf(portal.mac_str, sizeof(portal.mac_str),
                  "%02X:%02X:%02X:%02X:%02X:%02X",
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -1201,6 +1201,7 @@ static void portal_start_servers(bool enable_ap_services) {
 static bool wifi_start_station(const wifi_config_t *cfg) {
     if (!cfg || cfg->ssid[0] == '\0') return false;
     cyw43_arch_enable_sta_mode();
+    portal_set_identity(CYW43_ITF_STA);
     if (portal.hostname[0] != '\0') {
         netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], portal.hostname);
     }
@@ -1221,6 +1222,7 @@ static bool wifi_start_portal(void) {
     int auth = (PORTAL_AP_PASS[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_arch_disable_sta_mode();
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, auth);
+    portal_set_identity(CYW43_ITF_AP);
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_AP];
     ip4_addr_t ip, mask, gw;
     IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
@@ -1716,7 +1718,6 @@ int main(void) {
     if (cyw43_arch_init()) {
         printf("[EBD_IPKVM] wifi init failed\n");
     } else {
-        portal_set_identity();
         portal.has_config = wifi_config_load(&portal.config);
         if (!portal.has_config) {
             portal_defaults();
