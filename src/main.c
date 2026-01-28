@@ -511,7 +511,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
     portal_http_send(tpcb, "text/html", page);
 }
 
-static err_t portal_scan_callback(void *env, const cyw43_ev_scan_result_t *result) {
+static int portal_scan_callback(void *env, const cyw43_ev_scan_result_t *result) {
     (void)env;
     if (!result) {
         portal.scan_in_progress = false;
