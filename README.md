@@ -91,6 +91,8 @@ This test script:
 
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`.
+For Pico W Wi-Fi features (UDP stream + portal), ensure you build with
+`PICO_BOARD=pico_w` so the `cyw43` headers/libraries are available.
 
 Wi-Fi settings are stored in flash. Compile-time defaults can still be provided
 to prefill the portal:
