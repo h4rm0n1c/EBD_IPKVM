@@ -1,6 +1,28 @@
 # Log (running)
 
 - 2026-01-30: Switched video transport to UDP over Wi-Fi with per-line RLE compression and a new host receiver/relay helper for VLC testing.
+- 2026-01-30: Added a weak cyw43_arch_wifi_scan shim so portal scans can call the wrapper name even when the SDK omits it (fallbacks to the driver API).
+- 2026-01-30: Buffer portal HTTP requests across TCP segments so POST bodies (Save/Reboot, power controls) are parsed reliably.
+- 2026-01-30: Clean up portal HTTP connection state on close/error to avoid dangling pointers.
+- 2026-01-30: Expand portal HTTP request buffer and cap body size to accommodate full mobile headers.
+- 2026-01-30: Parse portal HTTP requests line-by-line in the PicoHTTPServer style to stabilize POST handling.
+- 2026-01-30: Normalize absolute-URI and query-string request paths in portal HTTP parsing.
+- 2026-01-30: Handle POSTs without Content-Length by consuming any buffered body bytes after headers.
+- 2026-01-30: Accept LF-only HTTP line endings during portal request parsing for captive clients.
+- 2026-01-30: Add form-based portal controls so power/scan actions work without JS fetch.
+- 2026-01-30: Switch portal scan to a server-rendered page and redirect control actions back to setup.
+- 2026-01-30: Aligned portal scan callback signature with cyw43 scan API to avoid pointer-type warnings.
+- 2026-01-30: Updated portal DNS/DHCP UDP receive callbacks to match lwIP udp_recv_fn signatures and silence build warnings.
+- 2026-01-30: Pin AP IP configuration to the cyw43 AP netif and bring it up explicitly to improve captive portal DHCP behavior.
+- 2026-01-30: Disable STA mode before enabling the portal AP to ensure the SSID is broadcast after failed station attempts.
+- 2026-01-30: Always broadcast DHCP replies to port 68 to avoid clients self-assigning 169.x addresses on the portal AP.
+- 2026-01-30: Set the AP netif as default so broadcast DHCP replies route over the portal interface.
+- 2026-01-30: Reworked portal DHCP handling to mirror the pico-examples DHCP server flow (fixed header/options and replies via the input netif).
+- 2026-01-30: Acknowledge HTTP request bytes with tcp_recved and note Pico SDK examples as the reference for portal networking tweaks.
+- 2026-01-30: Capture the input netif before freeing DHCP requests so replies can route over the AP interface reliably.
+- 2026-01-30: Update the portal UI to list scanned SSIDs, keep power buttons on-page, and switch UDP streaming to listen for client subscriptions.
+- 2026-01-30: Wrap portal HTTP handlers in cyw43_arch_lwip_begin/end and accept GET/POST for scan/PS actions to restore button behavior.
+- 2026-01-30: Add scan polling and power status feedback in the portal UI plus GET fallbacks for PS/scan endpoints.
 - 2026-01-30: Adjusted frame gating to transmit every VSYNC (~60 fps) instead of alternating frames.
 - 2026-01-30: Added a captive-portal Wi-Fi configuration flow with DHCP/DNS/HTTP setup and flash-stored credentials for UDP streaming.
 - 2026-01-30: Keep the HTTP configuration server available in station mode so live config/control is possible without returning to AP mode.

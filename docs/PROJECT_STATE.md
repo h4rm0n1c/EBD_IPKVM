@@ -26,7 +26,7 @@ Macintosh Classic KVM:
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
   - Edge testing: `V` toggles VSYNC edge (stops capture + clears state).
   - Wi-Fi configuration defaults to a captive portal AP (`EBD-IPKVM-Setup`) until credentials are saved.
-  - The HTTP config server remains available in station mode for live tweaks and power control (DNS/DHCP stay AP-only).
+- The HTTP config server remains available in station mode for live tweaks and power control (DNS/DHCP stay AP-only); UDP video listens on the configured port and streams to the first client that sends a packet.
   - `W` clears stored Wi-Fi settings and reboots into portal mode.
   - Wi-Fi features default to `PICO_BOARD=pico_w` unless overridden (clean the build dir if a cached `pico` board persists).
 

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <strings.h>
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -58,6 +60,7 @@
 #include "lwip/pbuf.h"
 #include "lwip/udp.h"
 #include "lwip/ip_addr.h"
+#include "lwip/ip.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/tcp.h"
 #include "lwip/netif.h"
@@ -85,7 +88,7 @@
 #define PORTAL_IP_OCT4 1
 #define PORTAL_LEASE_OCT4 2
 #define PORTAL_MAX_SCAN 12
-#define PORTAL_MAX_REQ 768
+#define PORTAL_MAX_REQ 4096
 
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
@@ -141,7 +144,9 @@ static volatile uint16_t txq_r = 0;
 #if VIDEO_STREAM_UDP
 typedef struct udp_stream_state {
     struct udp_pcb *pcb;
-    ip_addr_t dest;
+    ip_addr_t client_addr;
+    uint16_t client_port;
+    bool client_set;
     bool ready;
 } udp_stream_state_t;
 
@@ -169,6 +174,12 @@ typedef struct portal_state {
 } portal_state_t;
 
 static portal_state_t portal = {0};
+
+__attribute__((weak)) int cyw43_arch_wifi_scan(cyw43_wifi_scan_options_t *opts,
+                                               int (*result_cb)(void *, const cyw43_ev_scan_result_t *),
+                                               void *env) {
+    return cyw43_wifi_scan(&cyw43_state, opts, env, result_cb);
+}
 
 static inline void txq_reset(void) {
     uint32_t s = save_and_disable_interrupts();
@@ -263,14 +274,20 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
 }
 
 #if VIDEO_STREAM_UDP
-static bool udp_stream_init(const wifi_config_t *cfg) {
-    if (!cfg || cfg->udp_addr[0] == '\0') {
-        printf("[EBD_IPKVM] udp disabled: missing target\n");
-        return false;
-    }
+static void udp_stream_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                            const ip_addr_t *addr, u16_t port) {
+    (void)arg;
+    if (!p) return;
+    udp_stream.client_addr = *addr;
+    udp_stream.client_port = port;
+    udp_stream.client_set = true;
+    udp_stream.ready = true;
+    pbuf_free(p);
+}
 
-    if (!ipaddr_aton(cfg->udp_addr, &udp_stream.dest)) {
-        printf("[EBD_IPKVM] udp target parse failed: %s\n", cfg->udp_addr);
+static bool udp_stream_init(const wifi_config_t *cfg) {
+    if (!cfg || cfg->udp_port == 0) {
+        printf("[EBD_IPKVM] udp disabled: missing listen port\n");
         return false;
     }
 
@@ -280,28 +297,30 @@ static bool udp_stream_init(const wifi_config_t *cfg) {
         return false;
     }
 
-    err_t err = udp_connect(udp_stream.pcb, &udp_stream.dest, cfg->udp_port);
+    err_t err = udp_bind(udp_stream.pcb, IP_ADDR_ANY, cfg->udp_port);
     if (err != ERR_OK) {
-        printf("[EBD_IPKVM] udp connect failed: %d\n", err);
+        printf("[EBD_IPKVM] udp bind failed: %d\n", err);
         udp_remove(udp_stream.pcb);
         udp_stream.pcb = NULL;
         return false;
     }
+    udp_recv(udp_stream.pcb, udp_stream_recv, NULL);
 
-    udp_stream.ready = true;
-    printf("[EBD_IPKVM] udp video -> %s:%u\n", cfg->udp_addr, (unsigned)cfg->udp_port);
+    udp_stream.ready = false;
+    udp_stream.client_set = false;
+    printf("[EBD_IPKVM] udp video listening on port %u\n", (unsigned)cfg->udp_port);
     return true;
 }
 
 static bool udp_stream_send(const uint8_t *payload, size_t len) {
-    if (!udp_stream.ready || !udp_stream.pcb) return false;
+    if (!udp_stream.ready || !udp_stream.pcb || !udp_stream.client_set) return false;
 
     bool ok = false;
     cyw43_arch_lwip_begin();
     struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, (uint16_t)len, PBUF_RAM);
     if (p) {
         memcpy(p->payload, payload, len);
-        err_t err = udp_send(udp_stream.pcb, p);
+        err_t err = udp_sendto(udp_stream.pcb, p, &udp_stream.client_addr, udp_stream.client_port);
         ok = (err == ERR_OK);
         pbuf_free(p);
     }
@@ -457,8 +476,102 @@ static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location
     tcp_output(tpcb);
 }
 
+typedef struct {
+    char buf[PORTAL_MAX_REQ];
+    size_t len;
+    size_t parse_pos;
+    size_t body_offset;
+    int content_length;
+    bool request_line_done;
+    bool headers_done;
+    bool is_post;
+    bool content_length_seen;
+    char path[64];
+} portal_http_state_t;
+
+static void portal_http_state_cleanup(struct tcp_pcb *tpcb, portal_http_state_t *state) {
+    if (state) {
+        free(state);
+    }
+    if (tpcb) {
+        tcp_arg(tpcb, NULL);
+        tcp_recv(tpcb, NULL);
+        tcp_err(tpcb, NULL);
+    }
+}
+
+static void portal_http_err(void *arg, err_t err) {
+    (void)err;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
+    if (state) {
+        free(state);
+    }
+}
+
+static bool portal_find_line_end(const char *buf, size_t len, size_t *line_len, size_t *eol_len) {
+    for (size_t i = 0; i < len; i++) {
+        if (buf[i] == '\n') {
+            if (i > 0 && buf[i - 1] == '\r') {
+                *line_len = i - 1;
+                *eol_len = 2;
+            } else {
+                *line_len = i;
+                *eol_len = 1;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static int portal_parse_content_length_line(const char *line, size_t len) {
+    const char header[] = "Content-Length:";
+    size_t header_len = sizeof(header) - 1;
+    if (len < header_len || strncasecmp(line, header, header_len) != 0) {
+        return -1;
+    }
+    const char *val = line + header_len;
+    while ((size_t)(val - line) < len && (*val == ' ' || *val == '\t')) {
+        val++;
+    }
+    return atoi(val);
+}
+
+static bool portal_parse_request_line(portal_http_state_t *state, const char *line, size_t len) {
+    const char *space1 = memchr(line, ' ', len);
+    if (!space1) return false;
+    const char *space2 = memchr(space1 + 1, ' ', len - (size_t)(space1 + 1 - line));
+    if (!space2) return false;
+    size_t method_len = (size_t)(space1 - line);
+    state->is_post = (method_len == 4 && strncmp(line, "POST", 4) == 0);
+    size_t path_len = (size_t)(space2 - (space1 + 1));
+    if (path_len >= sizeof(state->path)) {
+        path_len = sizeof(state->path) - 1;
+    }
+    memcpy(state->path, space1 + 1, path_len);
+    state->path[path_len] = '\0';
+    if (strncmp(state->path, "http://", 7) == 0 || strncmp(state->path, "https://", 8) == 0) {
+        const char *p = strstr(state->path, "://");
+        if (p) {
+            p += 3;
+            const char *slash = strchr(p, '/');
+            if (slash) {
+                size_t new_len = strlen(slash);
+                memmove(state->path, slash, new_len + 1);
+            } else {
+                strcpy(state->path, "/");
+            }
+        }
+    }
+    char *q = strchr(state->path, '?');
+    if (q) {
+        *q = '\0';
+    }
+    return true;
+}
+
 static void portal_send_index(struct tcp_pcb *tpcb) {
-    char page[1024];
+    char page[2048];
     int n = snprintf(page, sizeof(page),
                      "<!doctype html><html><head><meta charset=\"utf-8\">"
                      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
@@ -468,35 +581,35 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      ".ssid{display:flex;gap:8px;align-items:center;}</style>"
                      "</head><body>"
                      "<h2>EBD IPKVM Wi-Fi Setup</h2>"
-                     "<p>Configure Wi-Fi and set the UDP target for video streaming.</p>"
+                     "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
-                     "<button onclick=\"scan()\">Scan Networks</button>"
-                     "<form method=\"POST\" action=\"/ps_on\">"
-                     "<button type=\"submit\">Power On Mac</button>"
-                     "</form>"
-                     "<form method=\"POST\" action=\"/ps_off\">"
-                     "<button type=\"submit\">Power Off Mac</button>"
-                     "</form>"
-                     "<pre id=\"scan\"></pre>"
+                     "<div class=\"row\">"
+                     "<a href=\"/scan\">Scan Wi-Fi</a>"
+                     "</div>"
                      "<form method=\"POST\" action=\"/save\">"
                      "<label>SSID</label><input name=\"ssid\" value=\"%s\" />"
                      "<label>Password</label><input name=\"pass\" type=\"password\" value=\"%s\" />"
-                     "<label>UDP Target IP</label><input name=\"udp_addr\" value=\"%s\" />"
-                     "<label>UDP Target Port</label><input name=\"udp_port\" value=\"%u\" />"
+                     "<label>UDP Listen Port</label><input name=\"udp_port\" value=\"%u\" />"
                      "<button type=\"submit\">Save &amp; Reboot</button>"
                      "</form>"
+                     "<div class=\"row\">"
+                     "<form method=\"POST\" action=\"/ps_on\" id=\"ps_on_form\">"
+                     "<button type=\"submit\" id=\"ps_on_btn\">Power On</button>"
+                     "</form>"
+                     "<form method=\"POST\" action=\"/ps_off\" id=\"ps_off_form\">"
+                     "<button type=\"submit\" id=\"ps_off_btn\">Power Off</button>"
+                     "</form>"
+                     "<span id=\"power_status\"></span>"
+                     "</div>"
                      "<script>"
-                     "async function scan(){"
-                     "const res=await fetch('/scan');"
-                     "const data=await res.json();"
-                     "document.getElementById('scan').textContent=JSON.stringify(data,null,2);"
-                     "}"
+                     "const powerStatus=document.getElementById('power_status');"
+                     "document.getElementById('ps_on_form').addEventListener('submit',()=>{powerStatus.textContent='on';});"
+                     "document.getElementById('ps_off_form').addEventListener('submit',()=>{powerStatus.textContent='off';});"
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
                      portal.config.ssid,
                      portal.config.pass,
-                     portal.config.udp_addr,
                      (unsigned)portal.config.udp_port);
     if (n < 0) {
         portal_http_send(tpcb, "text/plain", "render error");
@@ -505,7 +618,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
     portal_http_send(tpcb, "text/html", page);
 }
 
-static err_t portal_scan_callback(void *env, const cyw43_ev_scan_result_t *result) {
+static int portal_scan_callback(void *env, const cyw43_ev_scan_result_t *result) {
     (void)env;
     if (!result) {
         portal.scan_in_progress = false;
@@ -528,7 +641,10 @@ static void portal_start_scan(void) {
     portal_reset_scan();
     portal.scan_in_progress = true;
     cyw43_wifi_scan_options_t opts = {0};
-    cyw43_arch_wifi_scan(&opts, portal_scan_callback, NULL);
+    int err = cyw43_arch_wifi_scan(&opts, portal_scan_callback, NULL);
+    if (err) {
+        portal.scan_in_progress = false;
+    }
 }
 
 static void portal_send_scan(struct tcp_pcb *tpcb) {
@@ -554,6 +670,41 @@ static void portal_send_scan(struct tcp_pcb *tpcb) {
         snprintf(json + n, sizeof(json) - (size_t)n, "]}");
     }
     portal_http_send(tpcb, "application/json", json);
+}
+
+static void portal_send_scan_page(struct tcp_pcb *tpcb) {
+    if (!portal.scan_in_progress) {
+        portal_start_scan();
+    }
+    char page[2048];
+    int n = snprintf(page, sizeof(page),
+                     "<!doctype html><html><head><meta charset=\"utf-8\">"
+                     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                     "<title>EBD IPKVM Wi-Fi Scan</title>"
+                     "%s"
+                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>"
+                     "</head><body>"
+                     "<h2>Wi-Fi Scan</h2>"
+                     "<p>Status: <strong>%s</strong></p>"
+                     "<ul>",
+                     portal.scan_in_progress ? "<meta http-equiv=\"refresh\" content=\"2\">" : "",
+                     portal.scan_in_progress ? "scanning" : "done");
+    if (n > 0) {
+        for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
+            portal_scan_result_t *r = &portal.scan_results[i];
+            int wrote = snprintf(page + n, sizeof(page) - (size_t)n,
+                                 "<li>%s (rssi %ld)</li>",
+                                 r->ssid,
+                                 (long)r->rssi);
+            if (wrote < 0) break;
+            n += wrote;
+        }
+    }
+    if (n > 0 && (size_t)n < sizeof(page)) {
+        snprintf(page + n, sizeof(page) - (size_t)n,
+                 "</ul><p><a href=\"/\">Back to setup</a></p></body></html>");
+    }
+    portal_http_send(tpcb, "text/html", page);
 }
 
 static void portal_handle_save(const char *body) {
@@ -586,77 +737,172 @@ static void portal_handle_ps_on(bool on) {
     set_ps_on(on);
 }
 
-static void portal_handle_http_request(struct tcp_pcb *tpcb, const char *req) {
-    if (!req) {
+static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post,
+                                              const char *path, const char *body) {
+    cyw43_arch_lwip_begin();
+    if (!path || path[0] == '\0') {
         portal_http_send(tpcb, "text/plain", "bad request");
-        return;
+        goto out;
     }
-    const char *line_end = strstr(req, "\r\n");
-    if (!line_end) {
-        portal_http_send(tpcb, "text/plain", "bad request");
-        return;
-    }
-    char method[8] = {0};
-    char path[64] = {0};
-    sscanf(req, "%7s %63s", method, path);
-    const char *body = strstr(req, "\r\n\r\n");
-    if (body) body += 4;
-
-    if (strcmp(method, "GET") == 0) {
+    if (!is_post) {
         if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
             portal_send_index(tpcb);
         } else if (strcmp(path, "/scan") == 0) {
-            portal_send_scan(tpcb);
+            portal_send_scan_page(tpcb);
+        } else if (strcmp(path, "/ps_on") == 0) {
+            portal_handle_ps_on(true);
+            portal_http_send_redirect(tpcb, "/");
+        } else if (strcmp(path, "/ps_off") == 0) {
+            portal_handle_ps_on(false);
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send_redirect(tpcb, "/");
         }
-        return;
+        goto out;
     }
 
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/save") == 0) {
+    if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
-            portal_http_send(tpcb, "text/plain", "saved");
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
         }
-        return;
+        goto out;
     }
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_on") == 0) {
+    if (strcmp(path, "/ps_on") == 0) {
         portal_handle_ps_on(true);
-        portal_http_send(tpcb, "text/plain", "ps_on");
-        return;
+        portal_http_send_redirect(tpcb, "/");
+        goto out;
     }
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/ps_off") == 0) {
+    if (strcmp(path, "/ps_off") == 0) {
         portal_handle_ps_on(false);
-        portal_http_send(tpcb, "text/plain", "ps_off");
-        return;
+        portal_http_send_redirect(tpcb, "/");
+        goto out;
+    }
+    if (strcmp(path, "/scan") == 0) {
+        portal_send_scan_page(tpcb);
+        goto out;
     }
 
     portal_http_send_redirect(tpcb, "/");
+out:
+    cyw43_arch_lwip_end();
 }
 
 static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
-    (void)arg;
+    portal_http_state_t *state = (portal_http_state_t *)arg;
     if (err != ERR_OK) {
         if (p) pbuf_free(p);
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return err;
     }
     if (!p) {
+        portal_http_state_cleanup(tpcb, state);
         tcp_close(tpcb);
         return ERR_OK;
     }
 
-    static char req_buf[PORTAL_MAX_REQ];
+    if (!state) {
+        pbuf_free(p);
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+        return ERR_VAL;
+    }
+
+    size_t space = sizeof(state->buf) - state->len - 1;
     size_t total = p->tot_len;
-    if (total >= sizeof(req_buf)) total = sizeof(req_buf) - 1;
-    pbuf_copy_partial(p, req_buf, total, 0);
-    req_buf[total] = '\0';
+    if (total > space) {
+        total = space;
+    }
+    if (total > 0) {
+        pbuf_copy_partial(p, state->buf + state->len, total, 0);
+        state->len += total;
+        state->buf[state->len] = '\0';
+    }
+    tcp_recved(tpcb, p->tot_len);
     pbuf_free(p);
 
-    portal_handle_http_request(tpcb, req_buf);
-    tcp_close(tpcb);
+    for (;;) {
+        if (!state->request_line_done) {
+            size_t line_len = 0;
+            size_t eol_len = 0;
+            if (!portal_find_line_end(state->buf + state->parse_pos,
+                                      state->len - state->parse_pos,
+                                      &line_len, &eol_len)) {
+                break;
+            }
+            if (!portal_parse_request_line(state, state->buf + state->parse_pos, line_len)) {
+                portal_http_send(tpcb, "text/plain", "bad request");
+                portal_http_state_cleanup(tpcb, state);
+                tcp_close(tpcb);
+                return ERR_OK;
+            }
+            state->parse_pos += line_len + eol_len;
+            state->request_line_done = true;
+            continue;
+        }
+        if (!state->headers_done) {
+            size_t line_len = 0;
+            size_t eol_len = 0;
+            if (!portal_find_line_end(state->buf + state->parse_pos,
+                                      state->len - state->parse_pos,
+                                      &line_len, &eol_len)) {
+                break;
+            }
+            if (line_len == 0) {
+                state->headers_done = true;
+                state->body_offset = state->parse_pos + eol_len;
+                if (!state->content_length_seen && state->is_post) {
+                    size_t available_now = state->len - state->body_offset;
+                    if (available_now > INT_MAX) {
+                        portal_http_send(tpcb, "text/plain", "request too large");
+                        portal_http_state_cleanup(tpcb, state);
+                        tcp_close(tpcb);
+                        return ERR_OK;
+                    }
+                    state->content_length = (int)available_now;
+                }
+                size_t max_body = sizeof(state->buf) - state->body_offset - 1;
+                if (state->content_length < 0 || (size_t)state->content_length > max_body) {
+                    portal_http_send(tpcb, "text/plain", "request too large");
+                    portal_http_state_cleanup(tpcb, state);
+                    tcp_close(tpcb);
+                    return ERR_OK;
+                }
+                state->parse_pos += eol_len;
+                continue;
+            }
+            int parsed = portal_parse_content_length_line(state->buf + state->parse_pos,
+                                                          line_len);
+            if (parsed >= 0) {
+                state->content_length = parsed;
+                state->content_length_seen = true;
+            }
+            state->parse_pos += line_len + eol_len;
+            continue;
+        }
+        size_t available = state->len - state->body_offset;
+        if (available < (size_t)state->content_length) {
+            break;
+        }
+        const char *body = NULL;
+        if (state->content_length > 0) {
+            body = state->buf + state->body_offset;
+            state->buf[state->body_offset + (size_t)state->content_length] = '\0';
+        }
+        portal_handle_http_request_parsed(tpcb, state->is_post, state->path, body);
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+        return ERR_OK;
+    }
+
+    if (space == 0) {
+        portal_http_send(tpcb, "text/plain", "request too large");
+        portal_http_state_cleanup(tpcb, state);
+        tcp_close(tpcb);
+    }
     return ERR_OK;
 }
 
@@ -665,17 +911,24 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     if (err != ERR_OK || !newpcb) {
         return ERR_VAL;
     }
+    portal_http_state_t *state = calloc(1, sizeof(*state));
+    if (!state) {
+        tcp_abort(newpcb);
+        return ERR_MEM;
+    }
+    tcp_arg(newpcb, state);
     tcp_recv(newpcb, portal_http_recv);
+    tcp_err(newpcb, portal_http_err);
     return ERR_OK;
 }
 
-static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                             const ip_addr_t *addr, u16_t port) {
+static void portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                            const ip_addr_t *addr, u16_t port) {
     (void)arg;
-    if (!p) return ERR_OK;
+    if (!p) return;
     if (p->len < 12) {
         pbuf_free(p);
-        return ERR_OK;
+        return;
     }
 
     uint8_t buf[256];
@@ -687,7 +940,7 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     uint16_t id = (uint16_t)((buf[0] << 8) | buf[1]);
     uint16_t flags = 0x8180;
     uint16_t qdcount = (uint16_t)((buf[4] << 8) | buf[5]);
-    if (qdcount == 0) return ERR_OK;
+    if (qdcount == 0) return;
 
     uint8_t resp[256];
     size_t resp_len = 0;
@@ -704,9 +957,9 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     while (qlen < len && buf[qlen] != 0) {
         qlen += buf[qlen] + 1;
     }
-    if (qlen + 5 >= len) return ERR_OK;
+    if (qlen + 5 >= len) return;
     qlen += 5;
-    if (resp_len + qlen > sizeof(resp)) return ERR_OK;
+    if (resp_len + qlen > sizeof(resp)) return;
     memcpy(resp + resp_len, buf + 12, qlen - 12);
     resp_len += qlen - 12;
 
@@ -724,103 +977,163 @@ static err_t portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     resp[resp_len++] = PORTAL_IP_OCT4;
 
     struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)resp_len, PBUF_RAM);
-    if (!out) return ERR_MEM;
+    if (!out) return;
     memcpy(out->payload, resp, resp_len);
     udp_sendto(pcb, out, addr, port);
     pbuf_free(out);
-    return ERR_OK;
 }
 
-static uint8_t dhcp_buf[300];
+typedef struct dhcp_msg {
+    uint8_t op;
+    uint8_t htype;
+    uint8_t hlen;
+    uint8_t hops;
+    uint32_t xid;
+    uint16_t secs;
+    uint16_t flags;
+    uint8_t ciaddr[4];
+    uint8_t yiaddr[4];
+    uint8_t siaddr[4];
+    uint8_t giaddr[4];
+    uint8_t chaddr[16];
+    uint8_t sname[64];
+    uint8_t file[128];
+    uint8_t options[312];
+} dhcp_msg_t;
 
-static void dhcp_send_reply(struct udp_pcb *pcb, const ip_addr_t *addr, u16_t port,
-                            const uint8_t *req, size_t req_len, uint8_t msg_type) {
-    if (req_len < 240) return;
-    memset(dhcp_buf, 0, sizeof(dhcp_buf));
-    memcpy(dhcp_buf, req, req_len > sizeof(dhcp_buf) ? sizeof(dhcp_buf) : req_len);
-    dhcp_buf[0] = 2;
-    dhcp_buf[1] = 1;
-    dhcp_buf[2] = 6;
-    dhcp_buf[3] = 0;
+#define DHCP_OPT_MSG_TYPE 53
+#define DHCP_OPT_SERVER_ID 54
+#define DHCP_OPT_IP_LEASE_TIME 51
+#define DHCP_OPT_SUBNET_MASK 1
+#define DHCP_OPT_ROUTER 3
+#define DHCP_OPT_DNS 6
+#define DHCP_OPT_END 255
+
+static uint8_t *dhcp_opt_find(uint8_t *opt, size_t len, uint8_t code) {
+    for (size_t i = 0; i + 1 < len;) {
+        if (opt[i] == DHCP_OPT_END) break;
+        if (opt[i] == 0) {
+            i++;
+            continue;
+        }
+        if (opt[i] == code) return &opt[i];
+        i += 2 + opt[i + 1];
+    }
+    return NULL;
+}
+
+static void dhcp_opt_write_n(uint8_t **opt, uint8_t code, size_t n, const void *data) {
+    uint8_t *o = *opt;
+    *o++ = code;
+    *o++ = (uint8_t)n;
+    memcpy(o, data, n);
+    *opt = o + n;
+}
+
+static void dhcp_opt_write_u8(uint8_t **opt, uint8_t code, uint8_t val) {
+    uint8_t *o = *opt;
+    *o++ = code;
+    *o++ = 1;
+    *o++ = val;
+    *opt = o;
+}
+
+static void dhcp_opt_write_u32(uint8_t **opt, uint8_t code, uint32_t val) {
+    uint8_t *o = *opt;
+    *o++ = code;
+    *o++ = 4;
+    *o++ = (uint8_t)(val >> 24);
+    *o++ = (uint8_t)(val >> 16);
+    *o++ = (uint8_t)(val >> 8);
+    *o++ = (uint8_t)val;
+    *opt = o;
+}
+
+static void dhcp_send_reply(struct udp_pcb *pcb, struct netif *nif, uint8_t msg_type, const dhcp_msg_t *req) {
+    dhcp_msg_t resp;
+    memset(&resp, 0, sizeof(resp));
+    resp.op = 2;
+    resp.htype = req->htype ? req->htype : 1;
+    resp.hlen = req->hlen ? req->hlen : 6;
+    resp.xid = req->xid;
+    resp.flags = req->flags;
+    memcpy(resp.chaddr, req->chaddr, sizeof(resp.chaddr));
 
     ip4_addr_t yiaddr;
     IP4_ADDR(&yiaddr, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_LEASE_OCT4);
-    memcpy(&dhcp_buf[16], &yiaddr.addr, 4);
-
+    memcpy(resp.yiaddr, &yiaddr.addr, 4);
     ip4_addr_t siaddr;
     IP4_ADDR(&siaddr, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
-    memcpy(&dhcp_buf[20], &siaddr.addr, 4);
+    memcpy(resp.siaddr, &siaddr.addr, 4);
 
-    dhcp_buf[236] = 99;
-    dhcp_buf[237] = 130;
-    dhcp_buf[238] = 83;
-    dhcp_buf[239] = 99;
-    size_t opt = 240;
-    dhcp_buf[opt++] = 53;
-    dhcp_buf[opt++] = 1;
-    dhcp_buf[opt++] = msg_type;
-    dhcp_buf[opt++] = 54;
-    dhcp_buf[opt++] = 4;
-    memcpy(&dhcp_buf[opt], &siaddr.addr, 4);
+    uint8_t *opt = resp.options;
+    opt[0] = 99;
+    opt[1] = 130;
+    opt[2] = 83;
+    opt[3] = 99;
     opt += 4;
-    dhcp_buf[opt++] = 51;
-    dhcp_buf[opt++] = 4;
-    dhcp_buf[opt++] = 0x00; dhcp_buf[opt++] = 0x00; dhcp_buf[opt++] = 0x0E; dhcp_buf[opt++] = 0x10;
-    dhcp_buf[opt++] = 1;
-    dhcp_buf[opt++] = 4;
+    dhcp_opt_write_u8(&opt, DHCP_OPT_MSG_TYPE, msg_type);
+    dhcp_opt_write_n(&opt, DHCP_OPT_SERVER_ID, 4, &siaddr.addr);
     ip4_addr_t netmask;
     IP4_ADDR(&netmask, 255, 255, 255, 0);
-    memcpy(&dhcp_buf[opt], &netmask.addr, 4);
-    opt += 4;
-    dhcp_buf[opt++] = 3;
-    dhcp_buf[opt++] = 4;
-    memcpy(&dhcp_buf[opt], &siaddr.addr, 4);
-    opt += 4;
-    dhcp_buf[opt++] = 6;
-    dhcp_buf[opt++] = 4;
-    memcpy(&dhcp_buf[opt], &siaddr.addr, 4);
-    opt += 4;
-    dhcp_buf[opt++] = 255;
+    dhcp_opt_write_n(&opt, DHCP_OPT_SUBNET_MASK, 4, &netmask.addr);
+    dhcp_opt_write_n(&opt, DHCP_OPT_ROUTER, 4, &siaddr.addr);
+    dhcp_opt_write_n(&opt, DHCP_OPT_DNS, 4, &siaddr.addr);
+    dhcp_opt_write_u32(&opt, DHCP_OPT_IP_LEASE_TIME, 24 * 60 * 60);
+    *opt++ = DHCP_OPT_END;
 
-    struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)opt, PBUF_RAM);
+    size_t resp_len = (size_t)((uint8_t *)opt - (uint8_t *)&resp);
+    struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)resp_len, PBUF_RAM);
     if (!out) return;
-    memcpy(out->payload, dhcp_buf, opt);
+    memcpy(out->payload, &resp, resp_len);
+
     ip_addr_t dst;
     ip_addr_set_ip4_u32(&dst, PP_HTONL(0xFFFFFFFFu));
-    udp_sendto(pcb, out, &dst, port);
+    if (nif) {
+        udp_sendto_if(pcb, out, &dst, PORTAL_CLIENT_PORT, nif);
+    } else {
+        udp_sendto(pcb, out, &dst, PORTAL_CLIENT_PORT);
+    }
     pbuf_free(out);
 }
 
-static err_t portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                              const ip_addr_t *addr, u16_t port) {
+static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                             const ip_addr_t *addr, u16_t port) {
     (void)arg;
-    if (!p) return ERR_OK;
-    size_t len = p->tot_len;
-    if (len > sizeof(dhcp_buf)) len = sizeof(dhcp_buf);
-    pbuf_copy_partial(p, dhcp_buf, len, 0);
-    pbuf_free(p);
-    if (len < 240) return ERR_OK;
+    (void)addr;
+    (void)port;
+    if (!p) return;
 
-    uint8_t msg_type = 0;
-    size_t opt = 240;
-    while (opt + 1 < len) {
-        uint8_t code = dhcp_buf[opt++];
-        if (code == 0xFF) break;
-        if (code == 0x00) continue;
-        if (opt >= len) break;
-        uint8_t opt_len = dhcp_buf[opt++];
-        if (opt + opt_len > len) break;
-        if (code == 53 && opt_len == 1) {
-            msg_type = dhcp_buf[opt];
-        }
-        opt += opt_len;
+    dhcp_msg_t req;
+    const size_t min_size = 240 + 3;
+    size_t len = p->tot_len;
+    if (len < min_size) {
+        pbuf_free(p);
+        return;
     }
+    struct netif *nif = ip_current_input_netif();
+    size_t copied = pbuf_copy_partial(p, &req, sizeof(req), 0);
+    pbuf_free(p);
+    if (copied < min_size) {
+        return;
+    }
+
+    if (req.options[0] != 99 || req.options[1] != 130 ||
+        req.options[2] != 83 || req.options[3] != 99) {
+        return;
+    }
+    uint8_t *opt = &req.options[4];
+    size_t opt_len = sizeof(req.options) - 4;
+    uint8_t *msg = dhcp_opt_find(opt, opt_len, DHCP_OPT_MSG_TYPE);
+    if (!msg || msg[1] != 1) {
+        return;
+    }
+    uint8_t msg_type = msg[2];
     if (msg_type == 1) {
-        dhcp_send_reply(pcb, addr, PORTAL_CLIENT_PORT, dhcp_buf, len, 2);
+        dhcp_send_reply(pcb, nif, 2, &req);
     } else if (msg_type == 3) {
-        dhcp_send_reply(pcb, addr, PORTAL_CLIENT_PORT, dhcp_buf, len, 5);
+        dhcp_send_reply(pcb, nif, 5, &req);
     }
-    return ERR_OK;
 }
 
 static void portal_start_servers(bool enable_ap_services) {
@@ -862,15 +1175,17 @@ static bool wifi_start_station(const wifi_config_t *cfg) {
 
 static bool wifi_start_portal(void) {
     int auth = (PORTAL_AP_PASS[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
+    cyw43_arch_disable_sta_mode();
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, auth);
-    struct netif *netif = netif_list;
-    if (netif) {
-        ip4_addr_t ip, mask, gw;
-        IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
-        IP4_ADDR(&mask, 255, 255, 255, 0);
-        IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
-        netif_set_addr(netif, &ip, &mask, &gw);
-    }
+    struct netif *netif = &cyw43_state.netif[CYW43_ITF_AP];
+    ip4_addr_t ip, mask, gw;
+    IP4_ADDR(&ip, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
+    IP4_ADDR(&mask, 255, 255, 255, 0);
+    IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
+    netif_set_addr(netif, &ip, &mask, &gw);
+    netif_set_default(netif);
+    netif_set_up(netif);
+    netif_set_link_up(netif);
     portal_start_servers(true);
     portal.active = true;
     portal.ap_mode = true;

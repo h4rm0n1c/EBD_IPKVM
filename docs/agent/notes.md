@@ -8,6 +8,9 @@
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
-- UDP video streaming stores Wi-Fi credentials in flash; if missing, the device starts a captive portal AP (`EBD-IPKVM-Setup`) with DHCP/DNS/HTTP setup and saves SSID/password plus UDP target settings.
+- UDP video streaming stores Wi-Fi credentials in flash; if missing, the device starts a captive portal AP (`EBD-IPKVM-Setup`) with DHCP/DNS/HTTP setup and saves SSID/password plus the UDP listen port.
+- UDP video streaming now listens on the configured port and streams to the first client that sends a packet to the Pico.
 - The config HTTP server stays up in station mode; only the DHCP/DNS captive-portal services are AP-only.
 - PS_ON now auto-arms capture and can be toggled from the portal UI (in both AP and station modes).
+- If the SDK doesn't export `cyw43_arch_wifi_scan`, the firmware provides a weak shim that forwards to `cyw43_wifi_scan` so portal scans can always call the wrapper name.
+- Use Pico SDK example implementations (notably `pico-examples/pico_w`) as the primary reference when adjusting portal Wi-Fi/DHCP/HTTP behavior.

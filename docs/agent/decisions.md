@@ -3,6 +3,7 @@
 - 2026-01-30: Move video transport to UDP on Pico W Wi-Fi with per-line RLE compression; keep CDC for control/diagnostic commands and add a host-side relay for VLC rawvideo testing.
 - 2026-01-30: Store Wi-Fi credentials in flash and use a captive-portal AP (with DNS/DHCP/HTTP) when unconfigured so setup works from a phone without hardcoded credentials.
 - 2026-01-30: Keep the HTTP config server running in station mode to allow live control/config without dropping back to AP mode.
+- 2026-01-30: Flip UDP streaming to a listen/subscribe model where the Pico streams to the first client that sends a packet to the configured port.
 - 2026-01-30: Remove the 100-frame stop limit and arm capture automatically when PS_ON is asserted (CDC or portal UI).
 - 2026-01-30: Default the build to `PICO_BOARD=pico_w` to avoid manual flags for Wi-Fi features.
 - 2026-01-28: Insert an 18-PIXCLK delay after XOFF before sampling each line so the captured window starts in active video instead of the left porch.
