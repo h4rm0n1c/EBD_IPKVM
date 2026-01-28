@@ -160,6 +160,7 @@ typedef struct portal_state {
     bool scan_in_progress;
     bool config_saved;
     bool has_config;
+    bool ap_mode;
     wifi_config_t config;
     portal_scan_result_t scan_results[PORTAL_MAX_SCAN];
     uint8_t scan_count;
@@ -461,7 +462,8 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      ".ssid{display:flex;gap:8px;align-items:center;}</style>"
                      "</head><body>"
                      "<h2>EBD IPKVM Wi-Fi Setup</h2>"
-                     "<p>Connect the Pico W to your Wi-Fi and set the UDP target for video streaming.</p>"
+                     "<p>Configure Wi-Fi and set the UDP target for video streaming.</p>"
+                     "<p>Mode: <strong>%s</strong></p>"
                      "<button onclick=\"scan()\">Scan Networks</button>"
                      "<pre id=\"scan\"></pre>"
                      "<form method=\"POST\" action=\"/save\">"
@@ -479,6 +481,7 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "}"
                      "</script>"
                      "</body></html>",
+                     portal.ap_mode ? "AP (setup)" : "Station",
                      portal.config.ssid,
                      portal.config.pass,
                      portal.config.udp_addr,
@@ -794,16 +797,18 @@ static err_t portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     return ERR_OK;
 }
 
-static void portal_start_servers(void) {
-    portal.dns_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
-    if (portal.dns_pcb) {
-        udp_bind(portal.dns_pcb, IP_ADDR_ANY, PORTAL_DNS_PORT);
-        udp_recv(portal.dns_pcb, portal_dns_recv, NULL);
-    }
-    portal.dhcp_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
-    if (portal.dhcp_pcb) {
-        udp_bind(portal.dhcp_pcb, IP_ADDR_ANY, PORTAL_DHCP_PORT);
-        udp_recv(portal.dhcp_pcb, portal_dhcp_recv, NULL);
+static void portal_start_servers(bool enable_ap_services) {
+    if (enable_ap_services) {
+        portal.dns_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
+        if (portal.dns_pcb) {
+            udp_bind(portal.dns_pcb, IP_ADDR_ANY, PORTAL_DNS_PORT);
+            udp_recv(portal.dns_pcb, portal_dns_recv, NULL);
+        }
+        portal.dhcp_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
+        if (portal.dhcp_pcb) {
+            udp_bind(portal.dhcp_pcb, IP_ADDR_ANY, PORTAL_DHCP_PORT);
+            udp_recv(portal.dhcp_pcb, portal_dhcp_recv, NULL);
+        }
     }
     portal.http_pcb = tcp_new_ip_type(IPADDR_TYPE_V4);
     if (portal.http_pcb) {
@@ -823,6 +828,9 @@ static bool wifi_start_station(const wifi_config_t *cfg) {
         return false;
     }
     printf("[EBD_IPKVM] wifi connected: %s\n", cfg->ssid);
+    portal.active = true;
+    portal.ap_mode = false;
+    portal_start_servers(false);
     return true;
 }
 
@@ -837,8 +845,9 @@ static bool wifi_start_portal(void) {
         IP4_ADDR(&gw, PORTAL_IP_OCT1, PORTAL_IP_OCT2, PORTAL_IP_OCT3, PORTAL_IP_OCT4);
         netif_set_addr(netif, &ip, &mask, &gw);
     }
-    portal_start_servers();
+    portal_start_servers(true);
     portal.active = true;
+    portal.ap_mode = true;
     printf("[EBD_IPKVM] portal active: %s\n", PORTAL_AP_SSID);
     return true;
 }

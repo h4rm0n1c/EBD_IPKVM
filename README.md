@@ -55,6 +55,9 @@ setup portal (DNS redirects to the config page). Use the form to set:
 To factory-reset the stored Wi-Fi settings, send `W` over the CDC control
 channel (the device reboots into portal mode).
 
+When running in station mode, the same HTTP server stays available on the
+device IP for live control/config tweaks (DNS/DHCP services remain AP-only).
+
 ## Host capture helper
 
 ```bash

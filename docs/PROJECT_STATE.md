@@ -26,6 +26,7 @@ Macintosh Classic KVM:
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
   - Edge testing: `V` toggles VSYNC edge (stops capture + clears state).
   - Wi-Fi configuration defaults to a captive portal AP (`EBD-IPKVM-Setup`) until credentials are saved.
+  - The HTTP config server remains available in station mode for live tweaks (DNS/DHCP stay AP-only).
   - `W` clears stored Wi-Fi settings and reboots into portal mode.
 
 ## Host tooling
