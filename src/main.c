@@ -869,6 +869,7 @@ static bool wifi_start_station(const wifi_config_t *cfg) {
 
 static bool wifi_start_portal(void) {
     int auth = (PORTAL_AP_PASS[0] == '\0') ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
+    cyw43_arch_disable_sta_mode();
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, auth);
     struct netif *netif = &cyw43_state.netif[CYW43_ITF_AP];
     ip4_addr_t ip, mask, gw;

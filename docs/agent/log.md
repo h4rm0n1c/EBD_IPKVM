@@ -5,6 +5,7 @@
 - 2026-01-30: Aligned portal scan callback signature with cyw43 scan API to avoid pointer-type warnings.
 - 2026-01-30: Updated portal DNS/DHCP UDP receive callbacks to match lwIP udp_recv_fn signatures and silence build warnings.
 - 2026-01-30: Pin AP IP configuration to the cyw43 AP netif and bring it up explicitly to improve captive portal DHCP behavior.
+- 2026-01-30: Disable STA mode before enabling the portal AP to ensure the SSID is broadcast after failed station attempts.
 - 2026-01-30: Adjusted frame gating to transmit every VSYNC (~60 fps) instead of alternating frames.
 - 2026-01-30: Added a captive-portal Wi-Fi configuration flow with DHCP/DNS/HTTP setup and flash-stored credentials for UDP streaming.
 - 2026-01-30: Keep the HTTP configuration server available in station mode so live config/control is possible without returning to AP mode.
