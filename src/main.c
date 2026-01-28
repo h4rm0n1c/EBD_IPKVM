@@ -584,12 +584,8 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<p>Configure Wi-Fi and set the UDP listen port for video streaming.</p>"
                      "<p>Mode: <strong>%s</strong></p>"
                      "<div class=\"row\">"
-                     "<form method=\"GET\" action=\"/scan\" id=\"scan_form\">"
-                     "<button type=\"submit\" id=\"scan_btn\">Scan Wi-Fi</button>"
-                     "</form>"
-                     "<span id=\"scan_status\"></span>"
+                     "<a href=\"/scan\">Scan Wi-Fi</a>"
                      "</div>"
-                     "<ul id=\"scan_list\"></ul>"
                      "<form method=\"POST\" action=\"/save\">"
                      "<label>SSID</label><input name=\"ssid\" value=\"%s\" />"
                      "<label>Password</label><input name=\"pass\" type=\"password\" value=\"%s\" />"
@@ -606,54 +602,9 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      "<span id=\"power_status\"></span>"
                      "</div>"
                      "<script>"
-                     "const scanBtn=document.getElementById('scan_btn');"
-                     "const scanList=document.getElementById('scan_list');"
-                     "const scanStatus=document.getElementById('scan_status');"
                      "const powerStatus=document.getElementById('power_status');"
-                     "const ssidInput=document.querySelector('input[name=\"ssid\"]');"
-                     "async function scan(){"
-                     "scanStatus.textContent='scanning...';"
-                     "scanBtn.disabled=true;"
-                     "try{"
-                     "const res=await fetch('/scan');"
-                     "const data=await res.json();"
-                     "scanList.innerHTML='';"
-                     "if(Array.isArray(data.results)){"
-                     "data.results.forEach((r)=>{"
-                     "const li=document.createElement('li');"
-                     "const btn=document.createElement('button');"
-                     "btn.type='button';"
-                     "btn.textContent=`${r.ssid} (rssi ${r.rssi})`;"
-                     "btn.addEventListener('click',()=>{ssidInput.value=r.ssid;});"
-                     "li.appendChild(btn);"
-                     "scanList.appendChild(li);"
-                     "});"
-                     "}"
-                     "if(data.scanning){"
-                     "scanStatus.textContent='scanning...';"
-                     "setTimeout(scan,1000);"
-                     "}else{"
-                     "scanStatus.textContent='done';"
-                     "scanBtn.disabled=false;"
-                     "}"
-                     "}catch(e){"
-                     "scanStatus.textContent=`error: ${e.message}`;"
-                     "scanBtn.disabled=false;"
-                     "}"
-                     "}"
-                     "document.getElementById('scan_form').addEventListener('submit',(e)=>{e.preventDefault();scan();});"
-                     "async function power(path){"
-                     "powerStatus.textContent='...';"
-                     "try{"
-                     "await fetch(path,{method:'POST'});"
-                     "powerStatus.textContent=path==='\\/ps_on'?'on':'off';"
-                     "}catch(e){"
-                     "powerStatus.textContent=`error: ${e.message}`;"
-                     "}"
-                     "}"
-                     "document.getElementById('ps_on_form').addEventListener('submit',(e)=>{e.preventDefault();power('/ps_on');});"
-                     "document.getElementById('ps_off_form').addEventListener('submit',(e)=>{e.preventDefault();power('/ps_off');});"
-                     "window.addEventListener('error',(e)=>{scanStatus.textContent=`error: ${e.message}`;});"
+                     "document.getElementById('ps_on_form').addEventListener('submit',()=>{powerStatus.textContent='on';});"
+                     "document.getElementById('ps_off_form').addEventListener('submit',()=>{powerStatus.textContent='off';});"
                      "</script>"
                      "</body></html>",
                      portal.ap_mode ? "AP (setup)" : "Station",
@@ -721,6 +672,41 @@ static void portal_send_scan(struct tcp_pcb *tpcb) {
     portal_http_send(tpcb, "application/json", json);
 }
 
+static void portal_send_scan_page(struct tcp_pcb *tpcb) {
+    if (!portal.scan_in_progress) {
+        portal_start_scan();
+    }
+    char page[2048];
+    int n = snprintf(page, sizeof(page),
+                     "<!doctype html><html><head><meta charset=\"utf-8\">"
+                     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                     "<title>EBD IPKVM Wi-Fi Scan</title>"
+                     "%s"
+                     "<style>body{font-family:sans-serif;margin:20px;}li{margin:6px 0;}</style>"
+                     "</head><body>"
+                     "<h2>Wi-Fi Scan</h2>"
+                     "<p>Status: <strong>%s</strong></p>"
+                     "<ul>",
+                     portal.scan_in_progress ? "<meta http-equiv=\"refresh\" content=\"2\">" : "",
+                     portal.scan_in_progress ? "scanning" : "done");
+    if (n > 0) {
+        for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
+            portal_scan_result_t *r = &portal.scan_results[i];
+            int wrote = snprintf(page + n, sizeof(page) - (size_t)n,
+                                 "<li>%s (rssi %ld)</li>",
+                                 r->ssid,
+                                 (long)r->rssi);
+            if (wrote < 0) break;
+            n += wrote;
+        }
+    }
+    if (n > 0 && (size_t)n < sizeof(page)) {
+        snprintf(page + n, sizeof(page) - (size_t)n,
+                 "</ul><p><a href=\"/\">Back to setup</a></p></body></html>");
+    }
+    portal_http_send(tpcb, "text/html", page);
+}
+
 static void portal_handle_save(const char *body) {
     char ssid[WIFI_CFG_MAX_SSID + 1] = {0};
     char pass[WIFI_CFG_MAX_PASS + 1] = {0};
@@ -762,13 +748,13 @@ static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post
         if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
             portal_send_index(tpcb);
         } else if (strcmp(path, "/scan") == 0) {
-            portal_send_scan(tpcb);
+            portal_send_scan_page(tpcb);
         } else if (strcmp(path, "/ps_on") == 0) {
             portal_handle_ps_on(true);
-            portal_http_send(tpcb, "text/plain", "ps_on");
+            portal_http_send_redirect(tpcb, "/");
         } else if (strcmp(path, "/ps_off") == 0) {
             portal_handle_ps_on(false);
-            portal_http_send(tpcb, "text/plain", "ps_off");
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send_redirect(tpcb, "/");
         }
@@ -778,7 +764,7 @@ static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post
     if (strcmp(path, "/save") == 0) {
         if (body) {
             portal_handle_save(body);
-            portal_http_send(tpcb, "text/plain", "saved");
+            portal_http_send_redirect(tpcb, "/");
         } else {
             portal_http_send(tpcb, "text/plain", "missing body");
         }
@@ -786,16 +772,16 @@ static void portal_handle_http_request_parsed(struct tcp_pcb *tpcb, bool is_post
     }
     if (strcmp(path, "/ps_on") == 0) {
         portal_handle_ps_on(true);
-        portal_http_send(tpcb, "text/plain", "ps_on");
+        portal_http_send_redirect(tpcb, "/");
         goto out;
     }
     if (strcmp(path, "/ps_off") == 0) {
         portal_handle_ps_on(false);
-        portal_http_send(tpcb, "text/plain", "ps_off");
+        portal_http_send_redirect(tpcb, "/");
         goto out;
     }
     if (strcmp(path, "/scan") == 0) {
-        portal_send_scan(tpcb);
+        portal_send_scan_page(tpcb);
         goto out;
     }
 

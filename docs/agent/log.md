@@ -10,6 +10,7 @@
 - 2026-01-30: Handle POSTs without Content-Length by consuming any buffered body bytes after headers.
 - 2026-01-30: Accept LF-only HTTP line endings during portal request parsing for captive clients.
 - 2026-01-30: Add form-based portal controls so power/scan actions work without JS fetch.
+- 2026-01-30: Switch portal scan to a server-rendered page and redirect control actions back to setup.
 - 2026-01-30: Aligned portal scan callback signature with cyw43 scan API to avoid pointer-type warnings.
 - 2026-01-30: Updated portal DNS/DHCP UDP receive callbacks to match lwIP udp_recv_fn signatures and silence build warnings.
 - 2026-01-30: Pin AP IP configuration to the cyw43 AP netif and bring it up explicitly to improve captive portal DHCP behavior.
