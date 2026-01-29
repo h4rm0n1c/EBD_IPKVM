@@ -81,6 +81,18 @@ def main() -> None:
     parser.add_argument("--vlc-port", type=int, default=6000, help="Relay UDP port (default: 6000)")
     parser.add_argument("--vlc-fps", type=float, default=60.0, help="FPS to advertise in VLC command output")
     parser.add_argument("--vlc-chroma", default="GREY", help="VLC rawvideo chroma (default: GREY)")
+    parser.add_argument(
+        "--reprime-seconds",
+        type=float,
+        default=2.0,
+        help="Re-send the pico prime packet after N seconds without UDP data (0 disables)",
+    )
+    parser.add_argument(
+        "--stall-seconds",
+        type=float,
+        default=2.0,
+        help="Drop incomplete frames after N seconds without new lines (0 disables)",
+    )
     args = parser.parse_args()
 
     if args.outdir:
@@ -101,10 +113,14 @@ def main() -> None:
     counts = {}
     done = 0
     last_print = time.time()
+    last_packet_time = time.time()
+    last_prime_time = 0.0
+    frame_last_update = {}
 
     print(f"[udp] listening on {args.bind}:{args.port}")
     if args.pico_host:
         sock.sendto(b"EBD_IPKVM", (args.pico_host, args.port))
+        last_prime_time = time.time()
         print(f"[udp] primed stream via {args.pico_host}:{args.port}")
     else:
         print("[udp] pico host not set; no stream prime packet sent")
@@ -129,6 +145,36 @@ def main() -> None:
             data, _addr = sock.recvfrom(2048)
         except socket.timeout:
             now = time.time()
+            if (
+                args.pico_host
+                and args.reprime_seconds > 0
+                and now - last_packet_time > args.reprime_seconds
+                and now - last_prime_time > args.reprime_seconds
+            ):
+                sock.sendto(b"EBD_IPKVM", (args.pico_host, args.port))
+                last_prime_time = now
+                print(f"[udp] re-primed stream via {args.pico_host}:{args.port}")
+            if args.stall_seconds > 0:
+                stalled = [
+                    frame_id
+                    for frame_id in order
+                    if now - frame_last_update.get(frame_id, now) > args.stall_seconds
+                ]
+                for frame_id in stalled:
+                    have = counts.get(frame_id, 0)
+                    print(
+                        "[udp] dropping stalled frame_id={} lines={}/{} (> {:.1f}s)".format(
+                            frame_id,
+                            have,
+                            H,
+                            args.stall_seconds,
+                        )
+                    )
+                    frames.pop(frame_id, None)
+                    counts.pop(frame_id, None)
+                    frame_last_update.pop(frame_id, None)
+                    if frame_id in order:
+                        order.remove(frame_id)
             if now - last_print > 1.0:
                 last_print = now
                 if order:
@@ -144,6 +190,7 @@ def main() -> None:
         parsed = parse_packet(data)
         if not parsed:
             continue
+        last_packet_time = time.time()
         frame_id, line_id, payload = parsed
         if line_id >= H:
             continue
@@ -158,14 +205,17 @@ def main() -> None:
             frames[frame_id] = frame
             counts[frame_id] = 0
             order.append(frame_id)
+            frame_last_update[frame_id] = time.time()
             if len(order) > 4:
                 drop = order.pop(0)
                 frames.pop(drop, None)
                 counts.pop(drop, None)
+                frame_last_update.pop(drop, None)
 
         if frame[line_id] is None:
             frame[line_id] = bytes_to_row64(line_bytes)
             counts[frame_id] += 1
+            frame_last_update[frame_id] = time.time()
 
         if counts[frame_id] == H:
             rows = frame
@@ -178,6 +228,7 @@ def main() -> None:
             done += 1
             frames.pop(frame_id, None)
             counts.pop(frame_id, None)
+            frame_last_update.pop(frame_id, None)
             if frame_id in order:
                 order.remove(frame_id)
 
