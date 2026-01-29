@@ -238,6 +238,7 @@ print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
+frame_stats = {}  # frame_id -> dict(bytes=payload_bytes, rle_lines=count)
 done_count = 0
 last_print = time.time()
 
@@ -299,17 +300,31 @@ try:
                 row = bytes_to_row64(payload)
 
             fm = frames.setdefault(frame_id, {})
+            stats = frame_stats.setdefault(frame_id, {"bytes": 0, "rle_lines": 0})
             if line_id not in fm:
                 fm[line_id] = row
+                stats["bytes"] += payload_len
+                if is_rle:
+                    stats["rle_lines"] += 1
 
             if len(fm) == H:
                 out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
                 rows = [fm[i] for i in range(H)]
                 write_pgm(out, rows)
-                print(f"[host] wrote {out} (frame_id={frame_id})")
+                raw_bytes = LINE_BYTES * H
+                payload_bytes = stats["bytes"]
+                ratio = payload_bytes / raw_bytes if raw_bytes else 0.0
+                rle_lines = stats["rle_lines"]
+                print(
+                    f"[host] wrote {out} (frame_id={frame_id}, "
+                    f"rle_lines={rle_lines}/{H}, "
+                    f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
+                    f"ratio={ratio:.3f})"
+                )
                 done_count += 1
                 # free memory for this frame_id
                 del frames[frame_id]
+                del frame_stats[frame_id]
                 if done_count >= MAX_FRAMES:
                     break
 
