@@ -702,13 +702,15 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     (void)addr;
     (void)port;
     if (!p) return;
-    if (p->len < sizeof(dhcp_msg_t)) {
+    if (p->tot_len < sizeof(dhcp_msg_t)) {
         pbuf_free(p);
         return;
     }
 
+    dhcp_msg_t req_buf;
+    pbuf_copy_partial(p, &req_buf, sizeof(req_buf), 0);
     struct netif *nif = portal.ap_mode ? &cyw43_state.netif[CYW43_ITF_AP] : NULL;
-    dhcp_msg_t *req = (dhcp_msg_t *)p->payload;
+    dhcp_msg_t *req = &req_buf;
     uint8_t msg_type = 0;
     uint8_t *opt = req->options;
     if (opt[0] == 0x63 && opt[1] == 0x82 && opt[2] == 0x53 && opt[3] == 0x63) {
