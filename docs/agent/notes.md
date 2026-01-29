@@ -22,3 +22,4 @@
 - Portal setup now brackets lwIP server setup and netif configuration with cyw43_arch_lwip_begin/end; STA mode is disabled before enabling the AP to improve portal stability.
 - Portal HTTP buffering now allows larger request headers by using an 8KB request cap.
 - Portal HTTP parsing skips over oversized header lines (mirroring PicoHTTPServer `httpserver.c`) to tolerate large browser header fields.
+- Portal HTTP now checks for failed request-buffer allocation and returns a "server busy" response rather than risking a crash.

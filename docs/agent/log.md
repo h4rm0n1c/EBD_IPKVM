@@ -93,3 +93,4 @@
 - 2026-01-30: Wrap portal lwIP setup calls with cyw43 lwIP guards and disable STA before enabling the AP to stabilize the captive web server.
 - 2026-01-30: Increase the portal HTTP request buffer size to accommodate larger browser headers during setup.
 - 2026-01-30: Skip over oversized HTTP header lines during portal parsing (patterned after PicoHTTPServer httpserver.c) to avoid request failures on large User-Agent headers.
+- 2026-01-30: Guard portal HTTP request buffer allocation and return a busy response instead of crashing on low-memory conditions.

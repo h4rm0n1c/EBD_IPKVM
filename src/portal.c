@@ -476,6 +476,12 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
 
     if (!state->buf) {
         state->buf = calloc(1, PORTAL_MAX_REQ);
+        if (!state->buf) {
+            portal_http_send(tpcb, "text/plain", "server busy");
+            pbuf_free(p);
+            portal_http_state_cleanup(tpcb, state);
+            return ERR_OK;
+        }
         state->buf_len = 0;
         state->parse_pos = 0;
         state->content_length = -1;
