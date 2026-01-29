@@ -4,6 +4,11 @@
 - 2026-01-28: Delayed line capture start by 18 PIXCLKs after XOFF to shift sampling into active video and preserve the rightmost pixels.
 - 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.
 - 2026-01-27: Added VSYNC debounce and TX-idle gating so frame delivery stays monotonic under backpressure.
+- 2026-01-27: Documented /opt reference relevance (MacDevDocs, Pico SDK, PicoHTTPServer) for future KVM work.
+- 2026-01-27: Expanded /opt reference notes with SigrokPico RLE transport and PicoVGA multi-core video patterns.
+- 2026-01-27: Clarified MacDevDocs relevance as compact Mac video output references (128K through SE/30).
+- 2026-01-27: Noted MacDevDocs Classic/Classic II developer note sync wiring and timing references for compact Mac video output.
+- 2026-01-27: Searched MacDevDocs with `rg -i "HSYNC|VSYNC" /opt/MacDevDocs` to locate compact Mac sync references.
 - 2026-01-27: Switched frame DMA to a single contiguous transfer per frame and abort on VSYNC to remove per-line DMA re-arming.
 - 2026-01-27: Align active-line extraction to the end of short frames so captures still transmit when total lines dip below the nominal VBL+active count.
 - 2026-01-27: Byte-swapped 32-bit PIO RX FIFO words before enqueueing USB line packets to fix 16/32-pixel block ordering artifacts.
