@@ -16,3 +16,4 @@
 - Use Pico SDK example implementations (notably `pico-examples/pico_w`) as the primary reference when adjusting portal Wi-Fi/DHCP/HTTP behavior.
 - The portal HTTP handlers should avoid large stack buffers; keep render buffers in static storage to prevent AP resets under load.
 - DHCP option parsing now guards against malformed length fields to avoid overrunning the options buffer.
+- Captive-portal DNS now answers the device hostname with the portal IP and returns a TEST-NET-2 address for other hostnames so phones prompt for login; use the AP IP or hostname when browsing the portal.

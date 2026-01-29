@@ -87,3 +87,4 @@
 - 2026-01-30: Ensure portal HTTP responses call tcp_output so the captive portal web UI is flushed to clients.
 - 2026-01-30: Move portal HTML/JSON render buffers out of the HTTP handler stack to avoid AP instability during page loads.
 - 2026-01-30: Add DHCP option parsing bounds checks to avoid walking past malformed option data.
+- 2026-01-30: Return a secondary TEST-NET-2 address for non-portal DNS queries so captive clients surface the login UI while still resolving the portal hostname.
