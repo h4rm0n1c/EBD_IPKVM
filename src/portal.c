@@ -482,6 +482,13 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         state->headers_done = false;
     }
 
+    if (state->buf_len + p->tot_len >= PORTAL_MAX_REQ && state->parse_pos > 0) {
+        size_t remaining = state->buf_len - state->parse_pos;
+        memmove(state->buf, state->buf + state->parse_pos, remaining);
+        state->buf_len = remaining;
+        state->parse_pos = 0;
+    }
+
     if (state->buf_len + p->tot_len >= PORTAL_MAX_REQ) {
         portal_http_send(tpcb, "text/plain", "request too large");
         pbuf_free(p);

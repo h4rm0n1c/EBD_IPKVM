@@ -88,3 +88,4 @@
 - 2026-01-30: Move portal HTML/JSON render buffers out of the HTTP handler stack to avoid AP instability during page loads.
 - 2026-01-30: Add DHCP option parsing bounds checks to avoid walking past malformed option data.
 - 2026-01-30: Answer captive-portal DNS queries with the portal IP for all hostnames to keep the web UI reachable without secondary-IP routing.
+- 2026-01-30: Compact portal HTTP request buffers while parsing so larger headers don't immediately trip the request size cap.
