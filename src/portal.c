@@ -150,6 +150,7 @@ typedef struct portal_http_state {
     int content_length;
     bool request_line_parsed;
     bool headers_done;
+    bool line_too_long;
 } portal_http_state_t;
 
 static void portal_http_state_cleanup(struct tcp_pcb *tpcb, portal_http_state_t *state) {
@@ -480,6 +481,7 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         state->content_length = -1;
         state->request_line_parsed = false;
         state->headers_done = false;
+        state->line_too_long = false;
     }
 
     if (state->buf_len + p->tot_len >= PORTAL_MAX_REQ && state->parse_pos > 0) {
@@ -487,6 +489,23 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         memmove(state->buf, state->buf + state->parse_pos, remaining);
         state->buf_len = remaining;
         state->parse_pos = 0;
+    }
+
+    if (state->buf_len + p->tot_len >= PORTAL_MAX_REQ) {
+        if (state->request_line_parsed && !state->headers_done) {
+            size_t line_len = 0;
+            size_t eol_len = 0;
+            if (!portal_find_line_end(state->buf + state->parse_pos,
+                                      state->buf_len - state->parse_pos,
+                                      &line_len,
+                                      &eol_len)) {
+                char last = state->buf_len > 0 ? state->buf[state->buf_len - 1] : '\0';
+                state->buf[0] = (last == '\r') ? '\r' : '\0';
+                state->buf_len = (last == '\r') ? 1 : 0;
+                state->parse_pos = 0;
+                state->line_too_long = true;
+            }
+        }
     }
 
     if (state->buf_len + p->tot_len >= PORTAL_MAX_REQ) {
@@ -511,6 +530,11 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
                                       &eol_len)) {
                 break;
             }
+            if (state->line_too_long) {
+                portal_http_send(tpcb, "text/plain", "bad request");
+                portal_http_state_cleanup(tpcb, state);
+                return ERR_OK;
+            }
             if (!portal_parse_request_line(state, state->buf + state->parse_pos, line_len)) {
                 portal_http_send(tpcb, "text/plain", "bad request");
                 portal_http_state_cleanup(tpcb, state);
@@ -529,6 +553,11 @@ static err_t portal_http_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
                                       &line_len,
                                       &eol_len)) {
                 break;
+            }
+            if (state->line_too_long) {
+                state->line_too_long = false;
+                state->parse_pos += line_len + eol_len;
+                continue;
             }
             if (line_len == 0) {
                 state->headers_done = true;
