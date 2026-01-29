@@ -83,3 +83,4 @@
 - 2026-01-30: Split portal and video streaming into dedicated modules and move capture/encode work onto core1 with a shared packet queue.
 - 2026-01-30: Remove cyw43_arch_lwip_begin/end guards from UDP send in the video module to match lwIP poll builds and fix linker errors.
 - 2026-01-30: Fix portal DHCP parsing to use pbuf_copy_partial on full packets so phone DHCP requests aren't dropped on short pbuf segments.
+- 2026-01-30: Fix captive portal DNS replies to copy full requests and allocate enough space for the answer section.

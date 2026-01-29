@@ -582,25 +582,26 @@ static void portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
         return;
     }
 
-    if (p->len < 12) {
+    if (p->tot_len < 12) {
         pbuf_free(p);
         return;
     }
 
-    uint8_t *req = (uint8_t *)p->payload;
-    struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)p->len, PBUF_RAM);
+    size_t req_len = (size_t)p->tot_len;
+    size_t resp_extra = 16;
+    struct pbuf *out = pbuf_alloc(PBUF_TRANSPORT, (u16_t)(req_len + resp_extra), PBUF_RAM);
     if (!out) {
         pbuf_free(p);
         return;
     }
 
-    memcpy(out->payload, req, p->len);
+    pbuf_copy_partial(p, out->payload, p->tot_len, 0);
     uint8_t *resp = (uint8_t *)out->payload;
     resp[2] = 0x81; // response + recursion available
     resp[3] = 0x80; // no error
     resp[7] = 0x01; // answer count = 1
 
-    size_t resp_len = (size_t)p->len;
+    size_t resp_len = req_len;
     resp[resp_len++] = 0xC0;
     resp[resp_len++] = 0x0C; // name pointer
     resp[resp_len++] = 0x00;
