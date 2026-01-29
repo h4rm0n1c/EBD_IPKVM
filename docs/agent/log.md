@@ -2,6 +2,7 @@
 
 - 2026-01-30: Added optional RLE packet encoding with a CDC toggle and updated host decoding to handle variable-length line payloads (default RLE on).
 - 2026-01-30: Added per-frame host-side compression stats (payload vs raw bytes, RLE line counts) to visualize RLE effectiveness.
+- 2026-01-30: Switched host compression ratio readout to a percentage for easier scanning.
 - 2026-01-29: Lock classic line capture to HSYNC falling + PIXCLK rising and remove runtime edge toggles/program variants to simplify the PIO program set.
 - 2026-01-28: Delayed line capture start by 18 PIXCLKs after XOFF to shift sampling into active video and preserve the rightmost pixels.
 - 2026-01-27: Switched capture to VSYNC-ended frame boundaries with ping-pong framebuffers and main-loop line packetization to prevent line-count drift.

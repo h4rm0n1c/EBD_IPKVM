@@ -314,12 +314,13 @@ try:
                 raw_bytes = LINE_BYTES * H
                 payload_bytes = stats["bytes"]
                 ratio = payload_bytes / raw_bytes if raw_bytes else 0.0
+                percent = ratio * 100.0
                 rle_lines = stats["rle_lines"]
                 print(
                     f"[host] wrote {out} (frame_id={frame_id}, "
                     f"rle_lines={rle_lines}/{H}, "
                     f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
-                    f"ratio={ratio:.3f})"
+                    f"ratio={percent:.1f}%)"
                 )
                 done_count += 1
                 # free memory for this frame_id
