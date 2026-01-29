@@ -574,34 +574,6 @@ static err_t portal_http_accept(void *arg, struct tcp_pcb *newpcb, err_t err) {
     return ERR_OK;
 }
 
-static uint32_t portal_dns_select_ip(const uint8_t *req, size_t req_len) {
-    uint32_t portal_ip = (PORTAL_IP_OCT1 << 24) | (PORTAL_IP_OCT2 << 16) | (PORTAL_IP_OCT3 << 8) | PORTAL_IP_OCT4;
-    uint32_t secondary_ip = (PORTAL_DNS_SECONDARY_OCT1 << 24) | (PORTAL_DNS_SECONDARY_OCT2 << 16) |
-                            (PORTAL_DNS_SECONDARY_OCT3 << 8) | PORTAL_DNS_SECONDARY_OCT4;
-    if (!req || req_len < 13 || portal.hostname[0] == '\0') {
-        return portal_ip;
-    }
-
-    size_t offset = 12;
-    uint8_t label_len = req[offset];
-    if (label_len == 0 || label_len > 63 || (offset + 1 + label_len) > req_len) {
-        return portal_ip;
-    }
-
-    char label[64] = {0};
-    if (label_len >= sizeof(label)) {
-        label_len = (uint8_t)(sizeof(label) - 1);
-    }
-    memcpy(label, req + offset + 1, label_len);
-    label[label_len] = '\0';
-
-    size_t host_len = strlen(portal.hostname);
-    if (host_len == label_len && strncasecmp(label, portal.hostname, label_len) == 0) {
-        return portal_ip;
-    }
-    return secondary_ip;
-}
-
 static void portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                             const ip_addr_t *addr, u16_t port) {
     (void)arg;
@@ -643,7 +615,9 @@ static void portal_dns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     resp[resp_len++] = 0x3C; // TTL 60s
     resp[resp_len++] = 0x00;
     resp[resp_len++] = 0x04; // rdlen
-    uint32_t ip = portal_dns_select_ip(resp, req_len);
+    // Always answer with the portal IP so captive clients can reach the web UI
+    // without requiring secondary-IP routing support.
+    uint32_t ip = (PORTAL_IP_OCT1 << 24) | (PORTAL_IP_OCT2 << 16) | (PORTAL_IP_OCT3 << 8) | PORTAL_IP_OCT4;
     resp[resp_len++] = (uint8_t)((ip >> 24) & 0xFF);
     resp[resp_len++] = (uint8_t)((ip >> 16) & 0xFF);
     resp[resp_len++] = (uint8_t)((ip >> 8) & 0xFF);
