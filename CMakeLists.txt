@@ -17,7 +17,9 @@ pico_sdk_init()
 
 add_executable(EBD_IPKVM
     src/main.c
+    src/portal.c
     src/video_capture.c
+    src/video_stream.c
     src/wifi_config.c
 )
 
@@ -33,12 +35,14 @@ pico_enable_stdio_uart(EBD_IPKVM 0)
 target_compile_options(EBD_IPKVM PRIVATE -O3)
 
 target_link_libraries(EBD_IPKVM
+    pico_multicore
     pico_stdlib
     pico_cyw43_arch_lwip_poll
     hardware_flash
     hardware_pio
     hardware_dma
     hardware_irq
+    hardware_sync
 )
 
 pico_add_extra_outputs(EBD_IPKVM)

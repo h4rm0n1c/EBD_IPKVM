@@ -30,16 +30,21 @@ compressed with a simple byte-oriented RLE to reduce bandwidth.
 
 ## Host relay for VLC
 Use `src/host_recv_udp.py` to reconstruct frames and optionally relay them as
-8-bit grayscale rawvideo over UDP so VLC can display the stream. The Pico now
-listens on a UDP port; send a single packet to the Pico to prime the stream and
-it will reply with video packets to the sender:
+8-bit grayscale rawvideo over UDP so VLC can display the stream. The Pico listens
+on a UDP port; send a single packet to the Pico to prime the stream and it will
+reply with video packets to the sender. The firmware automatically arms capture
+once a UDP client is seen, so no USB `S` command is required for Wi-Fi-only
+streaming.
 
 ```bash
 python3 src/host_recv_udp.py --bind 0.0.0.0 --port 5004 --pico-host 192.168.4.1 \
-    --vlc-host 127.0.0.1 --vlc-port 6000
+    --vlc-host 127.0.0.1 --vlc-port 6000 --vlc-fps 60 --vlc-chroma GREY
 vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
     --rawvid-chroma GREY udp://@:6000
 ```
+
+`host_recv_udp.py` runs indefinitely by default. Use `--max-frames` with a
+non-zero value to stop after a fixed number of frames.
 
 ## Wi-Fi configuration
 - On boot, if no saved Wi-Fi credentials are present, the device starts an AP
@@ -53,6 +58,7 @@ vlc --demux rawvideo --rawvid-width 512 --rawvid-height 342 --rawvid-fps 60 \
 - Frames are gated to prevent backpressure (capture only starts when the transmit path is idle).
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - Capture DMA is sized for `CAP_MAX_LINES` (YOFF+ACTIVE) and runs to completion; payloads normally use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer, but if the captured frame is short the firmware falls back to the last `CAP_ACTIVE_H` lines.
+- For UDP streaming, capture is automatically armed after the first client packet is received.
 
 ## Error handling
 - If the transmit path is blocked, line packets are dropped and `lines_drop` increments.

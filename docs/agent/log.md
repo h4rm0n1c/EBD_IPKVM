@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-30: Auto-arm UDP capture on first client packet, remove the host UDP receiver frame cap, and document VLC rawvideo relay flags.
 - 2026-01-30: Add scan-page SSID selection buttons that return to setup with the chosen network prefilled.
 - 2026-01-30: Add DHCP hostname setup in STA mode and display the device MAC address in the portal UI.
 - 2026-01-30: Format the STA DHCP hostname as EBDIPKVM-<MAC suffix> for easier identification.
@@ -78,3 +79,9 @@
 - 2026-01-25: Fix missing gpio_irq forward declaration after adding runtime edge toggles.
 - 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
+- 2026-01-30: Add stall detection and automatic re-prime options to the UDP host receiver to recover from silent stream stops.
+- 2026-01-30: Split portal and video streaming into dedicated modules and move capture/encode work onto core1 with a shared packet queue.
+- 2026-01-30: Remove cyw43_arch_lwip_begin/end guards from UDP send in the video module to match lwIP poll builds and fix linker errors.
+- 2026-01-30: Fix portal DHCP parsing to use pbuf_copy_partial on full packets so phone DHCP requests aren't dropped on short pbuf segments.
+- 2026-01-30: Fix captive portal DNS replies to copy full requests and allocate enough space for the answer section.
+- 2026-01-30: Ensure portal HTTP responses call tcp_output so the captive portal web UI is flushed to clients.
