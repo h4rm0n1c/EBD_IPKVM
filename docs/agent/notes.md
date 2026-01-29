@@ -1,6 +1,9 @@
 # Notes
 
 - Local reference: `/opt/MacDevDocs` contains Apple legacy Mac documentation to consult when needed for this project.
+- Local reference: `/opt/Pico-SDK` and `/opt/PicoHTTPServer` are available for Pico SDK API details and Pico W captive-portal web UI patterns.
+- Local reference: `/opt/SigrokPico` documents USB CDC RLE streaming patterns, and `/opt/picovga` shows a core1 video pipeline split for RP2040.
+- MacDevDocs includes Macintosh Classic and Classic II developer notes; Classic lists /VSYNC and /HSYNC on the power/sweep connector and Classic II documents 512×342 internal video timing (EAGLE-generated).
 - ATX `PS_ON` is driven through a ULN2803, so GPIO9 high asserts the PSU on (active-low at the ATX header).
 - PIXCLK phase-lock after HSYNC (and a pre-roll high before falling-edge capture) prevents occasional 1-pixel capture phase slips.
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
