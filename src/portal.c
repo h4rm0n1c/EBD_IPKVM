@@ -32,6 +32,8 @@ typedef struct portal_state {
     wifi_config_t config;
     portal_scan_result_t scan_results[PORTAL_MAX_SCAN];
     uint8_t scan_count;
+    char http_page_buf[2048];
+    char http_json_buf[1024];
     struct udp_pcb *dns_pcb;
     struct udp_pcb *dhcp_pcb;
     struct tcp_pcb *http_pcb;
@@ -233,8 +235,7 @@ static bool portal_parse_request_line(portal_http_state_t *state, const char *li
 }
 
 static void portal_send_index(struct tcp_pcb *tpcb) {
-    char page[2048];
-    int n = snprintf(page, sizeof(page),
+    int n = snprintf(portal.http_page_buf, sizeof(portal.http_page_buf),
                      "<html><head><title>EBD IP-KVM</title></head><body>"
                      "<h1>EBD IP-KVM</h1>"
                      "<p>Status: %s</p>"
@@ -265,11 +266,11 @@ static void portal_send_index(struct tcp_pcb *tpcb) {
                      portal.config.ssid,
                      portal.config.pass,
                      (unsigned)portal.config.udp_port);
-    if (n <= 0 || (size_t)n >= sizeof(page)) {
+    if (n <= 0 || (size_t)n >= sizeof(portal.http_page_buf)) {
         portal_http_send(tpcb, "text/plain", "render error");
         return;
     }
-    portal_http_send(tpcb, "text/html", page);
+    portal_http_send(tpcb, "text/html", portal.http_page_buf);
 }
 
 static int portal_scan_callback(void *env, const cyw43_ev_scan_result_t *result) {
@@ -305,22 +306,21 @@ static void portal_send_scan(struct tcp_pcb *tpcb) {
     if (!portal.scan_in_progress) {
         portal_start_scan();
     }
-    char json[1024];
-    int n = snprintf(json, sizeof(json),
+    int n = snprintf(portal.http_json_buf, sizeof(portal.http_json_buf),
                      "{\"scanning\":%s,\"results\":[",
                      portal.scan_in_progress ? "true" : "false");
-    for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(json); i++) {
+    for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(portal.http_json_buf); i++) {
         portal_scan_result_t *r = &portal.scan_results[i];
-        n += snprintf(json + n, sizeof(json) - (size_t)n,
+        n += snprintf(portal.http_json_buf + n, sizeof(portal.http_json_buf) - (size_t)n,
                       "%s{\"ssid\":\"%s\",\"rssi\":%ld,\"auth\":%u}",
                       (i == 0) ? "" : ",",
                       r->ssid,
                       (long)r->rssi,
                       r->auth);
     }
-    if (n > 0 && (size_t)n < sizeof(json)) {
-        snprintf(json + n, sizeof(json) - (size_t)n, "]}");
-        portal_http_send(tpcb, "application/json", json);
+    if (n > 0 && (size_t)n < sizeof(portal.http_json_buf)) {
+        snprintf(portal.http_json_buf + n, sizeof(portal.http_json_buf) - (size_t)n, "]}");
+        portal_http_send(tpcb, "application/json", portal.http_json_buf);
         return;
     }
     portal_http_send(tpcb, "application/json", "{\"scanning\":false,\"results\":[]}");
@@ -330,17 +330,16 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
     if (!portal.scan_in_progress) {
         portal_start_scan();
     }
-    char page[2048];
-    int n = snprintf(page, sizeof(page),
+    int n = snprintf(portal.http_page_buf, sizeof(portal.http_page_buf),
                      "<html><head><title>Scan</title>%s</head><body>"
                      "<h1>Wi-Fi Scan</h1>"
                      "<p>Status: %s</p>"
                      "<ul>",
                      portal.scan_in_progress ? "<meta http-equiv=\"refresh\" content=\"2\">" : "",
                      portal.scan_in_progress ? "scanning" : "done");
-    for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(page); i++) {
+    for (uint8_t i = 0; i < portal.scan_count && n > 0 && (size_t)n < sizeof(portal.http_page_buf); i++) {
         portal_scan_result_t *r = &portal.scan_results[i];
-        n += snprintf(page + n, sizeof(page) - (size_t)n,
+        n += snprintf(portal.http_page_buf + n, sizeof(portal.http_page_buf) - (size_t)n,
                       "<li>SSID: %s (RSSI %ld)"
                       "<form method=\"POST\" action=\"/select\">"
                       "<input type=\"hidden\" name=\"ssid\" value=\"%s\" />"
@@ -351,10 +350,10 @@ static void portal_send_scan_page(struct tcp_pcb *tpcb) {
                       (long)r->rssi,
                       r->ssid);
     }
-    if (n > 0 && (size_t)n < sizeof(page)) {
-        snprintf(page + n, sizeof(page) - (size_t)n,
+    if (n > 0 && (size_t)n < sizeof(portal.http_page_buf)) {
+        snprintf(portal.http_page_buf + n, sizeof(portal.http_page_buf) - (size_t)n,
                  "</ul><a href=\"/\">Back</a></body></html>");
-        portal_http_send(tpcb, "text/html", page);
+        portal_http_send(tpcb, "text/html", portal.http_page_buf);
         return;
     }
     portal_http_send(tpcb, "text/plain", "render error");
@@ -719,10 +718,15 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     if (opt[0] == 0x63 && opt[1] == 0x82 && opt[2] == 0x53 && opt[3] == 0x63) {
         opt += 4;
         while ((size_t)(opt - req->options) < sizeof(req->options)) {
+            size_t remaining = sizeof(req->options) - (size_t)(opt - req->options);
+            if (remaining < 1) break;
             uint8_t code = *opt++;
             if (code == 255) break;
             if (code == 0) continue;
+            remaining = sizeof(req->options) - (size_t)(opt - req->options);
+            if (remaining < 1) break;
             uint8_t len = *opt++;
+            if (len > remaining - 1) break;
             if (code == 53 && len == 1) {
                 msg_type = *opt;
                 break;
