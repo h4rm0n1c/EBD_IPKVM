@@ -80,3 +80,4 @@
 - 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 - 2026-01-30: Add stall detection and automatic re-prime options to the UDP host receiver to recover from silent stream stops.
+- 2026-01-30: Split portal and video streaming into dedicated modules and move capture/encode work onto core1 with a shared packet queue.

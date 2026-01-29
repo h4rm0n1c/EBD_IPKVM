@@ -7,6 +7,7 @@
 - 2026-01-30: Flip UDP streaming to a listen/subscribe model where the Pico streams to the first client that sends a packet to the configured port.
 - 2026-01-30: Remove the 100-frame stop limit and arm capture automatically when PS_ON is asserted (CDC or portal UI).
 - 2026-01-30: Default the build to `PICO_BOARD=pico_w` to avoid manual flags for Wi-Fi features.
+- 2026-01-30: Split portal networking into its own module and run video capture/encode on core1 with a lock-protected packet queue so web and video processing do not share a loop.
 - 2026-01-28: Insert an 18-PIXCLK delay after XOFF before sampling each line so the captured window starts in active video instead of the left porch.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).
