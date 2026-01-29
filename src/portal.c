@@ -755,6 +755,7 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 }
 
 static void portal_start_servers(bool enable_ap_services) {
+    cyw43_arch_lwip_begin();
     if (enable_ap_services) {
         portal.dns_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
         if (portal.dns_pcb) {
@@ -774,15 +775,18 @@ static void portal_start_servers(bool enable_ap_services) {
         portal.http_pcb = tcp_listen_with_backlog(portal.http_pcb, 2);
         tcp_accept(portal.http_pcb, portal_http_accept);
     }
+    cyw43_arch_lwip_end();
 }
 
 static bool wifi_start_station_internal(const wifi_config_t *cfg) {
     if (!cfg) return false;
 
     portal_set_identity(CYW43_ITF_STA);
+    cyw43_arch_lwip_begin();
     if (portal.hostname[0] != '\0') {
         netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], portal.hostname);
     }
+    cyw43_arch_lwip_end();
 
     int err = cyw43_arch_wifi_connect_timeout_ms(cfg->ssid, cfg->pass, CYW43_AUTH_WPA2_AES_PSK, 20000);
     if (err != 0) {
@@ -799,15 +803,18 @@ static bool wifi_start_station_internal(const wifi_config_t *cfg) {
 static bool wifi_start_portal_internal(void) {
     portal_set_identity(CYW43_ITF_AP);
 
+    cyw43_arch_disable_sta_mode();
     cyw43_arch_enable_ap_mode(PORTAL_AP_SSID, PORTAL_AP_PASS, CYW43_AUTH_OPEN);
 
     ip4_addr_t gw;
     ip4addr_aton(PORTAL_AP_ADDR, &gw);
     ip4_addr_t mask;
     ip4addr_aton(PORTAL_AP_NETMASK, &mask);
+    cyw43_arch_lwip_begin();
     netif_set_addr(&cyw43_state.netif[CYW43_ITF_AP], &gw, &mask, &gw);
     netif_set_default(&cyw43_state.netif[CYW43_ITF_AP]);
     netif_set_up(&cyw43_state.netif[CYW43_ITF_AP]);
+    cyw43_arch_lwip_end();
 
     portal_start_servers(true);
     portal.active = true;

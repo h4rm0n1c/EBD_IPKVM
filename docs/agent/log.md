@@ -90,3 +90,4 @@
 - 2026-01-30: Answer captive-portal DNS queries with the portal IP for all hostnames to keep the web UI reachable without secondary-IP routing.
 - 2026-01-30: Compact portal HTTP request buffers while parsing so larger headers don't immediately trip the request size cap.
 - 2026-01-30: Update agent guidance to prioritize `/opt` reference material and keep `docs/` aligned with new constraints and examples.
+- 2026-01-30: Wrap portal lwIP setup calls with cyw43 lwIP guards and disable STA before enabling the AP to stabilize the captive web server.
