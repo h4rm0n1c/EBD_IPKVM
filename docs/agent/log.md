@@ -91,3 +91,4 @@
 - 2026-01-30: Compact portal HTTP request buffers while parsing so larger headers don't immediately trip the request size cap.
 - 2026-01-30: Update agent guidance to prioritize `/opt` reference material and keep `docs/` aligned with new constraints and examples.
 - 2026-01-30: Wrap portal lwIP setup calls with cyw43 lwIP guards and disable STA before enabling the AP to stabilize the captive web server.
+- 2026-01-30: Increase the portal HTTP request buffer size to accommodate larger browser headers during setup.

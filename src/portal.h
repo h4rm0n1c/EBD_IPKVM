@@ -21,7 +21,7 @@
 #define PORTAL_IP_OCT4 1
 #define PORTAL_LEASE_OCT4 2
 #define PORTAL_MAX_SCAN 12
-#define PORTAL_MAX_REQ 4096
+#define PORTAL_MAX_REQ 8192
 
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
