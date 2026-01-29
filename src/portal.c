@@ -723,7 +723,10 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     struct netif *nif = portal.ap_mode ? &cyw43_state.netif[CYW43_ITF_AP] : NULL;
     dhcp_msg_t *req = &req_buf;
     uint8_t msg_type = 0;
-    size_t opt_len = req_len - opts_offset;
+    size_t opt_len = (copy_len > opts_offset) ? (copy_len - opts_offset) : 0;
+    if (opt_len > sizeof(req->options)) {
+        opt_len = sizeof(req->options);
+    }
     uint8_t *opt = req->options;
     if (opt_len >= 4 && opt[0] == 0x63 && opt[1] == 0x82 && opt[2] == 0x53 && opt[3] == 0x63) {
         size_t opt_pos = 4;
