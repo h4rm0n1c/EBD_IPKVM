@@ -5,7 +5,7 @@
 Work-in-progress “IP KVM” for a Macintosh Classic using an RP2040 (Pico W):
 Tap raw 1-bpp video + sync, capture with PIO+DMA, and stream to a host UI.
 
-Above output is current project output as of PR #17.
+Above output is current project output as of PR #19.
 
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
