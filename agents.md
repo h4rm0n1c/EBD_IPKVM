@@ -19,8 +19,10 @@ After any non-trivial change:
 - If you learned a constraint/quirk, write it down in `docs/agent/notes.md`.
 
 ## Reference sources
+- Prefer local reference material in `/opt` before external sources; check for working examples there (e.g., Pico SDK demos or captive portal servers) and cite them when they inform changes.
 - Use `/opt/MacDevDocs` (Apple legacy Mac documentation) as a local reference when relevant to this project.
 - The `docs/mac_classic_video_protocol/` folder contains PDFs/snapshots for classic Mac video timing and sync behavior; use `pdftotext` to mine details before changing capture logic.
+- Treat `docs/` as the place to capture and update project knowledge; keep it aligned with any new constraints, workflows, or reference discoveries.
 
 ## Preferred reporting style
 - Cite file paths.
