@@ -125,6 +125,7 @@ static void portal_http_send(struct tcp_pcb *tpcb, const char *content_type, con
     if (len <= 0 || (size_t)len >= sizeof(header)) return;
     tcp_write(tpcb, header, (uint16_t)len, TCP_WRITE_FLAG_COPY);
     tcp_write(tpcb, body, (uint16_t)strlen(body), TCP_WRITE_FLAG_COPY);
+    tcp_output(tpcb);
 }
 
 static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location) {
@@ -135,6 +136,7 @@ static void portal_http_send_redirect(struct tcp_pcb *tpcb, const char *location
                        location);
     if (len <= 0 || (size_t)len >= sizeof(header)) return;
     tcp_write(tpcb, header, (uint16_t)len, TCP_WRITE_FLAG_COPY);
+    tcp_output(tpcb);
 }
 
 typedef struct portal_http_state {
