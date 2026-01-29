@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-30: Auto-arm UDP capture on first client packet, remove the host UDP receiver frame cap, and document VLC rawvideo relay flags.
 - 2026-01-30: Add scan-page SSID selection buttons that return to setup with the chosen network prefilled.
 - 2026-01-30: Add DHCP hostname setup in STA mode and display the device MAC address in the portal UI.
 - 2026-01-30: Format the STA DHCP hostname as EBDIPKVM-<MAC suffix> for easier identification.

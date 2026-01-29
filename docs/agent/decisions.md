@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-01-30: Auto-arm UDP capture when the first client packet arrives and remove the host UDP receiver frame cap so Wi-Fi-only viewers can stream continuously without USB control.
 - 2026-01-30: Move video transport to UDP on Pico W Wi-Fi with per-line RLE compression; keep CDC for control/diagnostic commands and add a host-side relay for VLC rawvideo testing.
 - 2026-01-30: Store Wi-Fi credentials in flash and use a captive-portal AP (with DNS/DHCP/HTTP) when unconfigured so setup works from a phone without hardcoded credentials.
 - 2026-01-30: Keep the HTTP config server running in station mode to allow live control/config without dropping back to AP mode.

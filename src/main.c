@@ -284,6 +284,9 @@ static void udp_stream_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     udp_stream.client_port = port;
     udp_stream.client_set = true;
     udp_stream.ready = true;
+    if (!armed) {
+        armed = true;
+    }
     pbuf_free(p);
 }
 

@@ -71,9 +71,16 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5004, help="UDP port (default: 5004)")
     parser.add_argument("--pico-host", default="", help="Pico W IP to prime the stream (send one UDP packet)")
     parser.add_argument("--outdir", default="", help="Output directory for PGM frames")
-    parser.add_argument("--max-frames", type=int, default=100, help="Stop after N frames (default: 100)")
-    parser.add_argument("--vlc-host", default="", help="Relay frames to VLC host")
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=0,
+        help="Stop after N frames (0 = unlimited, default: 0)",
+    )
+    parser.add_argument("--vlc-host", default="", help="Relay raw 8-bit frames to VLC host")
     parser.add_argument("--vlc-port", type=int, default=6000, help="Relay UDP port (default: 6000)")
+    parser.add_argument("--vlc-fps", type=float, default=60.0, help="FPS to advertise in VLC command output")
+    parser.add_argument("--vlc-chroma", default="GREY", help="VLC rawvideo chroma (default: GREY)")
     args = parser.parse_args()
 
     if args.outdir:
@@ -101,8 +108,23 @@ def main() -> None:
         print(f"[udp] primed stream via {args.pico_host}:{args.port}")
     else:
         print("[udp] pico host not set; no stream prime packet sent")
+    if vlc_target:
+        print("[udp] VLC command:")
+        print(
+            "  vlc --demux rawvideo --rawvid-width {w} --rawvid-height {h} "
+            "--rawvid-fps {fps:.2f} --rawvid-chroma {chroma} udp://@:{port}".format(
+                w=W,
+                h=H,
+                fps=args.vlc_fps,
+                chroma=args.vlc_chroma,
+                port=args.vlc_port,
+            )
+        )
 
-    while done < args.max_frames:
+    def should_stop() -> bool:
+        return args.max_frames > 0 and done >= args.max_frames
+
+    while not should_stop():
         try:
             data, _addr = sock.recvfrom(2048)
         except socket.timeout:
@@ -112,9 +134,11 @@ def main() -> None:
                 if order:
                     newest = order[-1]
                     have = counts.get(newest, 0)
-                    print(f"[udp] newest frame_id={newest} lines={have}/342 done={done}/{args.max_frames}")
+                    limit = args.max_frames if args.max_frames > 0 else "∞"
+                    print(f"[udp] newest frame_id={newest} lines={have}/342 done={done}/{limit}")
                 else:
-                    print(f"[udp] done={done}/{args.max_frames} (waiting for packets)")
+                    limit = args.max_frames if args.max_frames > 0 else "∞"
+                    print(f"[udp] done={done}/{limit} (waiting for packets)")
             continue
 
         parsed = parse_packet(data)
