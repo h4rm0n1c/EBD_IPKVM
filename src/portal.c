@@ -1,5 +1,6 @@
 #include "portal.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -705,29 +706,39 @@ static void portal_dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     (void)addr;
     (void)port;
     if (!p) return;
-    if (p->tot_len < sizeof(dhcp_msg_t)) {
+    size_t req_len = (size_t)p->tot_len;
+    size_t opts_offset = offsetof(dhcp_msg_t, options);
+    if (req_len < (opts_offset + 4)) {
         pbuf_free(p);
         return;
     }
 
     dhcp_msg_t req_buf;
-    pbuf_copy_partial(p, &req_buf, sizeof(req_buf), 0);
+    memset(&req_buf, 0, sizeof(req_buf));
+    size_t copy_len = req_len;
+    if (copy_len > sizeof(req_buf)) {
+        copy_len = sizeof(req_buf);
+    }
+    pbuf_copy_partial(p, &req_buf, copy_len, 0);
     struct netif *nif = portal.ap_mode ? &cyw43_state.netif[CYW43_ITF_AP] : NULL;
     dhcp_msg_t *req = &req_buf;
     uint8_t msg_type = 0;
+    size_t opt_len = req_len - opts_offset;
     uint8_t *opt = req->options;
-    if (opt[0] == 0x63 && opt[1] == 0x82 && opt[2] == 0x53 && opt[3] == 0x63) {
-        opt += 4;
-        while ((size_t)(opt - req->options) < sizeof(req->options)) {
-            uint8_t code = *opt++;
+    if (opt_len >= 4 && opt[0] == 0x63 && opt[1] == 0x82 && opt[2] == 0x53 && opt[3] == 0x63) {
+        size_t opt_pos = 4;
+        while (opt_pos < opt_len) {
+            uint8_t code = opt[opt_pos++];
             if (code == 255) break;
             if (code == 0) continue;
-            uint8_t len = *opt++;
+            if (opt_pos >= opt_len) break;
+            uint8_t len = opt[opt_pos++];
+            if (opt_pos + len > opt_len) break;
             if (code == 53 && len == 1) {
-                msg_type = *opt;
+                msg_type = opt[opt_pos];
                 break;
             }
-            opt += len;
+            opt_pos += len;
         }
     }
 

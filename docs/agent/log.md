@@ -85,3 +85,4 @@
 - 2026-01-30: Fix portal DHCP parsing to use pbuf_copy_partial on full packets so phone DHCP requests aren't dropped on short pbuf segments.
 - 2026-01-30: Fix captive portal DNS replies to copy full requests and allocate enough space for the answer section.
 - 2026-01-30: Ensure portal HTTP responses call tcp_output so the captive portal web UI is flushed to clients.
+- 2026-01-30: Accept shorter DHCP request packets and bound option parsing so portal AP clients don't get dropped during config.
