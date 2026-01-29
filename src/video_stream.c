@@ -614,7 +614,6 @@ static bool udp_stream_send(const uint8_t *payload, size_t len) {
     if (!udp_stream.ready || !udp_stream.pcb || !udp_stream.client_set) return false;
 
     bool ok = false;
-    cyw43_arch_lwip_begin();
     struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, (uint16_t)len, PBUF_RAM);
     if (p) {
         memcpy(p->payload, payload, len);
@@ -622,7 +621,6 @@ static bool udp_stream_send(const uint8_t *payload, size_t len) {
         ok = (err == ERR_OK);
         pbuf_free(p);
     }
-    cyw43_arch_lwip_end();
     return ok;
 }
 #endif
