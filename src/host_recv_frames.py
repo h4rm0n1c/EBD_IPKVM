@@ -11,6 +11,7 @@ FORCE_START = False
 TEST_AFTER = 0.0
 TEST_START = False
 PROBE_ONLY = False
+RLE_MODE = True
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -39,6 +40,10 @@ for arg in sys.argv[1:]:
         TEST_START = True
     elif arg == "--probe":
         PROBE_ONLY = True
+    elif arg == "--rle":
+        RLE_MODE = True
+    elif arg == "--raw":
+        RLE_MODE = False
     elif arg == "--no-force":
         FORCE_AFTER = 0.0
     elif arg == "--no-test":
@@ -67,7 +72,10 @@ MAX_FRAMES = 100
 W = 512
 H = 342
 LINE_BYTES = 64
-PKT_BYTES = 2 + 2 + 2 + 2 + LINE_BYTES
+HEADER_BYTES = 8
+MAX_PAYLOAD = LINE_BYTES * 2
+RLE_FLAG = 0x8000
+LEN_MASK = 0x7FFF
 
 MAGIC0 = 0xEB
 MAGIC1 = 0xD1
@@ -109,6 +117,24 @@ def bytes_to_row64(b: bytes) -> bytes:
             i += 1
     return bytes(row)
 
+def decode_rle_line(b: bytes):
+    if len(b) % 2:
+        return None
+    out = bytearray()
+    i = 0
+    while i < len(b):
+        count = b[i]
+        value = b[i + 1]
+        i += 2
+        if count == 0:
+            return None
+        out.extend([value] * count)
+        if len(out) > LINE_BYTES:
+            return None
+    if len(out) != LINE_BYTES:
+        return None
+    return bytes(out)
+
 def write_pgm(path: str, rows: list[bytes]) -> None:
     with open(path, "wb") as f:
         f.write(f"P5\n{W} {H}\n255\n".encode("ascii"))
@@ -123,10 +149,18 @@ def pop_one_packet(buf: bytearray):
         i += 1
     if i > 0:
         del buf[:i]
-    if len(buf) < PKT_BYTES:
+    if len(buf) < HEADER_BYTES:
         return None
-    pkt = bytes(buf[:PKT_BYTES])
-    del buf[:PKT_BYTES]
+    plen = buf[6] | (buf[7] << 8)
+    payload_len = plen & LEN_MASK
+    if payload_len == 0 or payload_len > MAX_PAYLOAD:
+        del buf[:2]
+        return None
+    total_len = HEADER_BYTES + payload_len
+    if len(buf) < total_len:
+        return None
+    pkt = bytes(buf[:total_len])
+    del buf[:total_len]
     return pkt
 
 fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
@@ -169,6 +203,12 @@ if BOOT_WAIT > 0:
 if SEND_RESET:
     os.write(fd, b"R")
     time.sleep(0.05)
+if RLE_MODE is True:
+    os.write(fd, b"E")
+    time.sleep(0.01)
+elif RLE_MODE is False:
+    os.write(fd, b"e")
+    time.sleep(0.01)
 if PROBE_ONLY:
     os.write(fd, b"U")
     time.sleep(0.2)
@@ -241,12 +281,22 @@ try:
             frame_id = pkt[2] | (pkt[3] << 8)
             line_id  = pkt[4] | (pkt[5] << 8)
             plen     = pkt[6] | (pkt[7] << 8)
+            is_rle   = bool(plen & RLE_FLAG)
+            payload_len = plen & LEN_MASK
 
-            if plen != LINE_BYTES or line_id >= H:
+            if payload_len == 0 or payload_len > MAX_PAYLOAD or line_id >= H:
                 continue
 
-            payload = pkt[8:8 + LINE_BYTES]
-            row = bytes_to_row64(payload)
+            payload = pkt[8:8 + payload_len]
+            if is_rle:
+                decoded = decode_rle_line(payload)
+                if decoded is None:
+                    continue
+                row = bytes_to_row64(decoded)
+            else:
+                if payload_len != LINE_BYTES:
+                    continue
+                row = bytes_to_row64(payload)
 
             fm = frames.setdefault(frame_id, {})
             if line_id not in fm:

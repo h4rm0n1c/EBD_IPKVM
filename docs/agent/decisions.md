@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-01-30: Add an RLE encoding option for scanline payloads using bit 15 of `payload_len` as a flag, plus CDC commands to enable/disable it while retaining raw payload compatibility; default to RLE-on for testing.
 - 2026-01-28: Insert an 18-PIXCLK delay after XOFF before sampling each line so the captured window starts in active video instead of the left porch.
 - 2026-01-27: Byte-swap each 32-bit PIO RX FIFO word in firmware before USB enqueue so host unpacking receives correctly ordered pixels.
 - 2026-01-27: Phase-lock PIXCLK after HSYNC and pre-roll the falling-edge capture so the first wait sees a real edge (prevents 1-pixel phase slips).

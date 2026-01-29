@@ -24,7 +24,11 @@
 #define WORDS_PER_LINE CAP_WORDS_PER_LINE
 
 #define PKT_HDR_BYTES 8
-#define PKT_BYTES     (PKT_HDR_BYTES + BYTES_PER_LINE)
+#define PKT_FLAG_RLE  0x8000u
+#define PKT_LEN_MASK  0x7FFFu
+#define PKT_MAX_PAYLOAD (BYTES_PER_LINE * 2)
+#define PKT_MAX_BYTES (PKT_HDR_BYTES + PKT_MAX_PAYLOAD)
+#define PKT_RAW_BYTES (PKT_HDR_BYTES + BYTES_PER_LINE)
 
 /* TX queue: power-of-two depth so we can mask wrap. */
 #define TXQ_DEPTH 512
@@ -52,10 +56,11 @@ static volatile bool test_frame_active = false;
 static volatile uint32_t last_vsync_us = 0;
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
-static uint8_t probe_buf[PKT_BYTES];
+static uint8_t probe_buf[PKT_MAX_BYTES];
 static volatile uint8_t probe_pending = 0;
 static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
+static volatile bool tx_rle_enabled = true;
 
 static uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
 static uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
@@ -66,6 +71,7 @@ static uint16_t frame_tx_line = 0;
 static uint16_t frame_tx_lines = 0;
 static uint16_t frame_tx_start = 0;
 static uint32_t frame_tx_line_buf[CAP_WORDS_PER_LINE];
+static uint8_t rle_line_buf[PKT_MAX_PAYLOAD];
 
 static int dma_chan;
 static PIO pio = pio0;
@@ -74,8 +80,13 @@ static bool vsync_fall_edge = true;
 static uint offset_fall_pixrise = 0;
 static void gpio_irq(uint gpio, uint32_t events);
 
-/* Ring buffer of complete line packets (72 bytes each). */
-static uint8_t txq[TXQ_DEPTH][PKT_BYTES];
+typedef struct {
+    uint16_t len;
+    uint8_t data[PKT_MAX_BYTES];
+} txq_entry_t;
+
+/* Ring buffer of complete line packets (variable length). */
+static txq_entry_t txq[TXQ_DEPTH];
 static volatile uint16_t txq_w = 0;
 static volatile uint16_t txq_r = 0;
 
@@ -128,7 +139,30 @@ static inline bool can_emit_text(void) {
     return !capture.capture_enabled && !test_frame_active && txq_is_empty() && (!armed || frames_done >= 100);
 }
 
-static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
+static size_t rle_encode_line(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap) {
+    size_t out = 0;
+    size_t i = 0;
+    while (i < src_len) {
+        uint8_t value = src[i];
+        size_t run = 1;
+        while ((i + run) < src_len && run < 255 && src[i + run] == value) {
+            run++;
+        }
+        if ((out + 2) > dst_cap) {
+            return 0;
+        }
+        dst[out++] = (uint8_t)run;
+        dst[out++] = value;
+        i += run;
+    }
+    return out;
+}
+
+static inline bool txq_enqueue_payload(uint16_t fid, uint16_t lid, const uint8_t *payload,
+                                       uint16_t payload_len, bool rle) {
+    if (payload_len > PKT_MAX_PAYLOAD) {
+        return false;
+    }
     uint16_t w = txq_w;
     uint16_t next = (uint16_t)((w + 1) & TXQ_MASK);
     if (next == txq_r) {
@@ -136,7 +170,7 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
         return false;
     }
 
-    uint8_t *p = txq[w];
+    uint8_t *p = txq[w].data;
     p[0] = 0xEB;
     p[1] = 0xD1;
 
@@ -146,14 +180,32 @@ static inline bool txq_enqueue(uint16_t fid, uint16_t lid, const void *data64) {
     p[4] = (uint8_t)(lid & 0xFF);
     p[5] = (uint8_t)((lid >> 8) & 0xFF);
 
-    p[6] = (uint8_t)(BYTES_PER_LINE & 0xFF);
-    p[7] = (uint8_t)((BYTES_PER_LINE >> 8) & 0xFF);
+    uint16_t len_field = payload_len;
+    if (rle) {
+        len_field = (uint16_t)(len_field | PKT_FLAG_RLE);
+    }
+    p[6] = (uint8_t)(len_field & 0xFF);
+    p[7] = (uint8_t)((len_field >> 8) & 0xFF);
 
-    memcpy(&p[8], data64, BYTES_PER_LINE);
+    memcpy(&p[8], payload, payload_len);
+    txq[w].len = (uint16_t)(PKT_HDR_BYTES + payload_len);
 
     /* publish write index last so reader never sees a half-filled packet */
     txq_w = next;
     return true;
+}
+
+static inline bool txq_enqueue_line(uint16_t fid, uint16_t lid, const uint8_t *data64) {
+    if (!tx_rle_enabled) {
+        return txq_enqueue_payload(fid, lid, data64, BYTES_PER_LINE, false);
+    }
+
+    size_t rle_len = rle_encode_line(data64, BYTES_PER_LINE, rle_line_buf, sizeof(rle_line_buf));
+    if (rle_len > 0 && rle_len < BYTES_PER_LINE) {
+        return txq_enqueue_payload(fid, lid, rle_line_buf, (uint16_t)rle_len, true);
+    }
+
+    return txq_enqueue_payload(fid, lid, data64, BYTES_PER_LINE, false);
 }
 
 static bool try_send_probe_packet(void) {
@@ -171,11 +223,11 @@ static bool try_send_probe_packet(void) {
         memset(&probe_buf[8], 0xA5, BYTES_PER_LINE);
     }
 
-    while (probe_offset < PKT_BYTES) {
+    while (probe_offset < PKT_RAW_BYTES) {
         int avail = tud_cdc_write_available();
         if (avail <= 0) return false;
         uint32_t to_write = (uint32_t)avail;
-        uint32_t remain = (uint32_t)(PKT_BYTES - probe_offset);
+        uint32_t remain = (uint32_t)(PKT_RAW_BYTES - probe_offset);
         if (to_write > remain) {
             to_write = remain;
         }
@@ -337,7 +389,7 @@ static void service_test_frame(void) {
     while (test_frame_active) {
         uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
         memset(test_line_buf, fill, BYTES_PER_LINE);
-        if (!txq_enqueue(frame_id, test_line, test_line_buf)) {
+        if (!txq_enqueue_line(frame_id, test_line, test_line_buf)) {
             break;
         }
 
@@ -393,7 +445,7 @@ static void service_frame_tx(void) {
         memcpy(frame_tx_line_buf, frame_tx_buf[src_line], sizeof(frame_tx_line_buf));
         reorder_line_words(frame_tx_line_buf);
 
-        if (!txq_enqueue(frame_tx_id, frame_tx_line, frame_tx_line_buf)) {
+        if (!txq_enqueue_line(frame_tx_id, frame_tx_line, (const uint8_t *)frame_tx_line_buf)) {
             lines_drop++;
             break;
         }
@@ -504,6 +556,16 @@ static void poll_cdc_commands(void) {
             request_probe_packet();
         } else if (ch == 'I' || ch == 'i') {
             debug_requested = true;
+        } else if (ch == 'E') {
+            tx_rle_enabled = true;
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] rle=on\n");
+            }
+        } else if (ch == 'e') {
+            tx_rle_enabled = false;
+            if (can_emit_text()) {
+                printf("[EBD_IPKVM] rle=off\n");
+            }
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
                 run_gpio_diag();
@@ -541,13 +603,22 @@ static inline void service_txq(void) {
         int avail = tud_cdc_write_available();
         if (avail <= 0) break;
 
-        uint32_t remain = (uint32_t)(PKT_BYTES - txq_offset);
+        uint16_t pkt_len = txq[r].len;
+        if (pkt_len == 0 || pkt_len > PKT_MAX_BYTES) {
+            txq_offset = 0;
+            s = save_and_disable_interrupts();
+            txq_r = (uint16_t)((r + 1) & TXQ_MASK);
+            restore_interrupts(s);
+            continue;
+        }
+
+        uint32_t remain = (uint32_t)(pkt_len - txq_offset);
         uint32_t to_write = (uint32_t)avail;
         if (to_write > remain) {
             to_write = remain;
         }
 
-        uint32_t n = tud_cdc_write(&txq[r][txq_offset], to_write);
+        uint32_t n = tud_cdc_write(&txq[r].data[txq_offset], to_write);
         if (n == 0) {
             usb_drops++;
             break;
@@ -556,7 +627,7 @@ static inline void service_txq(void) {
         txq_offset = (uint16_t)(txq_offset + n);
         wrote_any = true;
 
-        if (txq_offset >= PKT_BYTES) {
+        if (txq_offset >= pkt_len) {
             txq_offset = 0;
             s = save_and_disable_interrupts();
             txq_r = (uint16_t)((r + 1) & TXQ_MASK);

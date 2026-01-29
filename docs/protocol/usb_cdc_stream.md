@@ -4,7 +4,7 @@ The firmware streams captured Macintosh Classic video as fixed-size packets over
 USB CDC. Each packet contains a single scanline of 512 pixels (1 bpp) and a
 compact header for framing.
 
-## Packet layout (72 bytes)
+## Packet layout (variable length)
 
 | Offset | Size | Field | Notes |
 | ------ | ---- | ----- | ----- |
@@ -12,14 +12,16 @@ compact header for framing.
 | 1      | 1    | magic1 | `0xD1` |
 | 2      | 2    | frame_id | Little-endian frame counter (increments per transmitted frame). |
 | 4      | 2    | line_id | Little-endian line index (0..341). |
-| 6      | 2    | payload_len | Little-endian payload length (bytes). Currently `64`. |
-| 8      | 64   | payload | Packed 1 bpp pixels, MSB-first per byte. |
+| 6      | 2    | payload_len | Little-endian payload length (bytes). Bit 15 set indicates RLE payload. |
+| 8      | 64..128 | payload | Raw 1 bpp pixels (64 bytes) or RLE data (up to 128 bytes). |
 
 ### Payload format
 - Each line is 512 pixels → 512 bits → 64 bytes.
 - Bits are packed MSB-first; bit 7 is leftmost within each byte.
 - Firmware byte-swaps each 32-bit word from the PIO RX FIFO before enqueueing, so the payload is already in byte order for host unpacking.
 - Host expansion examples: see `src/host_recv_frames.py` (`bytes_to_row64`).
+- If bit 15 of `payload_len` is set, the payload is byte-wise RLE encoded as `(count, value)` pairs (count 1..255) and should expand to 64 bytes.
+- Firmware may emit raw packets even when RLE mode is enabled if the RLE payload is not smaller than 64 bytes.
 
 ## Host control commands
 The firmware is host-controlled over the same CDC channel:
@@ -40,6 +42,8 @@ The firmware is host-controlled over the same CDC channel:
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
 | `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
+| `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
 ### GPIO diagnostic output (`G`)
 - Only emitted while capture is stopped and the TX queue is empty.
