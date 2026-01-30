@@ -413,18 +413,29 @@ void app_core_init(const app_core_config_t *cfg) {
 
 void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
+    uint32_t active_us = 0;
+    uint32_t active_start = time_us_32();
     tud_task();
     poll_cdc_commands();
+    active_us += (uint32_t)(time_us_32() - active_start);
 
     /* Send queued binary packets from thread context (NOT IRQ). */
-    if (probe_pending && try_send_probe_packet()) {
-        probe_pending = 0;
+    if (probe_pending) {
+        active_start = time_us_32();
+        if (try_send_probe_packet()) {
+            probe_pending = 0;
+        }
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
     if (debug_requested && can_emit_text()) {
+        active_start = time_us_32();
         debug_requested = false;
         emit_debug_state();
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
+    active_start = time_us_32();
     service_txq();
+    active_us += (uint32_t)(time_us_32() - active_start);
 
     if (can_emit_text()) {
         if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
@@ -461,9 +472,8 @@ void app_core_poll(void) {
         }
     }
 
-    uint32_t busy_end = time_us_32();
     tight_loop_contents();
     uint32_t loop_end = time_us_32();
-    core0_busy_us += (uint32_t)(busy_end - loop_start);
+    core0_busy_us += active_us;
     core0_total_us += (uint32_t)(loop_end - loop_start);
 }

@@ -393,29 +393,36 @@ static void core1_entry(void) {
 
     while (true) {
         uint32_t loop_start = time_us_32();
+        uint32_t active_us = 0;
         uint32_t cmd = 0;
         while (core_bridge_try_pop(&cmd)) {
             core1_handle_command(cmd);
         }
 
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
+            uint32_t active_start = time_us_32();
             if (video_capture_finalize_frame(&capture, frame_id)) {
                 frame_id++;
                 frames_done++;
             } else {
                 frame_id++;
             }
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
+        uint32_t active_start = time_us_32();
         service_test_frame();
+        active_us += (uint32_t)(time_us_32() - active_start);
+
+        active_start = time_us_32();
         service_frame_tx();
-        uint32_t busy_end = time_us_32();
+        active_us += (uint32_t)(time_us_32() - active_start);
+
         tight_loop_contents();
         uint32_t loop_end = time_us_32();
 
-        uint32_t busy_delta = (uint32_t)(busy_end - loop_start);
         uint32_t total_delta = (uint32_t)(loop_end - loop_start);
-        __atomic_fetch_add(&core1_busy_us, busy_delta, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&core1_busy_us, active_us, __ATOMIC_RELAXED);
         __atomic_fetch_add(&core1_total_us, total_delta, __ATOMIC_RELAXED);
     }
 }
