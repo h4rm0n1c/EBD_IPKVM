@@ -9,6 +9,15 @@ Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
+### Identifying CDC0 vs CDC1 on Linux
+The USB interface strings are set to `EBD_IPKVM stream` and `EBD_IPKVM control`,
+which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
+also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
+number:
+
+- `...-if00` → CDC0 (stream)
+- `...-if02` → CDC1 (control)
+
 ## Packet layout (variable length)
 
 | Offset | Size | Field | Notes |
