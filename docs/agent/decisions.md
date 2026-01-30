@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.
 - 2026-01-30: Default capture mode to continuous 60 fps streaming to prioritize long-form testing runs.
 - 2026-01-30: Default host capture output to PBM for compact 1-bpp frames, keeping PGM as an opt-in option for 8-bit output.

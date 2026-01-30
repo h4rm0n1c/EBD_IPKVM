@@ -2,12 +2,12 @@
 #include <string.h>
 
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
-#include "hardware/sync.h"
 #include "pico/bootrom.h"
 
 #include "tusb.h"
@@ -58,6 +58,7 @@ static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
 static volatile uint32_t diag_video_edges = 0;
 static volatile bool test_frame_active = false;
+static volatile bool diag_active = false;
 static volatile uint32_t last_vsync_us = 0;
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[BYTES_PER_LINE];
@@ -94,12 +95,69 @@ typedef struct {
 static txq_entry_t txq[TXQ_DEPTH];
 static volatile uint16_t txq_w = 0;
 static volatile uint16_t txq_r = 0;
+static uint16_t txq_offset = 0;
+
+typedef enum {
+    CORE1_CMD_STOP_CAPTURE = 1,
+    CORE1_CMD_RESET_COUNTERS = 2,
+    CORE1_CMD_SINGLE_FRAME = 3,
+    CORE1_CMD_START_TEST = 4,
+    CORE1_CMD_CONFIG_VSYNC = 5,
+    CORE1_CMD_DIAG_PREP = 6,
+    CORE1_CMD_DIAG_DONE = 7,
+} core1_cmd_t;
+
+#define CORE1_CMD(code, param) (((uint32_t)(code) << 16) | ((param) & 0xFFFFu))
+#define CORE1_CMD_CODE(cmd) ((uint16_t)((cmd) >> 16))
+#define CORE1_CMD_PARAM(cmd) ((uint16_t)((cmd) & 0xFFFFu))
+
+static inline void core1_send_cmd(uint16_t code, uint16_t param) {
+    multicore_fifo_push_blocking(CORE1_CMD(code, param));
+}
+
+static inline bool load_bool(const volatile bool *value) {
+    return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+
+static inline uint16_t load_u16(const volatile uint16_t *value) {
+    return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+
+static inline uint32_t load_u32(const volatile uint32_t *value) {
+    return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+}
+
+static inline void store_bool(volatile bool *value, bool data) {
+    __atomic_store_n(value, data, __ATOMIC_RELEASE);
+}
+
+static inline void store_u16(volatile uint16_t *value, uint16_t data) {
+    __atomic_store_n(value, data, __ATOMIC_RELEASE);
+}
+
+static inline void store_u32(volatile uint32_t *value, uint32_t data) {
+    __atomic_store_n(value, data, __ATOMIC_RELEASE);
+}
+
+static inline void txq_store_w(uint16_t value) {
+    store_u16(&txq_w, value);
+}
+
+static inline void txq_store_r(uint16_t value) {
+    store_u16(&txq_r, value);
+}
+
+static inline uint16_t txq_load_w(void) {
+    return load_u16(&txq_w);
+}
+
+static inline uint16_t txq_load_r(void) {
+    return load_u16(&txq_r);
+}
 
 static inline void txq_reset(void) {
-    uint32_t s = save_and_disable_interrupts();
-    txq_w = 0;
-    txq_r = 0;
-    restore_interrupts(s);
+    txq_store_w(0);
+    txq_store_r(0);
 }
 
 static inline void reset_frame_tx_state(void) {
@@ -127,21 +185,22 @@ static inline void reset_diag_counts(void) {
 }
 
 static inline bool txq_is_empty(void) {
-    uint16_t r = txq_r;
-    uint16_t w = txq_w;
+    uint16_t r = txq_load_r();
+    uint16_t w = txq_load_w();
     return r == w;
 }
 
 static inline bool txq_has_space(void) {
-    uint32_t s = save_and_disable_interrupts();
-    uint16_t r = txq_r;
-    uint16_t w = txq_w;
-    restore_interrupts(s);
+    uint16_t r = txq_load_r();
+    uint16_t w = txq_load_w();
     return ((uint16_t)((w + 1) & TXQ_MASK)) != r;
 }
 
 static inline bool can_emit_text(void) {
-    return !capture.capture_enabled && !test_frame_active && txq_is_empty() && !armed;
+    return !load_bool(&capture.capture_enabled)
+           && !load_bool(&test_frame_active)
+           && txq_is_empty()
+           && !load_bool(&armed);
 }
 
 static size_t rle_encode_line(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap) {
@@ -168,9 +227,9 @@ static inline bool txq_enqueue_payload(uint16_t fid, uint16_t lid, const uint8_t
     if (payload_len > PKT_MAX_PAYLOAD) {
         return false;
     }
-    uint16_t w = txq_w;
+    uint16_t w = txq_load_w();
     uint16_t next = (uint16_t)((w + 1) & TXQ_MASK);
-    if (next == txq_r) {
+    if (next == txq_load_r()) {
         /* queue full */
         return false;
     }
@@ -196,12 +255,12 @@ static inline bool txq_enqueue_payload(uint16_t fid, uint16_t lid, const uint8_t
     txq[w].len = (uint16_t)(PKT_HDR_BYTES + payload_len);
 
     /* publish write index last so reader never sees a half-filled packet */
-    txq_w = next;
+    txq_store_w(next);
     return true;
 }
 
 static inline bool txq_enqueue_line(uint16_t fid, uint16_t lid, const uint8_t *data64) {
-    if (!tx_rle_enabled) {
+    if (!load_bool(&tx_rle_enabled)) {
         return txq_enqueue_payload(fid, lid, data64, BYTES_PER_LINE, false);
     }
 
@@ -253,20 +312,20 @@ static inline void request_probe_packet(void) {
 static void emit_debug_state(void) {
     if (!tud_cdc_connected()) return;
     printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d vsync=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
-           armed ? 1 : 0,
-           capture.capture_enabled ? 1 : 0,
-           test_frame_active ? 1 : 0,
-           probe_pending ? 1 : 0,
-           vsync_fall_edge ? "fall" : "rise",
-           (unsigned)txq_r,
-           (unsigned)txq_w,
+           load_bool(&armed) ? 1 : 0,
+           load_bool(&capture.capture_enabled) ? 1 : 0,
+           load_bool(&test_frame_active) ? 1 : 0,
+           __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
+           load_bool(&vsync_fall_edge) ? "fall" : "rise",
+           (unsigned)txq_load_r(),
+           (unsigned)txq_load_w(),
            tud_cdc_write_available(),
-           (unsigned long)frames_done,
-           (unsigned long)capture.lines_ok,
-           (unsigned long)lines_drop,
-           (unsigned long)usb_drops,
-           (unsigned long)capture.frame_overrun,
-           (unsigned long)capture.frame_short);
+           (unsigned long)load_u32(&frames_done),
+           (unsigned long)load_u32(&capture.lines_ok),
+           (unsigned long)load_u32(&lines_drop),
+           (unsigned long)load_u32(&usb_drops),
+           (unsigned long)__atomic_load_n(&capture.frame_overrun, __ATOMIC_ACQUIRE),
+           (unsigned long)__atomic_load_n(&capture.frame_short, __ATOMIC_ACQUIRE));
 }
 
 static inline void reorder_line_words(uint32_t *buf) {
@@ -283,20 +342,12 @@ static void configure_pio_program(void) {
 }
 
 static void configure_vsync_irq(void) {
-    uint32_t edge = vsync_fall_edge ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
+    uint32_t edge = load_bool(&vsync_fall_edge) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
     gpio_set_irq_enabled_with_callback(PIN_VSYNC, edge, true, &gpio_irq);
 }
 
-static void gpio_irq(uint gpio, uint32_t events) {
-    if (gpio != PIN_VSYNC) return;
-    if (vsync_fall_edge) {
-        if (!(events & GPIO_IRQ_EDGE_FALL)) return;
-    } else {
-        if (!(events & GPIO_IRQ_EDGE_RISE)) return;
-    }
-
-    uint32_t now_us = time_us_32();
+static void service_vsync(uint32_t now_us) {
     if ((uint32_t)(now_us - last_vsync_us) < 8000u) {
         return;
     }
@@ -304,24 +355,41 @@ static void gpio_irq(uint gpio, uint32_t events) {
 
     vsync_edges++;
 
-    if (capture.capture_enabled) {
+    if (load_bool(&diag_active)) {
         return;
     }
-    if (!armed) {
+    if (load_bool(&capture.capture_enabled)) {
+        return;
+    }
+    if (!load_bool(&armed)) {
         return;
     }
 
     bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
-    if (capture_mode == CAPTURE_MODE_TEST_30FPS) {
-        take_toggle = !take_toggle;          // every other VSYNC => ~30fps
-        want_frame = take_toggle && !tx_busy;
+    capture_mode_t mode = __atomic_load_n(&capture_mode, __ATOMIC_ACQUIRE);
+    if (mode == CAPTURE_MODE_TEST_30FPS) {
+        bool toggle = !load_bool(&take_toggle);          // every other VSYNC => ~30fps
+        store_bool(&take_toggle, toggle);
+        store_bool(&want_frame, toggle && !tx_busy);
     } else {
-        want_frame = !tx_busy;
+        store_bool(&want_frame, !tx_busy);
     }
 
-    if (want_frame) {
+    if (load_bool(&want_frame)) {
         video_capture_start(&capture, true);
     }
+}
+
+static void gpio_irq(uint gpio, uint32_t events) {
+    if (gpio != PIN_VSYNC) return;
+    bool fall_edge = load_bool(&vsync_fall_edge);
+    if (fall_edge) {
+        if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+    } else {
+        if (!(events & GPIO_IRQ_EDGE_RISE)) return;
+    }
+
+    service_vsync(time_us_32());
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -339,12 +407,6 @@ static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bo
 
 static void run_gpio_diag(void) {
     const uint32_t diag_ms = 500;
-
-    armed = false;
-    want_frame = false;
-    video_capture_stop(&capture);
-    txq_reset();
-    reset_frame_tx_state();
 
     gpio_set_function(PIN_PIXCLK, GPIO_FUNC_SIO);
     gpio_set_function(PIN_HSYNC, GPIO_FUNC_SIO);
@@ -392,9 +454,9 @@ static void run_gpio_diag(void) {
 }
 
 static void service_test_frame(void) {
-    if (!test_frame_active || capture.capture_enabled) return;
+    if (!load_bool(&test_frame_active) || load_bool(&capture.capture_enabled)) return;
 
-    while (test_frame_active) {
+    while (load_bool(&test_frame_active)) {
         uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
         memset(test_line_buf, fill, BYTES_PER_LINE);
         if (!txq_enqueue_line(frame_id, test_line, test_line_buf)) {
@@ -403,7 +465,7 @@ static void service_test_frame(void) {
 
         test_line++;
         if (test_line >= CAP_ACTIVE_H) {
-            test_frame_active = false;
+            store_bool(&test_frame_active, false);
             test_line = 0;
             frame_id++;
             frames_done++;
@@ -474,46 +536,31 @@ static void poll_cdc_commands(void) {
         if (tud_cdc_read(&ch, 1) != 1) break;
 
         if (ch == 'S' || ch == 's') {
-            armed = true;
+            store_bool(&armed, true);
             /* IMPORTANT: do NOT printf here; keep binary stream clean once armed */
         } else if (ch == 'X' || ch == 'x') {
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            test_frame_active = false;
-            test_line = 0;
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] armed=0 (host stop)\n");
             }
         } else if (ch == 'R' || ch == 'r') {
-            frames_done = 0;
-            frame_id = 0;
-            capture.lines_ok = 0;
-            capture.frame_overrun = 0;
-            capture.frame_short = 0;
-            lines_drop = 0;
-            usb_drops = 0;
-            vsync_edges = 0;
-            take_toggle = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            test_frame_active = false;
-            test_line = 0;
+            store_u32(&usb_drops, 0);
+            store_bool(&take_toggle, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
+            core1_send_cmd(CORE1_CMD_RESET_COUNTERS, 0);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] reset counters\n");
             }
         } else if (ch == 'Q' || ch == 'q') {
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            test_frame_active = false;
-            test_line = 0;
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] parked\n");
             }
@@ -529,80 +576,72 @@ static void poll_cdc_commands(void) {
                 printf("[EBD_IPKVM] ps_on=0\n");
             }
         } else if (ch == 'B' || ch == 'b') {
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
             sleep_ms(10);
             reset_usb_boot(0, 0);
         } else if (ch == 'Z' || ch == 'z') {
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
             sleep_ms(10);
             watchdog_reboot(0, 0, 0);
             while (true) { tight_loop_contents(); }
         } else if (ch == 'F' || ch == 'f') {
-            if (!capture.capture_enabled) {
-                want_frame = true;
-                video_capture_start(&capture, true);
-            }
+            core1_send_cmd(CORE1_CMD_SINGLE_FRAME, 0);
         } else if (ch == 'T' || ch == 't') {
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            test_frame_active = true;
-            test_line = 0;
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_START_TEST, 0);
             request_probe_packet();
         } else if (ch == 'U' || ch == 'u') {
             request_probe_packet();
         } else if (ch == 'I' || ch == 'i') {
             debug_requested = true;
         } else if (ch == 'E') {
-            tx_rle_enabled = true;
+            store_bool(&tx_rle_enabled, true);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] rle=on\n");
             }
         } else if (ch == 'e') {
-            tx_rle_enabled = false;
+            store_bool(&tx_rle_enabled, false);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] rle=off\n");
             }
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
+                core1_send_cmd(CORE1_CMD_DIAG_PREP, 0);
                 run_gpio_diag();
+                core1_send_cmd(CORE1_CMD_DIAG_DONE, 0);
             }
         } else if (ch == 'V' || ch == 'v') {
-            vsync_fall_edge = !vsync_fall_edge;
-            armed = false;
-            want_frame = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            configure_vsync_irq();
+            bool new_edge = !load_bool(&vsync_fall_edge);
+            store_bool(&vsync_fall_edge, new_edge);
+            store_bool(&armed, false);
+            store_bool(&want_frame, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
+            core1_send_cmd(CORE1_CMD_CONFIG_VSYNC, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] vsync_edge=%s\n", vsync_fall_edge ? "fall" : "rise");
+                printf("[EBD_IPKVM] vsync_edge=%s\n", new_edge ? "fall" : "rise");
             }
         } else if (ch == 'M' || ch == 'm') {
-            capture_mode = (capture_mode == CAPTURE_MODE_TEST_30FPS)
-                               ? CAPTURE_MODE_CONTINUOUS_60FPS
-                               : CAPTURE_MODE_TEST_30FPS;
-            want_frame = false;
-            take_toggle = false;
-            video_capture_stop(&capture);
-            txq_reset();
-            reset_frame_tx_state();
-            test_frame_active = false;
-            test_line = 0;
+            capture_mode_t next_mode = (capture_mode == CAPTURE_MODE_TEST_30FPS)
+                                           ? CAPTURE_MODE_CONTINUOUS_60FPS
+                                           : CAPTURE_MODE_TEST_30FPS;
+            __atomic_store_n(&capture_mode, next_mode, __ATOMIC_RELEASE);
+            store_bool(&want_frame, false);
+            store_bool(&take_toggle, false);
+            txq_offset = 0;
+            core1_send_cmd(CORE1_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
                 printf("[EBD_IPKVM] mode=%s\n",
-                       capture_mode == CAPTURE_MODE_CONTINUOUS_60FPS ? "60fps-continuous"
-                                                                     : "30fps-test");
+                       next_mode == CAPTURE_MODE_CONTINUOUS_60FPS ? "60fps-continuous"
+                                                                 : "30fps-test");
             }
         }
     }
@@ -612,14 +651,10 @@ static inline void service_txq(void) {
     if (!tud_cdc_connected()) return;
 
     bool wrote_any = false;
-    static uint16_t txq_offset = 0;
 
     while (true) {
-        uint16_t r, w;
-        uint32_t s = save_and_disable_interrupts();
-        r = txq_r;
-        w = txq_w;
-        restore_interrupts(s);
+        uint16_t r = txq_load_r();
+        uint16_t w = txq_load_w();
 
         if (r == w) break; /* empty */
 
@@ -629,9 +664,7 @@ static inline void service_txq(void) {
         uint16_t pkt_len = txq[r].len;
         if (pkt_len == 0 || pkt_len > PKT_MAX_BYTES) {
             txq_offset = 0;
-            s = save_and_disable_interrupts();
-            txq_r = (uint16_t)((r + 1) & TXQ_MASK);
-            restore_interrupts(s);
+            txq_store_r((uint16_t)((r + 1) & TXQ_MASK));
             continue;
         }
 
@@ -652,14 +685,90 @@ static inline void service_txq(void) {
 
         if (txq_offset >= pkt_len) {
             txq_offset = 0;
-            s = save_and_disable_interrupts();
-            txq_r = (uint16_t)((r + 1) & TXQ_MASK);
-            restore_interrupts(s);
+            txq_store_r((uint16_t)((r + 1) & TXQ_MASK));
         }
     }
 
     if (wrote_any) {
         tud_cdc_write_flush();
+    }
+}
+
+static void core1_stop_capture_and_reset(void) {
+    store_bool(&want_frame, false);
+    store_bool(&take_toggle, false);
+    store_bool(&test_frame_active, false);
+    test_line = 0;
+    video_capture_stop(&capture);
+    txq_reset();
+    reset_frame_tx_state();
+}
+
+static void core1_handle_command(uint32_t cmd) {
+    switch (CORE1_CMD_CODE(cmd)) {
+    case CORE1_CMD_STOP_CAPTURE:
+        store_bool(&diag_active, false);
+        core1_stop_capture_and_reset();
+        break;
+    case CORE1_CMD_RESET_COUNTERS:
+        store_u16(&frame_id, 0);
+        store_u32(&frames_done, 0);
+        store_u32(&lines_drop, 0);
+        store_u32(&vsync_edges, 0);
+        store_u32(&capture.lines_ok, 0);
+        __atomic_store_n(&capture.frame_overrun, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&capture.frame_short, 0, __ATOMIC_RELEASE);
+        break;
+    case CORE1_CMD_SINGLE_FRAME:
+        if (!capture.capture_enabled) {
+            store_bool(&want_frame, true);
+            video_capture_start(&capture, true);
+        }
+        break;
+    case CORE1_CMD_START_TEST:
+        store_bool(&armed, false);
+        store_bool(&diag_active, false);
+        core1_stop_capture_and_reset();
+        store_bool(&test_frame_active, true);
+        test_line = 0;
+        break;
+    case CORE1_CMD_CONFIG_VSYNC:
+        configure_vsync_irq();
+        break;
+    case CORE1_CMD_DIAG_PREP:
+        store_bool(&armed, false);
+        store_bool(&diag_active, true);
+        core1_stop_capture_and_reset();
+        break;
+    case CORE1_CMD_DIAG_DONE:
+        store_bool(&diag_active, false);
+        break;
+    default:
+        break;
+    }
+}
+
+static void core1_entry(void) {
+    configure_vsync_irq();
+
+    while (true) {
+        while (multicore_fifo_rvalid()) {
+            uint32_t cmd = multicore_fifo_pop_blocking();
+            core1_handle_command(cmd);
+        }
+
+        if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
+            if (video_capture_finalize_frame(&capture, frame_id)) {
+                frame_id++;
+                frames_done++;
+            } else {
+                frame_id++;
+            }
+        }
+
+        service_test_frame();
+        service_frame_tx();
+        tight_loop_contents();
     }
 }
 
@@ -682,9 +791,8 @@ int main(void) {
     gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_disable_pulls(PIN_VSYNC);
     gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
 
-    // Clear any stale IRQ state, then enable callback
-    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL);
-    configure_vsync_irq();
+    // Clear any stale IRQ state, core1 will enable callback
+    gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
 
     // Hand ONLY the pins PIO needs to PIO0
     gpio_set_function(PIN_PIXCLK, GPIO_FUNC_PIO0);
@@ -706,19 +814,12 @@ int main(void) {
     txq_reset();
     reset_frame_tx_state();
 
+    multicore_launch_core1(core1_entry);
+
     absolute_time_t next = make_timeout_time_ms(1000);
     uint32_t last_lines = 0;
 
     while (true) {
-        if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
-            if (video_capture_finalize_frame(&capture, frame_id)) {
-                frame_id++;
-                frames_done++;
-            } else {
-                frame_id++;
-            }
-        }
-
         tud_task();
         poll_cdc_commands();
 
@@ -730,34 +831,35 @@ int main(void) {
             debug_requested = false;
             emit_debug_state();
         }
-        service_test_frame();
-        service_frame_tx();
         service_txq();
 
         /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
-        bool can_report = !capture.capture_enabled && !test_frame_active && txq_is_empty() && !armed;
+        bool can_report = !load_bool(&capture.capture_enabled)
+                          && !load_bool(&test_frame_active)
+                          && txq_is_empty()
+                          && !load_bool(&armed);
         if (can_report) {
             if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
                 next = delayed_by_ms(next, 1000);
 
-                uint32_t l = capture.lines_ok;
+                uint32_t l = load_u32(&capture.lines_ok);
                 uint32_t per_s = l - last_lines;
                 last_lines = l;
 
-                uint32_t ve = vsync_edges;
-                vsync_edges = 0;
+                uint32_t ve = load_u32(&vsync_edges);
+                store_u32(&vsync_edges, 0);
 
                 printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu\n",
-                       armed ? 1 : 0,
-                       capture.capture_enabled ? 1 : 0,
+                       load_bool(&armed) ? 1 : 0,
+                       load_bool(&capture.capture_enabled) ? 1 : 0,
                        ps_on_state ? 1 : 0,
                        (unsigned long)per_s,
                        (unsigned long)l,
-                       (unsigned long)lines_drop,
-                       (unsigned long)usb_drops,
-                       (unsigned long)capture.frame_overrun,
+                       (unsigned long)load_u32(&lines_drop),
+                       (unsigned long)load_u32(&usb_drops),
+                       (unsigned long)__atomic_load_n(&capture.frame_overrun, __ATOMIC_ACQUIRE),
                        (unsigned long)ve,
-                       (unsigned long)frames_done);
+                       (unsigned long)load_u32(&frames_done));
             }
         }
 

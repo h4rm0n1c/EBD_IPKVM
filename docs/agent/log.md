@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-01-31: Split capture/line encoding onto core1 with a lock-free TX queue to keep core0 focused on CDC I/O and command parsing.
 - 2026-01-30: Added a CDC mode toggle for 30 fps test capture versus continuous ~60 fps streaming.
 - 2026-01-30: Defaulted capture mode to continuous ~60 fps streaming for testing.
 - 2026-01-30: Made raw stream mode in `host_recv_frames.py` run continuously and silence periodic debug output.
