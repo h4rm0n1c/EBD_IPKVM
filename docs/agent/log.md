@@ -1,5 +1,7 @@
 # Log (running)
 
+- 2026-02-01: Disabled frame file writes when streaming raw host data so raw capture no longer fills disks with PGM/PBM output.
+- 2026-02-01: Modularized core0 CDC/command handling and core1 capture/encode flow into app_core/video_core with shared stream protocol and core bridge helpers.
 - 2026-01-31: Split capture/line encoding onto core1 with a lock-free TX queue to keep core0 focused on CDC I/O and command parsing.
 - 2026-01-30: Added a CDC mode toggle for 30 fps test capture versus continuous ~60 fps streaming.
 - 2026-01-30: Defaulted capture mode to continuous ~60 fps streaming for testing.
