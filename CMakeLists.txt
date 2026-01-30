@@ -10,8 +10,11 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(EBD_IPKVM
+    src/app_core.c
+    src/core_bridge.c
     src/main.c
     src/video_capture.c
+    src/video_core.c
 )
 
 pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/classic_line.pio)

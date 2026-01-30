@@ -101,8 +101,6 @@ LEN_MASK = 0x7FFF
 MAGIC0 = 0xEB
 MAGIC1 = 0xD1
 
-os.makedirs(OUTDIR, exist_ok=True)
-
 log_out = sys.stdout
 raw_stream = None
 if STREAM_RAW:
@@ -113,6 +111,8 @@ if STREAM_RAW:
         log_out = sys.stderr
     else:
         raw_stream = open(STREAM_RAW_PATH, "wb", buffering=0)
+else:
+    os.makedirs(OUTDIR, exist_ok=True)
 
 def log(message: str) -> None:
     if QUIET:
@@ -279,7 +279,10 @@ mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
 ext = "pbm" if OUTPUT_FORMAT == "pbm" else "pgm"
 stream_note = f", raw_stream={STREAM_RAW_PATH}" if STREAM_RAW else ""
-log(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+if STREAM_RAW:
+    log(f"[host] reading {DEV}, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+else:
+    log(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -355,29 +358,38 @@ try:
                     stats["rle_lines"] += 1
 
             if len(fm) == H:
-                out = os.path.join(OUTDIR, f"frame_{done_count:03d}.{ext}")
                 rows = [fm[i] for i in range(H)]
-                if OUTPUT_FORMAT == "pbm":
-                    write_pbm(out, rows)
-                else:
+                expanded = None
+                if STREAM_RAW or OUTPUT_FORMAT != "pbm":
                     expanded = [bytes_to_row64(row) for row in rows]
-                    write_pgm(out, expanded)
                 if STREAM_RAW:
-                    if OUTPUT_FORMAT == "pbm":
-                        expanded = [bytes_to_row64(row) for row in rows]
                     frame_bytes = b"".join(expanded)
                     raw_stream.write(frame_bytes)
+                else:
+                    out = os.path.join(OUTDIR, f"frame_{done_count:03d}.{ext}")
+                    if OUTPUT_FORMAT == "pbm":
+                        write_pbm(out, rows)
+                    else:
+                        write_pgm(out, expanded)
                 raw_bytes = LINE_BYTES * H
                 payload_bytes = stats["bytes"]
                 ratio = payload_bytes / raw_bytes if raw_bytes else 0.0
                 percent = ratio * 100.0
                 rle_lines = stats["rle_lines"]
-                log(
-                    f"[host] wrote {out} (frame_id={frame_id}, "
-                    f"rle_lines={rle_lines}/{H}, "
-                    f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
-                    f"ratio={percent:.1f}%)"
-                )
+                if STREAM_RAW:
+                    log(
+                        f"[host] streamed frame_id={frame_id} "
+                        f"(rle_lines={rle_lines}/{H}, "
+                        f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
+                        f"ratio={percent:.1f}%)"
+                    )
+                else:
+                    log(
+                        f"[host] wrote {out} (frame_id={frame_id}, "
+                        f"rle_lines={rle_lines}/{H}, "
+                        f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
+                        f"ratio={percent:.1f}%)"
+                    )
                 done_count += 1
                 # free memory for this frame_id
                 del frames[frame_id]
