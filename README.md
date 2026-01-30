@@ -10,7 +10,7 @@ Above output is current project output as of PR #19.
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
 - Lines are queued and streamed over USB CDC in fixed-size packets.
-- Host test helper (`src/host_recv_frames.py`) reconstructs frames into PGM images.
+- Host test helper (`src/host_recv_frames.py`) reconstructs frames into PGM images (default).
 
 ## Signal/pin map (current firmware)
 - `GPIO0` — PIXCLK (input, PIO)
@@ -54,8 +54,16 @@ This test script:
 - Adjust the boot wait with `--boot-wait=SECONDS` if needed.
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
-- Writes PGM files to `frames/` (0/255 grayscale).
+- Writes PGM files to `frames/` (0/255 grayscale) by default; use `--pbm` for packed 1-bpp PBM.
+- Optionally emits a continuous 8-bit raw stream with `--stream-raw` or `--stream-raw=/path/to/pipe`.
 - Edge toggles for testing: send `H` to flip HSYNC edge, `K` to flip PIXCLK edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
+
+Example: stream raw 512×342 8-bit frames to ffplay on stdout:
+
+```bash
+python3 src/host_recv_frames.py /dev/ttyACM0 frames --stream-raw \
+  | ffplay -f rawvideo -pixel_format gray -video_size 512x342 -framerate 60 -
+```
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)
