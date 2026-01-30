@@ -28,6 +28,8 @@ static uint8_t probe_buf[APP_PKT_MAX_BYTES];
 static volatile uint8_t probe_pending = 0;
 static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
+static uint32_t core0_busy_us = 0;
+static uint32_t core0_total_us = 0;
 
 static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
@@ -51,6 +53,17 @@ static inline void reset_diag_counts(void) {
     diag_hsync_edges = 0;
     diag_vsync_edges = 0;
     diag_video_edges = 0;
+}
+
+static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us) {
+    if (busy_us) {
+        *busy_us = core0_busy_us;
+        core0_busy_us = 0;
+    }
+    if (total_us) {
+        *total_us = core0_total_us;
+        core0_total_us = 0;
+    }
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -348,6 +361,7 @@ void app_core_init(const app_core_config_t *cfg) {
 }
 
 void app_core_poll(void) {
+    uint32_t loop_start = time_us_32();
     tud_task();
     poll_cdc_commands();
 
@@ -371,8 +385,16 @@ void app_core_poll(void) {
             status_last_lines = l;
 
             uint32_t ve = video_core_take_vsync_edges();
+            uint32_t core1_busy = 0;
+            uint32_t core1_total = 0;
+            uint32_t core0_busy = 0;
+            uint32_t core0_total = 0;
+            video_core_take_core1_utilization(&core1_busy, &core1_total);
+            take_core0_utilization(&core0_busy, &core0_total);
+            uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
+            uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
-            printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu\n",
+            printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu core0_util=%lu%% core1_util=%lu%%\n",
                    video_core_is_armed() ? 1 : 0,
                    video_core_capture_enabled() ? 1 : 0,
                    ps_on_state ? 1 : 0,
@@ -382,9 +404,15 @@ void app_core_poll(void) {
                    (unsigned long)usb_drops,
                    (unsigned long)video_core_get_frame_overrun(),
                    (unsigned long)ve,
-                   (unsigned long)video_core_get_frames_done());
+                   (unsigned long)video_core_get_frames_done(),
+                   (unsigned long)core0_pct,
+                   (unsigned long)core1_pct);
         }
     }
 
+    uint32_t busy_end = time_us_32();
     tight_loop_contents();
+    uint32_t loop_end = time_us_32();
+    core0_busy_us += (uint32_t)(busy_end - loop_start);
+    core0_total_us += (uint32_t)(loop_end - loop_start);
 }

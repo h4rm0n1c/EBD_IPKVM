@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-01: Added core0/core1 utilization counters to the firmware status output to support time-budgeting work on the video core.
 - 2026-02-01: Disabled frame file writes when streaming raw host data so raw capture no longer fills disks with PGM/PBM output.
 - 2026-02-01: Modularized core0 CDC/command handling and core1 capture/encode flow into app_core/video_core with shared stream protocol and core bridge helpers.
 - 2026-01-31: Split capture/line encoding onto core1 with a lock-free TX queue to keep core0 focused on CDC I/O and command parsing.

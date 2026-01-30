@@ -50,6 +50,7 @@ uint32_t video_core_get_lines_ok(void);
 uint32_t video_core_get_frame_overrun(void);
 uint32_t video_core_get_frame_short(void);
 uint32_t video_core_take_vsync_edges(void);
+void video_core_take_core1_utilization(uint32_t *busy_us, uint32_t *total_us);
 
 bool video_core_txq_is_empty(void);
 bool video_core_txq_peek(const uint8_t **out_data, uint16_t *out_len);

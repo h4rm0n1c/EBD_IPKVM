@@ -31,6 +31,8 @@ static volatile bool test_frame_active = false;
 static volatile bool diag_active = false;
 static volatile uint32_t last_vsync_us = 0;
 static volatile bool tx_rle_enabled = true;
+static volatile uint32_t core1_busy_us = 0;
+static volatile uint32_t core1_total_us = 0;
 
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[CAP_BYTES_PER_LINE];
@@ -390,6 +392,7 @@ static void core1_entry(void) {
     configure_vsync_irq();
 
     while (true) {
+        uint32_t loop_start = time_us_32();
         uint32_t cmd = 0;
         while (core_bridge_try_pop(&cmd)) {
             core1_handle_command(cmd);
@@ -406,7 +409,14 @@ static void core1_entry(void) {
 
         service_test_frame();
         service_frame_tx();
+        uint32_t busy_end = time_us_32();
         tight_loop_contents();
+        uint32_t loop_end = time_us_32();
+
+        uint32_t busy_delta = (uint32_t)(busy_end - loop_start);
+        uint32_t total_delta = (uint32_t)(loop_end - loop_start);
+        __atomic_fetch_add(&core1_busy_us, busy_delta, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&core1_total_us, total_delta, __ATOMIC_RELAXED);
     }
 }
 
@@ -430,6 +440,8 @@ void video_core_init(const video_core_config_t *cfg) {
     store_u32(&frames_done, 0);
     store_u32(&vsync_edges, 0);
     store_u32(&last_vsync_us, 0);
+    store_u32(&core1_busy_us, 0);
+    store_u32(&core1_total_us, 0);
     test_line = 0;
 
     configure_pio_program();
@@ -520,6 +532,15 @@ uint32_t video_core_get_frame_short(void) {
 
 uint32_t video_core_take_vsync_edges(void) {
     return __atomic_exchange_n(&vsync_edges, 0, __ATOMIC_ACQ_REL);
+}
+
+void video_core_take_core1_utilization(uint32_t *busy_us, uint32_t *total_us) {
+    if (busy_us) {
+        *busy_us = __atomic_exchange_n(&core1_busy_us, 0, __ATOMIC_ACQ_REL);
+    }
+    if (total_us) {
+        *total_us = __atomic_exchange_n(&core1_total_us, 0, __ATOMIC_ACQ_REL);
+    }
 }
 
 bool video_core_txq_is_empty(void) {
