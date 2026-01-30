@@ -15,6 +15,8 @@ RLE_MODE = True
 OUTPUT_FORMAT = "pgm"
 STREAM_RAW = False
 STREAM_RAW_PATH = "-"
+QUIET = False
+QUIET_SET = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -61,6 +63,12 @@ for arg in sys.argv[1:]:
     elif arg.startswith("--stream-raw="):
         STREAM_RAW = True
         STREAM_RAW_PATH = arg.split("=", 1)[1]
+    elif arg == "--quiet":
+        QUIET = True
+        QUIET_SET = True
+    elif arg == "--verbose":
+        QUIET = False
+        QUIET_SET = True
     elif arg.startswith("--force-after="):
         value = arg.split("=", 1)[1]
         try:
@@ -80,7 +88,7 @@ for arg in sys.argv[1:]:
 
 DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = 100
+MAX_FRAMES = None if STREAM_RAW else 100
 
 W = 512
 H = 342
@@ -98,6 +106,8 @@ os.makedirs(OUTDIR, exist_ok=True)
 log_out = sys.stdout
 raw_stream = None
 if STREAM_RAW:
+    if not QUIET_SET:
+        QUIET = True
     if STREAM_RAW_PATH in ("", "-"):
         raw_stream = sys.stdout.buffer
         log_out = sys.stderr
@@ -105,6 +115,8 @@ if STREAM_RAW:
         raw_stream = open(STREAM_RAW_PATH, "wb", buffering=0)
 
 def log(message: str) -> None:
+    if QUIET:
+        return
     print(message, file=log_out)
 
 def set_raw_and_dtr(fd: int) -> None:
@@ -282,7 +294,9 @@ force_sent = FORCE_START or TEST_START
 test_sent = TEST_START
 
 try:
-    while done_count < MAX_FRAMES:
+    while True:
+        if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
+            break
         r, _, _ = select.select([fd], [], [], 0.25)
         if not r:
             now = time.time()
@@ -368,7 +382,7 @@ try:
                 # free memory for this frame_id
                 del frames[frame_id]
                 del frame_stats[frame_id]
-                if done_count >= MAX_FRAMES:
+                if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
                     break
 
         now = time.time()

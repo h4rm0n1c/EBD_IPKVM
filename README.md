@@ -55,7 +55,8 @@ This test script:
 - Use `--diag-secs=SECONDS` to briefly print ASCII status before arming capture.
 - Reassembles lines into full 512×342 frames.
 - Writes PGM files to `frames/` (0/255 grayscale) by default; use `--pbm` for packed 1-bpp PBM.
-- Optionally emits a continuous 8-bit raw stream with `--stream-raw` or `--stream-raw=/path/to/pipe`.
+- Optionally emits a continuous 8-bit raw stream with `--stream-raw` or `--stream-raw=/path/to/pipe` (runs until you stop it).
+- Firmware defaults to continuous ~60 fps capture; send `M` to toggle to the ~30 fps test cadence.
 - Edge toggles for testing: send `H` to flip HSYNC edge, `K` to flip PIXCLK edge, `V` to flip VSYNC edge (capture stops/clears when toggled).
 
 Example: stream raw 512×342 8-bit frames to ffplay on stdout:
