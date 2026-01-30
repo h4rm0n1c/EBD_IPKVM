@@ -231,11 +231,13 @@ static void emit_debug_state(void) {
                     (unsigned long)video_core_get_frame_short());
 }
 
-static void poll_cdc_commands(void) {
+static bool poll_cdc_commands(void) {
     // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
+    bool did_work = false;
     while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
         if (tud_cdc_n_read(CDC_CTRL, &ch, 1) != 1) break;
+        did_work = true;
 
         if (ch == 'S' || ch == 's') {
             video_core_set_armed(true);
@@ -348,10 +350,11 @@ static void poll_cdc_commands(void) {
             }
         }
     }
+    return did_work;
 }
 
-static inline void service_txq(void) {
-    if (!tud_cdc_n_connected(CDC_STREAM)) return;
+static inline bool service_txq(void) {
+    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
 
     bool wrote_any = false;
 
@@ -395,6 +398,7 @@ static inline void service_txq(void) {
     if (wrote_any) {
         tud_cdc_n_write_flush(CDC_STREAM);
     }
+    return wrote_any;
 }
 
 void app_core_init(const app_core_config_t *cfg) {
@@ -414,18 +418,20 @@ void app_core_init(const app_core_config_t *cfg) {
 void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
-    uint32_t active_start = time_us_32();
     tud_task();
-    poll_cdc_commands();
-    active_us += (uint32_t)(time_us_32() - active_start);
+    uint32_t active_start = time_us_32();
+    bool did_work = poll_cdc_commands();
+    if (did_work) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
 
     /* Send queued binary packets from thread context (NOT IRQ). */
     if (probe_pending) {
         active_start = time_us_32();
         if (try_send_probe_packet()) {
             probe_pending = 0;
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
-        active_us += (uint32_t)(time_us_32() - active_start);
     }
     if (debug_requested && can_emit_text()) {
         active_start = time_us_32();
@@ -434,8 +440,9 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
     active_start = time_us_32();
-    service_txq();
-    active_us += (uint32_t)(time_us_32() - active_start);
+    if (service_txq()) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
 
     if (can_emit_text()) {
         if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {

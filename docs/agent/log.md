@@ -2,6 +2,7 @@
 
 - 2026-02-01: Added core0/core1 utilization counters to the firmware status output to support time-budgeting work on the video core.
 - 2026-02-01: Refined core0/core1 utilization counters to track active USB/capture/TX queue work time instead of full loop occupancy.
+- 2026-02-01: Count utilization only when USB/capture/TX routines perform work, avoiding idle-loop inflation.
 - 2026-02-01: Split USB CDC into stream (CDC0) and control/status (CDC1) interfaces so status traffic no longer shares the video stream.
 - 2026-02-01: Updated host Python tooling to target CDC0 for the stream and CDC1 for control commands by default.
 - 2026-02-01: Documented how to identify CDC0/CDC1 in Linux via interface strings and /dev/serial/by-id symlinks.
