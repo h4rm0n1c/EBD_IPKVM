@@ -75,25 +75,13 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
         return;
     }
 
-    size_t offset = 0;
-    while (offset < len) {
-        int avail = tud_cdc_n_write_available(CDC_CTRL);
-        if (avail <= 0) {
-            break;
-        }
-        size_t to_write = (size_t)avail;
-        size_t remain = len - offset;
-        if (to_write > remain) {
-            to_write = remain;
-        }
-        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &buf[offset], to_write);
-        if (wrote == 0) {
-            break;
-        }
-        offset += wrote;
+    int avail = tud_cdc_n_write_available(CDC_CTRL);
+    if (avail < (int)len) {
+        return;
     }
 
-    if (offset > 0) {
+    uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf, len);
+    if (wrote == len) {
         tud_cdc_n_write_flush(CDC_CTRL);
     }
 }
