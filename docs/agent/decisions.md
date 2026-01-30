@@ -1,6 +1,6 @@
 # Decisions (running)
 
-- 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps/100-frame test capture and continuous 60 fps streaming, bypassing the 100-frame cap in continuous mode.
+- 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.
 - 2026-01-30: Default capture mode to continuous 60 fps streaming to prioritize long-form testing runs.
 - 2026-01-30: Default host capture output to PBM for compact 1-bpp frames, keeping PGM as an opt-in option for 8-bit output.
 - 2026-01-30: Add an RLE encoding option for scanline payloads using bit 15 of `payload_len` as a flag, plus CDC commands to enable/disable it while retaining raw payload compatibility; default to RLE-on for testing.

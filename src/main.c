@@ -52,7 +52,6 @@ static volatile uint32_t usb_drops = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
-static volatile bool done_latched = false;
 static volatile bool ps_on_state = false;
 static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
@@ -141,12 +140,8 @@ static inline bool txq_has_space(void) {
     return ((uint16_t)((w + 1) & TXQ_MASK)) != r;
 }
 
-static inline bool capture_gate_is_open(void) {
-    return !armed || capture_mode == CAPTURE_MODE_CONTINUOUS_60FPS || frames_done >= 100;
-}
-
 static inline bool can_emit_text(void) {
-    return !capture.capture_enabled && !test_frame_active && txq_is_empty() && capture_gate_is_open();
+    return !capture.capture_enabled && !test_frame_active && txq_is_empty() && !armed;
 }
 
 static size_t rle_encode_line(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap) {
@@ -318,7 +313,6 @@ static void gpio_irq(uint gpio, uint32_t events) {
 
     bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
     if (capture_mode == CAPTURE_MODE_TEST_30FPS) {
-        if (frames_done >= 100) return;
         take_toggle = !take_toggle;          // every other VSYNC => ~30fps
         want_frame = take_toggle && !tx_busy;
     } else {
@@ -504,7 +498,6 @@ static void poll_cdc_commands(void) {
             vsync_edges = 0;
             take_toggle = false;
             want_frame = false;
-            done_latched = false;
             video_capture_stop(&capture);
             txq_reset();
             reset_frame_tx_state();
@@ -742,7 +735,7 @@ int main(void) {
         service_txq();
 
         /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
-        bool can_report = !capture.capture_enabled && !test_frame_active && txq_is_empty() && capture_gate_is_open();
+        bool can_report = !capture.capture_enabled && !test_frame_active && txq_is_empty() && !armed;
         if (can_report) {
             if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
                 next = delayed_by_ms(next, 1000);
@@ -754,7 +747,7 @@ int main(void) {
                 uint32_t ve = vsync_edges;
                 vsync_edges = 0;
 
-                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu%s\n",
+                printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu\n",
                        armed ? 1 : 0,
                        capture.capture_enabled ? 1 : 0,
                        ps_on_state ? 1 : 0,
@@ -764,13 +757,7 @@ int main(void) {
                        (unsigned long)usb_drops,
                        (unsigned long)capture.frame_overrun,
                        (unsigned long)ve,
-                       (unsigned long)frames_done,
-                       capture_mode == CAPTURE_MODE_TEST_30FPS ? "/100" : "");
-            }
-
-            if (capture_mode == CAPTURE_MODE_TEST_30FPS && frames_done >= 100 && !done_latched) {
-                printf("[EBD_IPKVM] done (100 frames). Send 'R' then 'S' to run again.\n");
-                done_latched = true;
+                       (unsigned long)frames_done);
             }
         }
 

@@ -19,7 +19,7 @@ Macintosh Classic KVM:
 - Each line waits for the selected HSYNC edge, skips 157 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
   - Default continuous mode streams every VSYNC (~60 fps) and runs until stopped (toggle with `M`).
-  - Test mode alternates frames on each VSYNC to target ~30 fps and stops after 100 transmitted frames until reset.
+  - Test mode alternates frames on each VSYNC to target ~30 fps.
 - USB CDC streaming:
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
