@@ -18,17 +18,19 @@ Macintosh Classic KVM:
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
 - Each line waits for the selected HSYNC edge, skips 157 PIXCLK cycles, then samples 512 bits.
 - Throughput controls:
-  - Alternates frames on each VSYNC to target ~30 fps.
-  - Stops after 100 transmitted frames until reset.
+  - Default continuous mode streams every VSYNC (~60 fps) and runs until stopped (toggle with `M`).
+  - Test mode alternates frames on each VSYNC to target ~30 fps and stops after 100 transmitted frames until reset.
 - USB CDC streaming:
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
   - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
+  - Mode toggle: `M` switches between test and continuous capture cadence.
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 
 ## Host tooling
-- `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PGM frames.
-- Script expects 512×342 frames and writes `frames/frame_###.pgm` by default.
+- `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PBM frames (use `--pgm` for 8-bit output).
+- Script expects 512×342 frames and writes `frames/frame_###.pbm` by default.
 - `scripts/cdc_cmd.py` sends CDC command bytes (for example, `I` or `G`) and prints ASCII responses.
 - `scripts/ab_capture.py` runs two capture passes, toggling VIDEO inversion between runs (requires firmware support for the `O` command).
+- GIF helper (PBM/PGM frames): `ffmpeg -framerate 30 -i frame_%03d.pbm -vf "palettegen" palette.png` then `ffmpeg -framerate 30 -i frame_%03d.pbm -i palette.png -lavfi paletteuse output.gif` (swap `.pgm` if using `--pgm`).

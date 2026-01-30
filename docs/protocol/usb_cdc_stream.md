@@ -42,6 +42,7 @@ The firmware is host-controlled over the same CDC channel:
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
 | `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `M` | Toggle capture cadence between ~30 fps test mode (100-frame cap) and continuous ~60 fps streaming. |
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
@@ -53,7 +54,8 @@ The firmware is host-controlled over the same CDC channel:
   - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
-- Firmware toggles `want_frame` every VSYNC to reduce output to ~30 fps.
+- Default mode streams every VSYNC (~60 fps) and removes the 100-frame stop cap.
+- Test mode toggles `want_frame` every VSYNC to reduce output to ~30 fps.
 - Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC arms the next capture window; the current capture finishes when the fixed-length DMA transfer completes (not on the VSYNC edge).
@@ -62,7 +64,7 @@ The firmware is host-controlled over the same CDC channel:
 - PIXCLK is phase-locked after HSYNC so the first capture edge is deterministic (avoids 1-pixel phase slips); capture samples on PIXCLK rising edges with a small post-edge delay before sampling.
 - After the 157-PIXCLK horizontal skip (XOFF), the PIO waits an additional 18 PIXCLK cycles before sampling to shift the active capture window away from the left blanking porch.
 - Capture DMA is sized for `CAP_MAX_LINES` (YOFF+ACTIVE) and runs to completion; payloads normally use `CAP_YOFF_LINES + line_id` when indexing into the captured buffer, but if the captured frame is short the firmware falls back to the last `CAP_ACTIVE_H` lines.
-- Streaming stops after 100 complete frames unless reset.
+- In test mode, streaming stops after 100 complete frames unless reset; continuous mode runs until stopped (default).
 
 ## Error handling
 - If the TX queue is full, line packets are dropped and `lines_drop` increments.

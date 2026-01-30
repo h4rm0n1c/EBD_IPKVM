@@ -1,5 +1,9 @@
 # Log (running)
 
+- 2026-01-30: Added a CDC mode toggle for 30 fps/100-frame test capture versus continuous ~60 fps streaming, removing the 100-frame cap in continuous mode.
+- 2026-01-30: Defaulted capture mode to continuous ~60 fps streaming for testing.
+- 2026-01-30: Switched host test output to compact PBM by default with a --pgm fallback for 8-bit frames.
+- 2026-01-30: Documented ffmpeg palette generation and GIF assembly commands for host frame captures.
 - 2026-01-30: Added optional RLE packet encoding with a CDC toggle and updated host decoding to handle variable-length line payloads (default RLE on).
 - 2026-01-30: Added per-frame host-side compression stats (payload vs raw bytes, RLE line counts) to visualize RLE effectiveness.
 - 2026-01-30: Switched host compression ratio readout to a percentage for easier scanning.

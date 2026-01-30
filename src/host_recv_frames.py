@@ -12,6 +12,7 @@ TEST_AFTER = 0.0
 TEST_START = False
 PROBE_ONLY = False
 RLE_MODE = True
+OUTPUT_FORMAT = "pbm"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -48,6 +49,10 @@ for arg in sys.argv[1:]:
         FORCE_AFTER = 0.0
     elif arg == "--no-test":
         TEST_AFTER = 0.0
+    elif arg == "--pgm":
+        OUTPUT_FORMAT = "pgm"
+    elif arg == "--pbm":
+        OUTPUT_FORMAT = "pbm"
     elif arg.startswith("--force-after="):
         value = arg.split("=", 1)[1]
         try:
@@ -140,6 +145,12 @@ def write_pgm(path: str, rows: list[bytes]) -> None:
         f.write(f"P5\n{W} {H}\n255\n".encode("ascii"))
         for r in rows:
             f.write(r)
+
+def write_pbm(path: str, rows: list[bytes]) -> None:
+    with open(path, "wb") as f:
+        f.write(f"P4\n{W} {H}\n".encode("ascii"))
+        for r in rows:
+            f.write(bytes((~b) & 0xFF for b in r))
 
 def pop_one_packet(buf: bytearray):
     # find magic
@@ -234,7 +245,8 @@ else:
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.pgm ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
+ext = "pbm" if OUTPUT_FORMAT == "pbm" else "pgm"
+print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -293,24 +305,28 @@ try:
                 decoded = decode_rle_line(payload)
                 if decoded is None:
                     continue
-                row = bytes_to_row64(decoded)
+                packed = decoded
             else:
                 if payload_len != LINE_BYTES:
                     continue
-                row = bytes_to_row64(payload)
+                packed = payload
 
             fm = frames.setdefault(frame_id, {})
             stats = frame_stats.setdefault(frame_id, {"bytes": 0, "rle_lines": 0})
             if line_id not in fm:
-                fm[line_id] = row
+                fm[line_id] = packed
                 stats["bytes"] += payload_len
                 if is_rle:
                     stats["rle_lines"] += 1
 
             if len(fm) == H:
-                out = os.path.join(OUTDIR, f"frame_{done_count:03d}.pgm")
+                out = os.path.join(OUTDIR, f"frame_{done_count:03d}.{ext}")
                 rows = [fm[i] for i in range(H)]
-                write_pgm(out, rows)
+                if OUTPUT_FORMAT == "pbm":
+                    write_pbm(out, rows)
+                else:
+                    expanded = [bytes_to_row64(row) for row in rows]
+                    write_pgm(out, expanded)
                 raw_bytes = LINE_BYTES * H
                 payload_bytes = stats["bytes"]
                 ratio = payload_bytes / raw_bytes if raw_bytes else 0.0
