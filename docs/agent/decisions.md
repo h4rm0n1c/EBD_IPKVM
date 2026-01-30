@@ -1,6 +1,9 @@
 # Decisions (running)
 
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
+- 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
+- 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
+- 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
 - 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.
 - 2026-01-30: Default capture mode to continuous 60 fps streaming to prioritize long-form testing runs.
 - 2026-01-30: Default host capture output to PBM for compact 1-bpp frames, keeping PGM as an opt-in option for 8-bit output.

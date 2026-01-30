@@ -17,6 +17,8 @@ STREAM_RAW = False
 STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
+STREAM_DEV = "/dev/ttyACM0"
+CTRL_DEV = "/dev/ttyACM1"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -69,6 +71,10 @@ for arg in sys.argv[1:]:
     elif arg == "--verbose":
         QUIET = False
         QUIET_SET = True
+    elif arg.startswith("--stream-device="):
+        STREAM_DEV = arg.split("=", 1)[1]
+    elif arg.startswith("--ctrl-device="):
+        CTRL_DEV = arg.split("=", 1)[1]
     elif arg.startswith("--force-after="):
         value = arg.split("=", 1)[1]
         try:
@@ -86,7 +92,8 @@ for arg in sys.argv[1:]:
     else:
         ARGS.append(arg)
 
-DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
+if len(ARGS) > 0:
+    STREAM_DEV = ARGS[0]
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
 MAX_FRAMES = None if STREAM_RAW else 100
 
@@ -206,14 +213,16 @@ def pop_one_packet(buf: bytearray):
     del buf[:total_len]
     return pkt
 
-fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY)
-set_raw_and_dtr(fd)
+stream_fd = os.open(STREAM_DEV, os.O_RDWR | os.O_NOCTTY)
+ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+set_raw_and_dtr(stream_fd)
+set_raw_and_dtr(ctrl_fd)
 
 if SEND_BOOT:
-    os.write(fd, b"P")
+    os.write(ctrl_fd, b"P")
 
 if SEND_STOP:
-    os.write(fd, b"X")
+    os.write(ctrl_fd, b"X")
     time.sleep(0.05)
 
 if DIAG_SECS > 0:
@@ -221,10 +230,10 @@ if DIAG_SECS > 0:
     log(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
     diag_buf = bytearray()
     while time.time() < end_diag:
-        r, _, _ = select.select([fd], [], [], 0.25)
+        r, _, _ = select.select([ctrl_fd], [], [], 0.25)
         if not r:
             continue
-        chunk = os.read(fd, 1024)
+        chunk = os.read(ctrl_fd, 1024)
         if not chunk:
             continue
         diag_buf.extend(chunk)
@@ -244,45 +253,45 @@ if BOOT_WAIT > 0:
 
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
-    os.write(fd, b"R")
+    os.write(ctrl_fd, b"R")
     time.sleep(0.05)
 if RLE_MODE is True:
-    os.write(fd, b"E")
+    os.write(ctrl_fd, b"E")
     time.sleep(0.01)
 elif RLE_MODE is False:
-    os.write(fd, b"e")
+    os.write(ctrl_fd, b"e")
     time.sleep(0.01)
 if PROBE_ONLY:
-    os.write(fd, b"U")
+    os.write(ctrl_fd, b"U")
     time.sleep(0.2)
     probe_deadline = time.time() + 1.0
     probe_bytes = 0
     while time.time() < probe_deadline:
-        r, _, _ = select.select([fd], [], [], 0.25)
+        r, _, _ = select.select([stream_fd], [], [], 0.25)
         if not r:
             continue
-        chunk = os.read(fd, 8192)
+        chunk = os.read(stream_fd, 8192)
         if chunk:
             probe_bytes += len(chunk)
     print(f"[host] probe bytes received: {probe_bytes}")
     sys.exit(0)
 if TEST_START:
-    os.write(fd, b"T")
+    os.write(ctrl_fd, b"T")
     FORCE_AFTER = 0.0
     FORCE_START = False
 elif FORCE_START:
-    os.write(fd, b"F")
+    os.write(ctrl_fd, b"F")
 else:
-    os.write(fd, b"S")
+    os.write(ctrl_fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
 ext = "pbm" if OUTPUT_FORMAT == "pbm" else "pgm"
 stream_note = f", raw_stream={STREAM_RAW_PATH}" if STREAM_RAW else ""
 if STREAM_RAW:
-    log(f"[host] reading {DEV}, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+    log(f"[host] reading {STREAM_DEV}, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 else:
-    log(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+    log(f"[host] reading {STREAM_DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -300,15 +309,15 @@ try:
     while True:
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
-        r, _, _ = select.select([fd], [], [], 0.25)
+        r, _, _ = select.select([stream_fd], [], [], 0.25)
         if not r:
             now = time.time()
             if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
-                os.write(fd, b"F")
+                os.write(ctrl_fd, b"F")
                 force_sent = True
                 log(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
             if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
-                os.write(fd, b"T")
+                os.write(ctrl_fd, b"T")
                 test_sent = True
                 log(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:
@@ -316,7 +325,7 @@ try:
                 last_rx = now
             continue
 
-        chunk = os.read(fd, 8192)
+        chunk = os.read(stream_fd, 8192)
         if not chunk:
             time.sleep(0.01)
             continue
@@ -409,13 +418,15 @@ try:
 finally:
     if SEND_STOP:
         try:
-            os.write(fd, b"X")
+            os.write(ctrl_fd, b"X")
         except OSError:
             pass
     try:
-        os.write(fd, b"p")
+        os.write(ctrl_fd, b"p")
     except OSError:
         pass
+    os.close(stream_fd)
+    os.close(ctrl_fd)
 
 if raw_stream and raw_stream is not sys.stdout.buffer:
     raw_stream.close()

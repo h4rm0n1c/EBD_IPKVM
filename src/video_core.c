@@ -31,6 +31,8 @@ static volatile bool test_frame_active = false;
 static volatile bool diag_active = false;
 static volatile uint32_t last_vsync_us = 0;
 static volatile bool tx_rle_enabled = true;
+static volatile uint32_t core1_busy_us = 0;
+static volatile uint32_t core1_total_us = 0;
 
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[CAP_BYTES_PER_LINE];
@@ -256,9 +258,10 @@ static void gpio_irq(uint gpio, uint32_t events) {
     service_vsync(time_us_32());
 }
 
-static void service_test_frame(void) {
-    if (!load_bool(&test_frame_active) || load_bool(&capture.capture_enabled)) return;
+static bool service_test_frame(void) {
+    if (!load_bool(&test_frame_active) || load_bool(&capture.capture_enabled)) return false;
 
+    bool did_work = false;
     while (load_bool(&test_frame_active)) {
         uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
         memset(test_line_buf, fill, CAP_BYTES_PER_LINE);
@@ -266,6 +269,7 @@ static void service_test_frame(void) {
             break;
         }
 
+        did_work = true;
         test_line++;
         if (test_line >= CAP_ACTIVE_H) {
             store_bool(&test_frame_active, false);
@@ -275,9 +279,11 @@ static void service_test_frame(void) {
             break;
         }
     }
+    return did_work;
 }
 
-static void service_frame_tx(void) {
+static bool service_frame_tx(void) {
+    bool did_work = false;
     if (!frame_tx_buf) {
         uint32_t (*buf)[CAP_WORDS_PER_LINE] = NULL;
         uint16_t fid = 0;
@@ -293,16 +299,17 @@ static void service_frame_tx(void) {
                 frame_tx_start = (lines >= CAP_ACTIVE_H) ? (uint16_t)(lines - CAP_ACTIVE_H) : 0;
             }
             video_capture_set_inflight(&capture, buf);
+            did_work = true;
         }
     }
 
-    if (!frame_tx_buf) return;
+    if (!frame_tx_buf) return did_work;
 
     if (frame_tx_lines < CAP_ACTIVE_H) {
         capture.frame_short++;
         frame_tx_buf = NULL;
         video_capture_set_inflight(&capture, NULL);
-        return;
+        return true;
     }
 
     while (frame_tx_line < CAP_ACTIVE_H) {
@@ -313,7 +320,7 @@ static void service_frame_tx(void) {
             capture.frame_short++;
             frame_tx_buf = NULL;
             video_capture_set_inflight(&capture, NULL);
-            return;
+            return true;
         }
         memcpy(frame_tx_line_buf, frame_tx_buf[src_line], sizeof(frame_tx_line_buf));
         reorder_line_words(frame_tx_line_buf);
@@ -323,6 +330,7 @@ static void service_frame_tx(void) {
             break;
         }
 
+        did_work = true;
         frame_tx_line++;
     }
 
@@ -330,6 +338,7 @@ static void service_frame_tx(void) {
         frame_tx_buf = NULL;
         video_capture_set_inflight(&capture, NULL);
     }
+    return did_work;
 }
 
 static void core1_stop_capture_and_reset(void) {
@@ -390,23 +399,40 @@ static void core1_entry(void) {
     configure_vsync_irq();
 
     while (true) {
+        uint32_t loop_start = time_us_32();
+        uint32_t active_us = 0;
         uint32_t cmd = 0;
         while (core_bridge_try_pop(&cmd)) {
             core1_handle_command(cmd);
         }
 
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
+            uint32_t active_start = time_us_32();
             if (video_capture_finalize_frame(&capture, frame_id)) {
                 frame_id++;
                 frames_done++;
             } else {
                 frame_id++;
             }
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
-        service_test_frame();
-        service_frame_tx();
+        uint32_t active_start = time_us_32();
+        if (service_test_frame()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
+        active_start = time_us_32();
+        if (service_frame_tx()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
         tight_loop_contents();
+        uint32_t loop_end = time_us_32();
+
+        uint32_t total_delta = (uint32_t)(loop_end - loop_start);
+        __atomic_fetch_add(&core1_busy_us, active_us, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&core1_total_us, total_delta, __ATOMIC_RELAXED);
     }
 }
 
@@ -430,6 +456,8 @@ void video_core_init(const video_core_config_t *cfg) {
     store_u32(&frames_done, 0);
     store_u32(&vsync_edges, 0);
     store_u32(&last_vsync_us, 0);
+    store_u32(&core1_busy_us, 0);
+    store_u32(&core1_total_us, 0);
     test_line = 0;
 
     configure_pio_program();
@@ -520,6 +548,15 @@ uint32_t video_core_get_frame_short(void) {
 
 uint32_t video_core_take_vsync_edges(void) {
     return __atomic_exchange_n(&vsync_edges, 0, __ATOMIC_ACQ_REL);
+}
+
+void video_core_take_core1_utilization(uint32_t *busy_us, uint32_t *total_us) {
+    if (busy_us) {
+        *busy_us = __atomic_exchange_n(&core1_busy_us, 0, __ATOMIC_ACQ_REL);
+    }
+    if (total_us) {
+        *total_us = __atomic_exchange_n(&core1_total_us, 0, __ATOMIC_ACQ_REL);
+    }
 }
 
 bool video_core_txq_is_empty(void) {

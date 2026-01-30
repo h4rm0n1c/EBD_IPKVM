@@ -1,4 +1,5 @@
 #include "pico/stdlib.h"
+#include "tusb.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
@@ -16,6 +17,7 @@
 
 int main(void) {
     stdio_init_all();
+    tud_init(0);
     sleep_ms(1200);
 
     // SIO GPIO inputs + pulls (sane when Mac is off)

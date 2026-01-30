@@ -1,8 +1,22 @@
 # USB CDC line stream protocol
 
-The firmware streams captured Macintosh Classic video as fixed-size packets over
-USB CDC. Each packet contains a single scanline of 512 pixels (1 bpp) and a
-compact header for framing.
+The firmware exposes two USB CDC interfaces:
+
+- CDC0: video stream (binary packets).
+- CDC1: control + status (ASCII commands and logs).
+
+Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
+Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
+header for framing.
+
+### Identifying CDC0 vs CDC1 on Linux
+The USB interface strings are set to `EBD_IPKVM stream` and `EBD_IPKVM control`,
+which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
+also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
+number:
+
+- `...-if00` → CDC0 (stream)
+- `...-if02` → CDC1 (control)
 
 ## Packet layout (variable length)
 
@@ -24,7 +38,7 @@ compact header for framing.
 - Firmware may emit raw packets even when RLE mode is enabled if the RLE payload is not smaller than 64 bytes.
 
 ## Host control commands
-The firmware is host-controlled over the same CDC channel:
+The firmware is host-controlled over CDC1 (control channel):
 
 | Command | Action |
 | ------- | ------ |
@@ -46,8 +60,14 @@ The firmware is host-controlled over the same CDC channel:
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
+Status lines (including utilization counters) are emitted on CDC1 and can be
+read without interfering with the CDC0 video stream. Utilization percentages
+(`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
+work (only when those operations perform work), rather than total loop
+occupancy.
+
 ### GPIO diagnostic output (`G`)
-- Only emitted while capture is stopped and the TX queue is empty.
+- Emitted on CDC1 (control channel).
 - Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
 - Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:
