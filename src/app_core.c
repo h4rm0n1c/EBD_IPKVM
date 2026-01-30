@@ -1,5 +1,6 @@
 #include "app_core.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,6 +18,9 @@
 #define APP_PKT_MAX_PAYLOAD (CAP_BYTES_PER_LINE * 2)
 #define APP_PKT_MAX_BYTES (STREAM_HEADER_BYTES + APP_PKT_MAX_PAYLOAD)
 #define APP_PKT_RAW_BYTES (STREAM_HEADER_BYTES + CAP_BYTES_PER_LINE)
+
+#define CDC_STREAM 0
+#define CDC_CTRL 1
 
 static app_core_config_t app_cfg;
 
@@ -45,7 +49,7 @@ static inline void set_ps_on(bool on) {
 }
 
 static inline bool can_emit_text(void) {
-    return video_core_can_emit_text();
+    return tud_cdc_n_connected(CDC_CTRL);
 }
 
 static inline void reset_diag_counts(void) {
@@ -64,6 +68,50 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
         *total_us = core0_total_us;
         core0_total_us = 0;
     }
+}
+
+static void cdc_ctrl_write(const char *buf, size_t len) {
+    if (!tud_cdc_n_connected(CDC_CTRL) || len == 0) {
+        return;
+    }
+
+    size_t offset = 0;
+    while (offset < len) {
+        int avail = tud_cdc_n_write_available(CDC_CTRL);
+        if (avail <= 0) {
+            break;
+        }
+        size_t to_write = (size_t)avail;
+        size_t remain = len - offset;
+        if (to_write > remain) {
+            to_write = remain;
+        }
+        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &buf[offset], to_write);
+        if (wrote == 0) {
+            break;
+        }
+        offset += wrote;
+    }
+
+    if (offset > 0) {
+        tud_cdc_n_write_flush(CDC_CTRL);
+    }
+}
+
+static void cdc_ctrl_printf(const char *fmt, ...) {
+    char buf[320];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len <= 0) {
+        return;
+    }
+    size_t to_send = (size_t)len;
+    if (to_send >= sizeof(buf)) {
+        to_send = sizeof(buf) - 1;
+    }
+    cdc_ctrl_write(buf, to_send);
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -115,20 +163,20 @@ static void run_gpio_diag(void) {
     gpio_set_function(app_cfg.pin_hsync, GPIO_FUNC_PIO0);
     gpio_set_function(app_cfg.pin_video, GPIO_FUNC_PIO0);
 
-    printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
-           pixclk ? 1 : 0,
-           hsync ? 1 : 0,
-           vsync ? 1 : 0,
-           video ? 1 : 0,
-           diag_ms / 1000.0,
-           (unsigned long)diag_pixclk_edges,
-           (unsigned long)diag_hsync_edges,
-           (unsigned long)diag_vsync_edges,
-           (unsigned long)diag_video_edges);
+    cdc_ctrl_printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
+                    pixclk ? 1 : 0,
+                    hsync ? 1 : 0,
+                    vsync ? 1 : 0,
+                    video ? 1 : 0,
+                    diag_ms / 1000.0,
+                    (unsigned long)diag_pixclk_edges,
+                    (unsigned long)diag_hsync_edges,
+                    (unsigned long)diag_vsync_edges,
+                    (unsigned long)diag_video_edges);
 }
 
 static bool try_send_probe_packet(void) {
-    if (!tud_cdc_connected()) return false;
+    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
 
     if (probe_offset == 0) {
         stream_write_header(probe_buf, 0x55AAu, 0x1234u, CAP_BYTES_PER_LINE);
@@ -136,19 +184,19 @@ static bool try_send_probe_packet(void) {
     }
 
     while (probe_offset < APP_PKT_RAW_BYTES) {
-        int avail = tud_cdc_write_available();
+        int avail = tud_cdc_n_write_available(CDC_STREAM);
         if (avail <= 0) return false;
         uint32_t to_write = (uint32_t)avail;
         uint32_t remain = (uint32_t)(APP_PKT_RAW_BYTES - probe_offset);
         if (to_write > remain) {
             to_write = remain;
         }
-        uint32_t wrote = tud_cdc_write(&probe_buf[probe_offset], to_write);
+        uint32_t wrote = tud_cdc_n_write(CDC_STREAM, &probe_buf[probe_offset], to_write);
         if (wrote == 0) return false;
         probe_offset = (uint16_t)(probe_offset + wrote);
     }
 
-    tud_cdc_write_flush();
+    tud_cdc_n_write_flush(CDC_STREAM);
     return true;
 }
 
@@ -158,34 +206,34 @@ static inline void request_probe_packet(void) {
 }
 
 static void emit_debug_state(void) {
-    if (!tud_cdc_connected()) return;
+    if (!tud_cdc_n_connected(CDC_CTRL)) return;
 
     uint16_t txq_r = 0;
     uint16_t txq_w = 0;
     video_core_get_txq_indices(&txq_r, &txq_w);
 
-    printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d vsync=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
-           video_core_is_armed() ? 1 : 0,
-           video_core_capture_enabled() ? 1 : 0,
-           video_core_test_frame_active() ? 1 : 0,
-           __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
-           video_core_get_vsync_edge() ? "fall" : "rise",
-           (unsigned)txq_r,
-           (unsigned)txq_w,
-           tud_cdc_write_available(),
-           (unsigned long)video_core_get_frames_done(),
-           (unsigned long)video_core_get_lines_ok(),
-           (unsigned long)video_core_get_lines_drop(),
-           (unsigned long)usb_drops,
-           (unsigned long)video_core_get_frame_overrun(),
-           (unsigned long)video_core_get_frame_short());
+    cdc_ctrl_printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d vsync=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
+                    video_core_is_armed() ? 1 : 0,
+                    video_core_capture_enabled() ? 1 : 0,
+                    video_core_test_frame_active() ? 1 : 0,
+                    __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
+                    video_core_get_vsync_edge() ? "fall" : "rise",
+                    (unsigned)txq_r,
+                    (unsigned)txq_w,
+                    tud_cdc_n_write_available(CDC_STREAM),
+                    (unsigned long)video_core_get_frames_done(),
+                    (unsigned long)video_core_get_lines_ok(),
+                    (unsigned long)video_core_get_lines_drop(),
+                    (unsigned long)usb_drops,
+                    (unsigned long)video_core_get_frame_overrun(),
+                    (unsigned long)video_core_get_frame_short());
 }
 
 static void poll_cdc_commands(void) {
     // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
-    while (tud_cdc_available()) {
+    while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
-        if (tud_cdc_read(&ch, 1) != 1) break;
+        if (tud_cdc_n_read(CDC_CTRL, &ch, 1) != 1) break;
 
         if (ch == 'S' || ch == 's') {
             video_core_set_armed(true);
@@ -196,7 +244,7 @@ static void poll_cdc_commands(void) {
             txq_offset = 0;
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] armed=0 (host stop)\n");
+                cdc_ctrl_printf("[EBD_IPKVM] armed=0 (host stop)\n");
             }
         } else if (ch == 'R' || ch == 'r') {
             usb_drops = 0;
@@ -206,7 +254,7 @@ static void poll_cdc_commands(void) {
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             core_bridge_send(CORE_BRIDGE_CMD_RESET_COUNTERS, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] reset counters\n");
+                cdc_ctrl_printf("[EBD_IPKVM] reset counters\n");
             }
         } else if (ch == 'Q' || ch == 'q') {
             video_core_set_armed(false);
@@ -214,18 +262,18 @@ static void poll_cdc_commands(void) {
             txq_offset = 0;
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] parked\n");
+                cdc_ctrl_printf("[EBD_IPKVM] parked\n");
             }
             while (true) { tud_task(); sleep_ms(50); }
         } else if (ch == 'P') {
             set_ps_on(true);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] ps_on=1\n");
+                cdc_ctrl_printf("[EBD_IPKVM] ps_on=1\n");
             }
         } else if (ch == 'p') {
             set_ps_on(false);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] ps_on=0\n");
+                cdc_ctrl_printf("[EBD_IPKVM] ps_on=0\n");
             }
         } else if (ch == 'B' || ch == 'b') {
             video_core_set_armed(false);
@@ -257,12 +305,12 @@ static void poll_cdc_commands(void) {
         } else if (ch == 'E') {
             video_core_set_tx_rle_enabled(true);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] rle=on\n");
+                cdc_ctrl_printf("[EBD_IPKVM] rle=on\n");
             }
         } else if (ch == 'e') {
             video_core_set_tx_rle_enabled(false);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] rle=off\n");
+                cdc_ctrl_printf("[EBD_IPKVM] rle=off\n");
             }
         } else if (ch == 'G' || ch == 'g') {
             if (can_emit_text()) {
@@ -279,7 +327,7 @@ static void poll_cdc_commands(void) {
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             core_bridge_send(CORE_BRIDGE_CMD_CONFIG_VSYNC, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] vsync_edge=%s\n", new_edge ? "fall" : "rise");
+                cdc_ctrl_printf("[EBD_IPKVM] vsync_edge=%s\n", new_edge ? "fall" : "rise");
             }
         } else if (ch == 'M' || ch == 'm') {
             capture_mode_t mode = video_core_get_capture_mode();
@@ -292,16 +340,16 @@ static void poll_cdc_commands(void) {
             txq_offset = 0;
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             if (can_emit_text()) {
-                printf("[EBD_IPKVM] mode=%s\n",
-                       next_mode == CAPTURE_MODE_CONTINUOUS_60FPS ? "60fps-continuous"
-                                                                 : "30fps-test");
+                cdc_ctrl_printf("[EBD_IPKVM] mode=%s\n",
+                                next_mode == CAPTURE_MODE_CONTINUOUS_60FPS ? "60fps-continuous"
+                                                                          : "30fps-test");
             }
         }
     }
 }
 
 static inline void service_txq(void) {
-    if (!tud_cdc_connected()) return;
+    if (!tud_cdc_n_connected(CDC_STREAM)) return;
 
     bool wrote_any = false;
 
@@ -318,7 +366,7 @@ static inline void service_txq(void) {
             continue;
         }
 
-        int avail = tud_cdc_write_available();
+        int avail = tud_cdc_n_write_available(CDC_STREAM);
         if (avail <= 0) break;
 
         uint32_t remain = (uint32_t)(pkt_len - txq_offset);
@@ -327,7 +375,7 @@ static inline void service_txq(void) {
             to_write = remain;
         }
 
-        uint32_t n = tud_cdc_write(&data[txq_offset], to_write);
+        uint32_t n = tud_cdc_n_write(CDC_STREAM, &data[txq_offset], to_write);
         if (n == 0) {
             usb_drops++;
             break;
@@ -343,18 +391,19 @@ static inline void service_txq(void) {
     }
 
     if (wrote_any) {
-        tud_cdc_write_flush();
+        tud_cdc_n_write_flush(CDC_STREAM);
     }
 }
 
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
-    printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
-    printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
-    printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
-    printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
+    cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
+    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -375,7 +424,6 @@ void app_core_poll(void) {
     }
     service_txq();
 
-    /* Keep status text off the wire while armed/capturing or while TX queue not empty. */
     if (can_emit_text()) {
         if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
             status_next = delayed_by_ms(status_next, 1000);
@@ -394,19 +442,19 @@ void app_core_poll(void) {
             uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
             uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
-            printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu core0_util=%lu%% core1_util=%lu%%\n",
-                   video_core_is_armed() ? 1 : 0,
-                   video_core_capture_enabled() ? 1 : 0,
-                   ps_on_state ? 1 : 0,
-                   (unsigned long)per_s,
-                   (unsigned long)l,
-                   (unsigned long)video_core_get_lines_drop(),
-                   (unsigned long)usb_drops,
-                   (unsigned long)video_core_get_frame_overrun(),
-                   (unsigned long)ve,
-                   (unsigned long)video_core_get_frames_done(),
-                   (unsigned long)core0_pct,
-                   (unsigned long)core1_pct);
+            cdc_ctrl_printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu core0_util=%lu%% core1_util=%lu%%\n",
+                            video_core_is_armed() ? 1 : 0,
+                            video_core_capture_enabled() ? 1 : 0,
+                            ps_on_state ? 1 : 0,
+                            (unsigned long)per_s,
+                            (unsigned long)l,
+                            (unsigned long)video_core_get_lines_drop(),
+                            (unsigned long)usb_drops,
+                            (unsigned long)video_core_get_frame_overrun(),
+                            (unsigned long)ve,
+                            (unsigned long)video_core_get_frames_done(),
+                            (unsigned long)core0_pct,
+                            (unsigned long)core1_pct);
         }
     }
 
