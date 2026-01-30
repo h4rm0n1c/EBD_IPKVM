@@ -88,6 +88,7 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
     char buf[320];
+    char out[360];
     va_list args;
     va_start(args, fmt);
     int len = vsnprintf(buf, sizeof(buf), fmt, args);
@@ -95,11 +96,24 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     if (len <= 0) {
         return;
     }
-    size_t to_send = (size_t)len;
-    if (to_send >= sizeof(buf)) {
-        to_send = sizeof(buf) - 1;
+    size_t raw_len = (size_t)len;
+    if (raw_len >= sizeof(buf)) {
+        raw_len = sizeof(buf) - 1;
     }
-    cdc_ctrl_write(buf, to_send);
+    size_t out_len = 0;
+    for (size_t i = 0; i < raw_len && out_len + 1 < sizeof(out); i++) {
+        if (buf[i] == '\n') {
+            if (out_len + 2 >= sizeof(out)) {
+                break;
+            }
+            out[out_len++] = '\r';
+        }
+        out[out_len++] = buf[i];
+    }
+    if (out_len == 0) {
+        return;
+    }
+    cdc_ctrl_write(out, out_len);
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
