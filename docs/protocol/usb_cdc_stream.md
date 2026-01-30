@@ -61,7 +61,10 @@ The firmware is host-controlled over CDC1 (control channel):
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
 Status lines (including utilization counters) are emitted on CDC1 and can be
-read without interfering with the CDC0 video stream.
+read without interfering with the CDC0 video stream. Utilization percentages
+(`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
+work (only when those operations perform work), rather than total loop
+occupancy.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).
