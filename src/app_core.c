@@ -200,19 +200,19 @@ static void emit_debug_state(void) {
     uint16_t txq_w = 0;
     video_core_get_txq_indices(&txq_r, &txq_w);
 
-    cdc_ctrl_printf("[EBD_IPKVM] dbg armed=%d cap=%d test=%d probe=%d vsync=%s txq_r=%u txq_w=%u write_avail=%d frames=%lu lines=%lu drops=%lu usb=%lu frame_overrun=%lu short=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM] dbg a=%d cap=%d test=%d probe=%d vs=%s\n",
                     video_core_is_armed() ? 1 : 0,
                     video_core_capture_enabled() ? 1 : 0,
                     video_core_test_frame_active() ? 1 : 0,
                     __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
-                    video_core_get_vsync_edge() ? "fall" : "rise",
+                    video_core_get_vsync_edge() ? "fall" : "rise");
+    cdc_ctrl_printf("[EBD_IPKVM] dbg txq=%u/%u av=%d fr=%lu ln=%lu dr=%lu ov=%lu sh=%lu\n",
                     (unsigned)txq_r,
                     (unsigned)txq_w,
                     tud_cdc_n_write_available(CDC_STREAM),
                     (unsigned long)video_core_get_frames_done(),
                     (unsigned long)video_core_get_lines_ok(),
                     (unsigned long)video_core_get_lines_drop(),
-                    (unsigned long)usb_drops,
                     (unsigned long)video_core_get_frame_overrun(),
                     (unsigned long)video_core_get_frame_short());
 }
@@ -430,17 +430,18 @@ void app_core_poll(void) {
             uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
             uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
-            cdc_ctrl_printf("[EBD_IPKVM] armed=%d cap=%d ps_on=%d lines/s=%lu total=%lu q_drops=%lu usb_drops=%lu frame_overrun=%lu vsync_edges/s=%lu frames=%lu core0_util=%lu%% core1_util=%lu%%\n",
+            cdc_ctrl_printf("[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
                             video_core_is_armed() ? 1 : 0,
                             video_core_capture_enabled() ? 1 : 0,
                             ps_on_state ? 1 : 0,
                             (unsigned long)per_s,
                             (unsigned long)l,
+                            (unsigned long)video_core_get_frames_done());
+            cdc_ctrl_printf("[EBD_IPKVM] dr=%lu usb=%lu ov=%lu vs/s=%lu c0=%lu%% c1=%lu%%\n",
                             (unsigned long)video_core_get_lines_drop(),
                             (unsigned long)usb_drops,
                             (unsigned long)video_core_get_frame_overrun(),
                             (unsigned long)ve,
-                            (unsigned long)video_core_get_frames_done(),
                             (unsigned long)core0_pct,
                             (unsigned long)core1_pct);
         }

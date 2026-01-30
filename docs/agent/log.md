@@ -5,6 +5,7 @@
 - 2026-02-01: Updated host Python tooling to target CDC0 for the stream and CDC1 for control commands by default.
 - 2026-02-01: Documented how to identify CDC0/CDC1 in Linux via interface strings and /dev/serial/by-id symlinks.
 - 2026-02-01: Avoid partial CDC1 status writes so log lines don't interleave when control FIFO is tight.
+- 2026-02-01: Split CDC1 debug/status output into shorter lines so the control interface can emit updates reliably.
 - 2026-02-01: Disabled frame file writes when streaming raw host data so raw capture no longer fills disks with PGM/PBM output.
 - 2026-02-01: Modularized core0 CDC/command handling and core1 capture/encode flow into app_core/video_core with shared stream protocol and core bridge helpers.
 - 2026-01-31: Split capture/line encoding onto core1 with a lock-free TX queue to keep core0 focused on CDC I/O and command parsing.
