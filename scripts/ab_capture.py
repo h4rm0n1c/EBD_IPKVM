@@ -43,9 +43,11 @@ def send_cmd(dev: str, payload: bytes, settle_s: float = 0.1) -> None:
         os.close(fd)
 
 
-def run_host_capture(dev: str, outdir: str, max_frames: int, host_args: list[str]) -> None:
+def run_host_capture(dev: str, ctrl_dev: str, outdir: str, max_frames: int, host_args: list[str]) -> None:
     host_script = Path(__file__).resolve().parent.parent / "src" / "host_recv_frames.py"
-    cmd = [sys.executable, str(host_script), dev, outdir, f"--max-frames={max_frames}"]
+    cmd = [sys.executable, str(host_script), dev, outdir,
+           f"--max-frames={max_frames}",
+           f"--ctrl-device={ctrl_dev}"]
     cmd.extend(host_args)
     print(f"[ab] running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
@@ -53,7 +55,8 @@ def run_host_capture(dev: str, outdir: str, max_frames: int, host_args: list[str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="A/B test VIDEO inversion with capture runs.")
-    parser.add_argument("--device", default="/dev/ttyACM0", help="CDC device path.")
+    parser.add_argument("--stream-device", default="/dev/ttyACM0", help="CDC stream device (CDC0).")
+    parser.add_argument("--ctrl-device", default="/dev/ttyACM1", help="CDC control device (CDC1).")
     parser.add_argument("--outdir", default="frames_ab", help="Output base directory.")
     parser.add_argument("--max-frames", type=int, default=30, help="Frames per run.")
     parser.add_argument("--settle", type=float, default=1.0, help="Seconds to wait after toggling inversion.")
@@ -67,17 +70,19 @@ def main() -> int:
     out_base.mkdir(parents=True, exist_ok=True)
 
     try:
-        run_host_capture(args.device, str(out_base / "A"), args.max_frames, args.host_arg)
+        run_host_capture(args.stream_device, args.ctrl_device, str(out_base / "A"),
+                         args.max_frames, args.host_arg)
 
         print("[ab] toggling VIDEO inversion for B run")
-        send_cmd(args.device, b"X")
-        send_cmd(args.device, b"O")
+        send_cmd(args.ctrl_device, b"X")
+        send_cmd(args.ctrl_device, b"O")
         time.sleep(args.settle)
 
-        run_host_capture(args.device, str(out_base / "B"), args.max_frames, args.host_arg)
+        run_host_capture(args.stream_device, args.ctrl_device, str(out_base / "B"),
+                         args.max_frames, args.host_arg)
     finally:
         try:
-            send_cmd(args.device, b"X")
+            send_cmd(args.ctrl_device, b"X")
         except OSError:
             pass
 
