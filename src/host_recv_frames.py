@@ -12,7 +12,11 @@ TEST_AFTER = 0.0
 TEST_START = False
 PROBE_ONLY = False
 RLE_MODE = True
-OUTPUT_FORMAT = "pbm"
+OUTPUT_FORMAT = "pgm"
+STREAM_RAW = False
+STREAM_RAW_PATH = "-"
+QUIET = False
+QUIET_SET = False
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -53,6 +57,18 @@ for arg in sys.argv[1:]:
         OUTPUT_FORMAT = "pgm"
     elif arg == "--pbm":
         OUTPUT_FORMAT = "pbm"
+    elif arg == "--stream-raw":
+        STREAM_RAW = True
+        STREAM_RAW_PATH = "-"
+    elif arg.startswith("--stream-raw="):
+        STREAM_RAW = True
+        STREAM_RAW_PATH = arg.split("=", 1)[1]
+    elif arg == "--quiet":
+        QUIET = True
+        QUIET_SET = True
+    elif arg == "--verbose":
+        QUIET = False
+        QUIET_SET = True
     elif arg.startswith("--force-after="):
         value = arg.split("=", 1)[1]
         try:
@@ -72,7 +88,7 @@ for arg in sys.argv[1:]:
 
 DEV = ARGS[0] if len(ARGS) > 0 else "/dev/ttyACM0"
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = 100
+MAX_FRAMES = None if STREAM_RAW else 100
 
 W = 512
 H = 342
@@ -86,6 +102,22 @@ MAGIC0 = 0xEB
 MAGIC1 = 0xD1
 
 os.makedirs(OUTDIR, exist_ok=True)
+
+log_out = sys.stdout
+raw_stream = None
+if STREAM_RAW:
+    if not QUIET_SET:
+        QUIET = True
+    if STREAM_RAW_PATH in ("", "-"):
+        raw_stream = sys.stdout.buffer
+        log_out = sys.stderr
+    else:
+        raw_stream = open(STREAM_RAW_PATH, "wb", buffering=0)
+
+def log(message: str) -> None:
+    if QUIET:
+        return
+    print(message, file=log_out)
 
 def set_raw_and_dtr(fd: int) -> None:
     # Raw mode (no translations, no line discipline surprises)
@@ -186,7 +218,7 @@ if SEND_STOP:
 
 if DIAG_SECS > 0:
     end_diag = time.time() + DIAG_SECS
-    print(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
+    log(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
     diag_buf = bytearray()
     while time.time() < end_diag:
         r, _, _ = select.select([fd], [], [], 0.25)
@@ -203,7 +235,7 @@ if DIAG_SECS > 0:
                 text = line.decode("utf-8", errors="replace")
             except UnicodeDecodeError:
                 text = repr(line)
-            print(f"[host][diag] {text}")
+            log(f"[host][diag] {text}")
 
 if BOOT_WAIT > 0:
     remaining = BOOT_WAIT - DIAG_SECS
@@ -246,7 +278,8 @@ else:
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
 ext = "pbm" if OUTPUT_FORMAT == "pbm" else "pgm"
-print(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s)")
+stream_note = f", raw_stream={STREAM_RAW_PATH}" if STREAM_RAW else ""
+log(f"[host] reading {DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -261,20 +294,22 @@ force_sent = FORCE_START or TEST_START
 test_sent = TEST_START
 
 try:
-    while done_count < MAX_FRAMES:
+    while True:
+        if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
+            break
         r, _, _ = select.select([fd], [], [], 0.25)
         if not r:
             now = time.time()
             if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
                 os.write(fd, b"F")
                 force_sent = True
-                print(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
+                log(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
             if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
                 os.write(fd, b"T")
                 test_sent = True
-                print(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
+                log(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:
-                print("[host] no data yet (is Pico armed + Mac running?)")
+                log("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now
             continue
 
@@ -327,12 +362,17 @@ try:
                 else:
                     expanded = [bytes_to_row64(row) for row in rows]
                     write_pgm(out, expanded)
+                if STREAM_RAW:
+                    if OUTPUT_FORMAT == "pbm":
+                        expanded = [bytes_to_row64(row) for row in rows]
+                    frame_bytes = b"".join(expanded)
+                    raw_stream.write(frame_bytes)
                 raw_bytes = LINE_BYTES * H
                 payload_bytes = stats["bytes"]
                 ratio = payload_bytes / raw_bytes if raw_bytes else 0.0
                 percent = ratio * 100.0
                 rle_lines = stats["rle_lines"]
-                print(
+                log(
                     f"[host] wrote {out} (frame_id={frame_id}, "
                     f"rle_lines={rle_lines}/{H}, "
                     f"payload_bytes={payload_bytes}, raw_bytes={raw_bytes}, "
@@ -342,7 +382,7 @@ try:
                 # free memory for this frame_id
                 del frames[frame_id]
                 del frame_stats[frame_id]
-                if done_count >= MAX_FRAMES:
+                if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
                     break
 
         now = time.time()
@@ -351,9 +391,9 @@ try:
             if frames:
                 newest = max(frames.keys())
                 have = len(frames[newest])
-                print(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
+                log(f"[host] newest frame_id={newest} lines={have}/342 done={done_count}/100")
             else:
-                print(f"[host] done={done_count}/100 (waiting for packets)")
+                log(f"[host] done={done_count}/100 (waiting for packets)")
 finally:
     if SEND_STOP:
         try:
@@ -365,4 +405,7 @@ finally:
     except OSError:
         pass
 
-print("[host] complete.")
+if raw_stream and raw_stream is not sys.stdout.buffer:
+    raw_stream.close()
+
+log("[host] complete.")
