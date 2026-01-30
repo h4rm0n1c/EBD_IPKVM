@@ -77,5 +77,23 @@ python3 src/host_recv_frames.py /dev/ttyACM0 frames --stream-raw \
   - `agent/`: running notes + decisions for Codex/agents.
   - PDFs: helper datasheets used during bring-up.
 
+## Attribution
+This project relies on documentation and reference implementations from the following sources.
+
+### Classic Mac video timing + signaling references (docs/)
+- [**Classic Macintosh Video Signals Demystified, Designing a Mac-to-VGA Adapter with LM1881** (Big Mess o' Wires)](docs/mac_classic_video_protocol/Classic%20Macintosh%20Video%20Signals%20Demystified,%20Designing%20a%20Mac-to-VGA%20Adapter%20with%20LM1881%20_%20Big%20Mess%20o%27%20Wires.pdf) — monitor ID pins, composite sync behavior, and sync-on-green details for classic Macs.
+- [**Control a Macintosh Classic CRT with a BeagleBone Black (Part 1)**](docs/mac_classic_video_protocol/Control%20a%20Macintosh%20Classic%20CRT%20with%20a%20BeagleBone%20Black%20-%20Part%201%20_%20Nerdhut.pdf) — Classic CRT HSYNC/VSYNC/DATA timing reference.
+- [**Mac SE/30 video interface**](docs/mac_classic_video_protocol/Mac-SE_30%20video%20interface%20-%20Trammell%20Hudson%27s%20Projects.pdf) — SE/30 timing notes and capture window context.
+- [**Macintosh Classic II Developer Note**](docs/mac_classic_video_protocol/mac_classic_ii.pdf) — 512×342 timing chart and dot clock reference.
+- [**Mac Plus Analog Board**](docs/mac_classic_video_protocol/plus_analog.pdf) — sync polarity + line rate notes for compact Macs.
+- **Datasheets**: [SP3222E](docs/SP3222E.PDF), [SN74LS245](docs/sn74ls245.pdf), [ULN2803A](docs/uln2803a.pdf) — electrical interface references used during bring-up.
+
+### /opt references
+- **/opt/MacDevDocs** — Apple developer notes + hardware references used to cross-check classic Mac timing and connector pinouts (see the [Apple Developer Documentation Archive](https://developer.apple.com/library/archive/)).
+- [**/opt/Pico-SDK**](https://github.com/raspberrypi/pico-sdk) — RP2040 PIO/DMA/USB SDK structure and build expectations.
+- [**/opt/PicoHTTPServer**](https://github.com/sysprogs/PicoHTTPServer) — Pico W HTTP server, captive portal flow, and incremental response patterns for future on-device UI work.
+- [**/opt/SigrokPico**](https://github.com/pico-coder/sigrok-pico) — USB CDC transport patterns and RLE compression ideas for low-entropy line data.
+- [**/opt/picovga**](https://github.com/codaris/picovga-cmake) — multi-core video pipeline patterns for RP2040 video workloads.
+
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`.
