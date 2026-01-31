@@ -34,3 +34,5 @@
 - 2026-01-25: Set horizontal skip to 178 PIXCLK cycles after HSYNC falling edge based on VCD sweep results.
 - 2026-01-25: Add runtime CDC toggles for HSYNC/VSYNC edge selection to speed capture validation.
 - 2026-01-25: Add runtime CDC toggle for PIXCLK edge selection to diagnose sampling phase.
+
+- 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
