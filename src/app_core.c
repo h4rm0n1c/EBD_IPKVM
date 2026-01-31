@@ -24,6 +24,7 @@
 
 #define CDC_STREAM 0
 #define CDC_CTRL 1
+#define CDC_ADB 2
 
 static app_core_config_t app_cfg;
 
@@ -46,6 +47,7 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
+static volatile bool adb_diag_pending = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
 
@@ -56,6 +58,10 @@ static inline void set_ps_on(bool on) {
 
 static inline bool can_emit_text(void) {
     return tud_cdc_n_connected(CDC_CTRL);
+}
+
+static inline bool can_emit_adb_text(void) {
+    return tud_cdc_n_connected(CDC_ADB);
 }
 
 static inline void reset_diag_counts(void) {
@@ -120,6 +126,69 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
         return;
     }
     cdc_ctrl_write(out, out_len);
+}
+
+static void cdc_adb_write(const char *buf, size_t len) {
+    if (!tud_cdc_n_connected(CDC_ADB) || len == 0) {
+        return;
+    }
+
+    size_t offset = 0;
+    absolute_time_t deadline = make_timeout_time_ms(3);
+    while (offset < len) {
+        int avail = tud_cdc_n_write_available(CDC_ADB);
+        if (avail <= 0) {
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
+            tud_task();
+            continue;
+        }
+        size_t chunk = len - offset;
+        if (chunk > (size_t)avail) {
+            chunk = (size_t)avail;
+        }
+        uint32_t wrote = tud_cdc_n_write(CDC_ADB, &buf[offset], chunk);
+        if (wrote == 0) {
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
+            tud_task();
+            continue;
+        }
+        offset += wrote;
+        tud_cdc_n_write_flush(CDC_ADB);
+    }
+}
+
+static void cdc_adb_printf(const char *fmt, ...) {
+    char buf[320];
+    char out[360];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len <= 0) {
+        return;
+    }
+    size_t raw_len = (size_t)len;
+    if (raw_len >= sizeof(buf)) {
+        raw_len = sizeof(buf) - 1;
+    }
+    size_t out_len = 0;
+    for (size_t i = 0; i < raw_len && out_len + 1 < sizeof(out); i++) {
+        if (buf[i] == '\n') {
+            if (out_len + 2 >= sizeof(out)) {
+                break;
+            }
+            out[out_len++] = '\r';
+        }
+        out[out_len++] = buf[i];
+    }
+    if (out_len == 0) {
+        return;
+    }
+    cdc_adb_write(out, out_len);
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -193,13 +262,20 @@ static void emit_adb_diag(void) {
     bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
     bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
-    cdc_ctrl_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu last=%luus drop=%lu\n",
+    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus drop=%lu\n",
                     adb_recv ? 1 : 0,
                     adb_xmit ? 1 : 0,
                     (unsigned long)adb_stats.rx_pulses,
                     (unsigned long)adb_stats.rx_raw_pulses,
+                    (unsigned long)adb_stats.rx_overruns,
+                    (unsigned long)adb_stats.attention_pulses,
+                    (unsigned long)adb_stats.sync_pulses,
                     (unsigned long)adb_stats.last_pulse_us,
                     (unsigned long)adb_events_get_drop_count());
+}
+
+static inline void request_adb_diag(void) {
+    __atomic_store_n(&adb_diag_pending, true, __ATOMIC_RELEASE);
 }
 
 static bool try_send_probe_packet(void) {
@@ -347,10 +423,6 @@ static bool poll_cdc_commands(void) {
                 run_gpio_diag();
                 core_bridge_send(CORE_BRIDGE_CMD_DIAG_DONE, 0);
             }
-        } else if (ch == 'A' || ch == 'a') {
-            if (can_emit_text()) {
-                emit_adb_diag();
-            }
         } else if (ch == 'V' || ch == 'v') {
             bool new_edge = !video_core_get_vsync_edge();
             video_core_set_vsync_edge(new_edge);
@@ -439,7 +511,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' for pin levels + pulse stats.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
 
@@ -469,6 +541,14 @@ void app_core_poll(void) {
     if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
+    if (adb_test_cdc_take_diag_request()) {
+        request_adb_diag();
+    }
+    if (__atomic_exchange_n(&adb_diag_pending, false, __ATOMIC_ACQ_REL)) {
+        if (can_emit_adb_text()) {
+            emit_adb_diag();
+        }
+    }
 
     /* Send queued binary packets from thread context (NOT IRQ). */
     if (probe_pending) {
@@ -489,24 +569,24 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    if (can_emit_text()) {
-        if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
-            status_next = delayed_by_ms(status_next, 1000);
+    if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
+        status_next = delayed_by_ms(status_next, 1000);
 
-            uint32_t l = video_core_get_lines_ok();
-            uint32_t per_s = l - status_last_lines;
-            status_last_lines = l;
+        uint32_t l = video_core_get_lines_ok();
+        uint32_t per_s = l - status_last_lines;
+        status_last_lines = l;
 
-            uint32_t ve = video_core_take_vsync_edges();
-            uint32_t core1_busy = 0;
-            uint32_t core1_total = 0;
-            uint32_t core0_busy = 0;
-            uint32_t core0_total = 0;
-            video_core_take_core1_utilization(&core1_busy, &core1_total);
-            take_core0_utilization(&core0_busy, &core0_total);
-            uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
-            uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
+        uint32_t ve = video_core_take_vsync_edges();
+        uint32_t core1_busy = 0;
+        uint32_t core1_total = 0;
+        uint32_t core0_busy = 0;
+        uint32_t core0_total = 0;
+        video_core_take_core1_utilization(&core1_busy, &core1_total);
+        take_core0_utilization(&core0_busy, &core0_total);
+        uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
+        uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
+        if (can_emit_text()) {
             cdc_ctrl_printf("[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
                             video_core_is_armed() ? 1 : 0,
                             video_core_capture_enabled() ? 1 : 0,
@@ -522,20 +602,25 @@ void app_core_poll(void) {
                             (unsigned long)core0_pct,
                             (unsigned long)core1_pct,
                             (unsigned long)cdc1_disconnects);
+        }
 
+        if (can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
-            cdc_ctrl_printf("[EBD_IPKVM] adb rx=%lu raw=%lu last=%luus ev=%lu drop=%lu\n",
-                            (unsigned long)adb_stats.rx_pulses,
-                            (unsigned long)adb_stats.rx_raw_pulses,
-                            (unsigned long)adb_stats.last_pulse_us,
-                            (unsigned long)adb_stats.events_consumed,
-                            (unsigned long)adb_events_get_drop_count());
+            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus ev=%lu drop=%lu\n",
+                           (unsigned long)adb_stats.rx_pulses,
+                           (unsigned long)adb_stats.rx_raw_pulses,
+                           (unsigned long)adb_stats.rx_overruns,
+                           (unsigned long)adb_stats.attention_pulses,
+                           (unsigned long)adb_stats.sync_pulses,
+                           (unsigned long)adb_stats.last_pulse_us,
+                           (unsigned long)adb_stats.events_consumed,
+                           (unsigned long)adb_events_get_drop_count());
 
             if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
                 if (adb_bus_take_rx_seen()) {
                     adb_rx_next = delayed_by_ms(get_absolute_time(), 3000);
-                    cdc_ctrl_printf("[EBD_IPKVM] adb rx seen\n");
+                    cdc_adb_printf("[EBD_IPKVM] adb rx seen\n");
                 }
             }
         }

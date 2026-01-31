@@ -90,3 +90,14 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+- 2026-02-03: Capped ADB RX pulse handling per poll iteration and exposed an overrun counter to avoid core1 starvation when the ADB line is active.
+- 2026-02-03: Flush ADB RX FIFO on backlog overruns so core1 stays responsive while still sampling new ADB activity.
+- 2026-02-03: Allow ~35 µs ADB low pulses in the RX filter window and tie ADB RX PIO waits to the configured pin base.
+- 2026-02-03: Moved ADB diagnostic/status output to CDC2 to keep CDC1 focused on control/status traffic.
+- 2026-02-03: Allow ADB diagnostic requests to be triggered from CDC2 as well as CDC1.
+- 2026-02-03: Make scripts/cdc_cmd.py tolerate CDC disconnects and add a --no-read option for reset/BOOTSEL commands.
+- 2026-02-03: Handle ADB diag requests only on CDC2 to keep CDC1 control traffic clean.
+- 2026-02-03: Added attention/sync pulse counters to CDC2 ADB status output for early frame-boundary validation.
+- 2026-02-03: Added a --no-setup option to cdc_cmd.py to skip termios/DTR when sending BOOTSEL commands.
+- 2026-02-03: Emit the 1Hz ADB status line on CDC2 even when CDC1 is disconnected.
+- 2026-02-03: Chunk and flush CDC2 ADB status writes to avoid silent drops when write space is low.

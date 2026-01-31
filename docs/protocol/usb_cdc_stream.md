@@ -70,17 +70,21 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
-ADB status is emitted on CDC1 as:
+ADB status is emitted on CDC2 (independent of CDC1 control status) as:
 
-- `[EBD_IPKVM] adb rx=<filtered> raw=<total> last=<us> ev=<events> drop=<drops>`
-  - `rx` counts pulses that pass the ADB pulse-width filter (µs window).
+- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> last=<us> ev=<events> drop=<drops>`
+- `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
   - `raw` counts all observed low pulses, even if they are too short/long.
+  - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
+  - `att` counts low pulses in the attention-width window (~700–900 µs).
+  - `syn` counts low pulses in the sync-width window (~60–90 µs).
   - `last` is the most recent observed low-pulse width in microseconds.
 
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
+- The `A` command (sent on CDC2) emits ADB pulse diagnostics on CDC2.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).

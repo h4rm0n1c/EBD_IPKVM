@@ -56,6 +56,20 @@ bool adb_pio_rx_pop(adb_pio_t *ctx, uint32_t *out_count) {
     return true;
 }
 
+bool adb_pio_rx_has_data(const adb_pio_t *ctx) {
+    if (!ctx) {
+        return false;
+    }
+    return !pio_sm_is_rx_fifo_empty(ctx->pio, ctx->sm_rx);
+}
+
+void adb_pio_rx_flush(adb_pio_t *ctx) {
+    if (!ctx) {
+        return;
+    }
+    pio_sm_clear_fifos(ctx->pio, ctx->sm_rx);
+}
+
 void adb_pio_tx_pulse(adb_pio_t *ctx, uint16_t cycles) {
     if (!ctx) {
         return;

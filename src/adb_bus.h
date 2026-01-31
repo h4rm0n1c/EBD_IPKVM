@@ -9,6 +9,9 @@ typedef struct {
     uint32_t rx_raw_pulses;
     uint32_t rx_pulses;
     uint32_t rx_seen;
+    uint32_t rx_overruns;
+    uint32_t attention_pulses;
+    uint32_t sync_pulses;
     uint32_t events_consumed;
     uint32_t last_pulse_us;
 } adb_bus_stats_t;
