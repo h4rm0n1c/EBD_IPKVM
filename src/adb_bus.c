@@ -11,8 +11,6 @@
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
-static bool adb_last_state = true;
-static uint32_t adb_low_start_us = 0;
 static adb_pio_t adb_pio = {0};
 
 static volatile uint32_t adb_rx_pulses = 0;
@@ -34,8 +32,6 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     gpio_set_dir(adb_pin_xmit, GPIO_IN);
     gpio_disable_pulls(adb_pin_xmit);
 
-    adb_last_state = gpio_get(adb_pin_recv);
-    adb_low_start_us = time_us_32();
     adb_rx_pulses = 0;
     adb_rx_seen = 0;
     adb_events_consumed = 0;
@@ -53,20 +49,6 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
 
 bool adb_bus_poll(void) {
     bool did_work = false;
-    uint32_t now_us = time_us_32();
-    bool state = gpio_get(adb_pin_recv);
-
-    if (state != adb_last_state) {
-        did_work = true;
-        adb_last_state = state;
-        if (!state) {
-            adb_low_start_us = now_us;
-        } else {
-            uint32_t pulse_us = (uint32_t)(now_us - adb_low_start_us);
-            adb_note_rx_pulse(pulse_us);
-        }
-    }
-
     uint16_t pulse_count = 0;
     while (adb_pio_rx_pop(&adb_pio, &pulse_count)) {
         adb_note_rx_pulse((uint32_t)pulse_count);
