@@ -9,7 +9,7 @@ Above output is current project output as of PR #19.
 
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
-- Lines are queued and streamed over USB CDC in fixed-size packets.
+- Lines are queued and streamed over USB CDC with a compact per-line header (optional RLE).
 - Host test helper (`src/host_recv_frames.py`) reconstructs frames into PGM images (default).
 
 ## Signal/pin map (current firmware)
@@ -17,38 +17,49 @@ Above output is current project output as of PR #19.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
+- `GPIO7` — ADB RECV (input via 74LVC245 from Mac ADB data)
+- `GPIO8` — ADB XMIT (output via ULN2803 to Mac ADB data, open-collector)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
 
 ## Capture geometry
 - Active video: 512×342 (1 bpp)
-- Horizontal offset: 178 PIXCLK cycles after the selected HSYNC edge (PIO skip loop)
+- Horizontal offset: 175 PIXCLK cycles after the selected HSYNC edge (PIO skip + 18-cycle delay after phase-lock)
 - Vertical offset: 28 HSYNCs after VSYNC fall
 - Capture window: 370 HSYNCs total (28 VBL + 342 active)
 - Line capture begins on the selected HSYNC edge.
 
-## USB stream (CDC)
-Each line is emitted as a 72-byte packet:
+## USB CDC interfaces
+The firmware exposes two CDC interfaces:
+- **CDC0 (stream)**: binary line packets (video data).
+- **CDC1 (control)**: ASCII commands + status text.
+
+See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
+
+### Stream packet format (CDC0)
+Each line is emitted as a packet with a compact header:
 
 ```
-0..1  magic      0xEB 0xD1
-2..3  frame_id   little-endian
-4..5  line_id    little-endian (0..341)
-6..7  payload_len (bytes, currently 64)
-8..71 line payload (64 bytes = 512 packed pixels)
+0..1   magic       0xEB 0xD1
+2..3   frame_id    little-endian
+4..5   line_id     little-endian (0..341)
+6..7   payload_len little-endian (bit 15 indicates RLE)
+8..N   line payload (64 bytes raw, or up to 128 bytes RLE)
 ```
 
-See `docs/protocol/usb_cdc_stream.md` for the full description and host framing notes.
+RLE payloads expand to 64 bytes on the host; firmware may still emit raw
+lines if RLE does not compress.
 
 ## Host capture helper
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames
+python3 src/host_recv_frames.py /dev/ttyACM0 frames --ctrl-device=/dev/ttyACM1
 ```
 
 This test script:
-- Waits briefly after opening the CDC port (default 0.25s) to allow Pico boot.
+- Uses the stream/control CDC ports (override with `--stream-device=` and `--ctrl-device=`).
+- Optionally asserts `P` (power on) before capture; use `--no-boot` to skip.
 - Sends `X` to stop any prior run before arming (use `--no-stop` to skip).
 - Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
 - Adjust the boot wait with `--boot-wait=SECONDS` if needed.
