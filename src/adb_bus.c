@@ -49,9 +49,10 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
 
 bool adb_bus_poll(void) {
     bool did_work = false;
-    uint16_t pulse_count = 0;
+    uint32_t pulse_count = 0;
     while (adb_pio_rx_pop(&adb_pio, &pulse_count)) {
-        adb_note_rx_pulse((uint32_t)pulse_count);
+        uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
+        adb_note_rx_pulse(pulse_us);
         did_work = true;
     }
 

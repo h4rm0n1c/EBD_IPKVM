@@ -3,10 +3,8 @@
 ; Wait for low pulse, measure duration, push cycle count.
     wait 1 pin 6     ; idle high (GPIO6 ADB RECV)
     wait 0 pin 6     ; falling edge
-    set x, 31
-    mov y, x
-    in null, 32
-    mov x, isr
+    set x, 0
+    mov x, ~x
 count_low:
     jmp pin done
     jmp x-- count_low

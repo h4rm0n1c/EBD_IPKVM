@@ -13,8 +13,10 @@ typedef struct {
     uint offset_tx;
     uint pin_recv;
     uint pin_xmit;
+    uint32_t tick_hz;
 } adb_pio_t;
 
 void adb_pio_init(adb_pio_t *ctx, PIO pio, uint sm_rx, uint sm_tx, uint pin_recv, uint pin_xmit);
-bool adb_pio_rx_pop(adb_pio_t *ctx, uint16_t *out_count);
+bool adb_pio_rx_pop(adb_pio_t *ctx, uint32_t *out_count);
 void adb_pio_tx_pulse(adb_pio_t *ctx, uint16_t cycles);
+uint32_t adb_pio_ticks_to_us(const adb_pio_t *ctx, uint32_t ticks);

@@ -20,3 +20,4 @@
 
 ## Implementation notes
 - ADB should follow the same core split as the video pipeline: PIO for timing and core1 for RX/TX state handling, with core0 only enqueueing host commands.
+- The current PIO RX program runs with a clkdiv of 8 and reports pulse widths in microseconds after firmware conversion; pulse filters are expressed in µs.

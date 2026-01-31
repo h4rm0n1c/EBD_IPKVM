@@ -148,6 +148,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
   - Ensure shared ADB data line with external pull-up and common ground; do not drive high directly.
 - **PIO1 wiring**:
   - Load RX + TX programs on PIO1, with RX SM sampling the RECV pin and TX SM toggling XMIT output enable.
+  - Run ADB PIO at clkdiv=8 so RX tick counts convert cleanly to microseconds for pulse filtering.
   - Verify that TX is idle (line released) unless a Talk response or SRQ is scheduled.
 - **Core1 timing loop**:
   - Schedule the ADB service loop to run every ~50–70 µs and parse attention/sync/bit cells.
