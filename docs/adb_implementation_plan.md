@@ -144,7 +144,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 ## First bring-up attempt (initial ADB test)
 
 - **Hardware sanity**:
-  - Confirm ADB line level shifting: 74LVC245 on GPIO7 (RECV) + ULN2803 open-collector on GPIO8 (XMIT).
+- Confirm ADB line level shifting: 74LVC245 on GPIO6 (RECV) + ULN2803 open-collector on GPIO14 (XMIT).
   - Ensure shared ADB data line with external pull-up and common ground; do not drive high directly.
 - **PIO1 wiring**:
   - Load RX + TX programs on PIO1, with RX SM sampling the RECV pin and TX SM toggling XMIT output enable.

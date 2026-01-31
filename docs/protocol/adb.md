@@ -10,8 +10,8 @@
 
 | Signal | GPIO | Direction | Level shifting | Notes |
 | ------ | ---- | --------- | -------------- | ----- |
-| ADB RECV | GPIO7 | Input | 74LVC245 | Receives ADB data from the Mac. |
-| ADB XMIT | GPIO8 | Output | ULN2803 | Drives the shared ADB data line (open-collector). |
+| ADB RECV | GPIO6 | Input | 74LVC245 | Receives ADB data from the Mac. |
+| ADB XMIT | GPIO14 | Output | ULN2803 | Drives the shared ADB data line (open-collector). |
 
 ## Electrical constraints
 - The ADB data line is shared between RECV and XMIT; ensure open-collector behavior on the transmit path.
