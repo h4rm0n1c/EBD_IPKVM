@@ -98,3 +98,4 @@
 - 2026-02-03: Make scripts/cdc_cmd.py tolerate CDC disconnects and add a --no-read option for reset/BOOTSEL commands.
 - 2026-02-03: Handle ADB diag requests only on CDC2 to keep CDC1 control traffic clean.
 - 2026-02-03: Added attention/sync pulse counters to CDC2 ADB status output for early frame-boundary validation.
+- 2026-02-03: Added a --no-setup option to cdc_cmd.py to skip termios/DTR when sending BOOTSEL commands.

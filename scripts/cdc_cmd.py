@@ -39,14 +39,23 @@ def main() -> int:
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")
     parser.add_argument("--no-read", action="store_true", help="Exit immediately after sending the command.")
+    parser.add_argument("--no-setup", action="store_true",
+                        help="Skip termios/DTR setup (useful for BOOTSEL commands).")
     args = parser.parse_args()
 
     if args.read_secs <= 0 and not args.no_read:
         raise SystemExit("--read-secs must be > 0 (or use --no-read)")
 
-    fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     try:
-        set_raw_and_dtr(fd)
+        fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except OSError:
+        return 1
+    try:
+        if not args.no_setup:
+            try:
+                set_raw_and_dtr(fd)
+            except OSError:
+                return 1
         try:
             os.write(fd, args.cmd.encode("ascii"))
         except OSError:
