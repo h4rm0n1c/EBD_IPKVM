@@ -133,13 +133,30 @@ static void cdc_adb_write(const char *buf, size_t len) {
         return;
     }
 
-    int avail = tud_cdc_n_write_available(CDC_ADB);
-    if (avail < (int)len) {
-        return;
-    }
-
-    uint32_t wrote = tud_cdc_n_write(CDC_ADB, buf, len);
-    if (wrote == len) {
+    size_t offset = 0;
+    absolute_time_t deadline = make_timeout_time_ms(3);
+    while (offset < len) {
+        int avail = tud_cdc_n_write_available(CDC_ADB);
+        if (avail <= 0) {
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
+            tud_task();
+            continue;
+        }
+        size_t chunk = len - offset;
+        if (chunk > (size_t)avail) {
+            chunk = (size_t)avail;
+        }
+        uint32_t wrote = tud_cdc_n_write(CDC_ADB, &buf[offset], chunk);
+        if (wrote == 0) {
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
+            tud_task();
+            continue;
+        }
+        offset += wrote;
         tud_cdc_n_write_flush(CDC_ADB);
     }
 }
