@@ -47,6 +47,7 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
+static volatile bool adb_diag_pending = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
 
@@ -254,6 +255,10 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_events_get_drop_count());
 }
 
+static inline void request_adb_diag(void) {
+    __atomic_store_n(&adb_diag_pending, true, __ATOMIC_RELEASE);
+}
+
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
 
@@ -400,9 +405,7 @@ static bool poll_cdc_commands(void) {
                 core_bridge_send(CORE_BRIDGE_CMD_DIAG_DONE, 0);
             }
         } else if (ch == 'A' || ch == 'a') {
-            if (can_emit_adb_text()) {
-                emit_adb_diag();
-            }
+            request_adb_diag();
         } else if (ch == 'V' || ch == 'v') {
             bool new_edge = !video_core_get_vsync_edge();
             video_core_set_vsync_edge(new_edge);
@@ -521,8 +524,15 @@ void app_core_poll(void) {
     if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
-    if (adb_test_cdc_take_diag_request() && can_emit_adb_text()) {
-        emit_adb_diag();
+    if (adb_test_cdc_take_diag_request()) {
+        request_adb_diag();
+    }
+    if (__atomic_exchange_n(&adb_diag_pending, false, __ATOMIC_ACQ_REL)) {
+        if (can_emit_adb_text()) {
+            emit_adb_diag();
+        } else if (can_emit_text()) {
+            cdc_ctrl_printf("[EBD_IPKVM] adb diag requested but CDC2 is not connected\n");
+        }
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */
