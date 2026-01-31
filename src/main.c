@@ -74,6 +74,8 @@ int main(void) {
         .pin_hsync = PIN_HSYNC,
         .pin_video = PIN_VIDEO,
         .pin_ps_on = PIN_PS_ON,
+        .pin_adb_recv = PIN_ADB_RECV,
+        .pin_adb_xmit = PIN_ADB_XMIT,
     };
     app_core_init(&app_cfg);
 

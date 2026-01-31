@@ -10,6 +10,8 @@ typedef struct app_core_config {
     uint pin_hsync;
     uint pin_video;
     uint pin_ps_on;
+    uint pin_adb_recv;
+    uint pin_adb_xmit;
 } app_core_config_t;
 
 void app_core_init(const app_core_config_t *cfg);

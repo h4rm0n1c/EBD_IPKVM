@@ -166,16 +166,20 @@ static void run_gpio_diag(void) {
     bool hsync = gpio_get(app_cfg.pin_hsync);
     bool vsync = gpio_get(app_cfg.pin_vsync);
     bool video = gpio_get(app_cfg.pin_video);
+    bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
+    bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
     gpio_set_function(app_cfg.pin_pixclk, GPIO_FUNC_PIO0);
     gpio_set_function(app_cfg.pin_hsync, GPIO_FUNC_PIO0);
     gpio_set_function(app_cfg.pin_video, GPIO_FUNC_PIO0);
 
-    cdc_ctrl_printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d adb=%d xmit=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
                     pixclk ? 1 : 0,
                     hsync ? 1 : 0,
                     vsync ? 1 : 0,
                     video ? 1 : 0,
+                    adb_recv ? 1 : 0,
+                    adb_xmit ? 1 : 0,
                     diag_ms / 1000.0,
                     (unsigned long)diag_pixclk_edges,
                     (unsigned long)diag_hsync_edges,
