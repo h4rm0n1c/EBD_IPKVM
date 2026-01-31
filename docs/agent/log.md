@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-02: Updated README with ADB pins, corrected capture geometry, and clarified CDC stream/control interfaces plus host helper defaults.
 - 2026-02-01: Added core0/core1 utilization counters to the firmware status output to support time-budgeting work on the video core.
 - 2026-02-01: Refined core0/core1 utilization counters to track active USB/capture/TX queue work time instead of full loop occupancy.
 - 2026-02-01: Count utilization only when USB/capture/TX routines perform work, avoiding idle-loop inflation.
