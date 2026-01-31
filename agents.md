@@ -28,6 +28,10 @@ After any non-trivial change:
 - Cite function names / symbols.
 - Provide minimal code context so changes are easy to apply.
 
+## Documentation usage
+- Use `docs/` as the source of truth for protocol/behavior decisions.
+- If instructions conflict, update the documentation and note the change in `docs/agent/log.md`.
+
 ## Safety
 - Assume upstream signals may be 5V TTL.
 - Never advise connecting 5V signals directly to Pico GPIO.

@@ -70,7 +70,7 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
-ADB status is emitted on CDC2 as:
+ADB status is emitted on CDC2 (independent of CDC1 control status) as:
 
 - `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> last=<us> ev=<events> drop=<drops>`
 - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).

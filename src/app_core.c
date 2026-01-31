@@ -552,24 +552,24 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    if (can_emit_text()) {
-        if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
-            status_next = delayed_by_ms(status_next, 1000);
+    if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
+        status_next = delayed_by_ms(status_next, 1000);
 
-            uint32_t l = video_core_get_lines_ok();
-            uint32_t per_s = l - status_last_lines;
-            status_last_lines = l;
+        uint32_t l = video_core_get_lines_ok();
+        uint32_t per_s = l - status_last_lines;
+        status_last_lines = l;
 
-            uint32_t ve = video_core_take_vsync_edges();
-            uint32_t core1_busy = 0;
-            uint32_t core1_total = 0;
-            uint32_t core0_busy = 0;
-            uint32_t core0_total = 0;
-            video_core_take_core1_utilization(&core1_busy, &core1_total);
-            take_core0_utilization(&core0_busy, &core0_total);
-            uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
-            uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
+        uint32_t ve = video_core_take_vsync_edges();
+        uint32_t core1_busy = 0;
+        uint32_t core1_total = 0;
+        uint32_t core0_busy = 0;
+        uint32_t core0_total = 0;
+        video_core_take_core1_utilization(&core1_busy, &core1_total);
+        take_core0_utilization(&core0_busy, &core0_total);
+        uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
+        uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
+        if (can_emit_text()) {
             cdc_ctrl_printf("[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
                             video_core_is_armed() ? 1 : 0,
                             video_core_capture_enabled() ? 1 : 0,
@@ -585,25 +585,25 @@ void app_core_poll(void) {
                             (unsigned long)core0_pct,
                             (unsigned long)core1_pct,
                             (unsigned long)cdc1_disconnects);
+        }
 
-            if (can_emit_adb_text()) {
-                adb_bus_stats_t adb_stats = {0};
-                adb_bus_get_stats(&adb_stats);
-                cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus ev=%lu drop=%lu\n",
-                               (unsigned long)adb_stats.rx_pulses,
-                               (unsigned long)adb_stats.rx_raw_pulses,
-                               (unsigned long)adb_stats.rx_overruns,
-                               (unsigned long)adb_stats.attention_pulses,
-                               (unsigned long)adb_stats.sync_pulses,
-                               (unsigned long)adb_stats.last_pulse_us,
-                               (unsigned long)adb_stats.events_consumed,
-                               (unsigned long)adb_events_get_drop_count());
+        if (can_emit_adb_text()) {
+            adb_bus_stats_t adb_stats = {0};
+            adb_bus_get_stats(&adb_stats);
+            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus ev=%lu drop=%lu\n",
+                           (unsigned long)adb_stats.rx_pulses,
+                           (unsigned long)adb_stats.rx_raw_pulses,
+                           (unsigned long)adb_stats.rx_overruns,
+                           (unsigned long)adb_stats.attention_pulses,
+                           (unsigned long)adb_stats.sync_pulses,
+                           (unsigned long)adb_stats.last_pulse_us,
+                           (unsigned long)adb_stats.events_consumed,
+                           (unsigned long)adb_events_get_drop_count());
 
-                if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
-                    if (adb_bus_take_rx_seen()) {
-                        adb_rx_next = delayed_by_ms(get_absolute_time(), 3000);
-                        cdc_adb_printf("[EBD_IPKVM] adb rx seen\n");
-                    }
+            if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
+                if (adb_bus_take_rx_seen()) {
+                    adb_rx_next = delayed_by_ms(get_absolute_time(), 3000);
+                    cdc_adb_printf("[EBD_IPKVM] adb rx seen\n");
                 }
             }
         }
