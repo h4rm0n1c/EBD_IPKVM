@@ -3,7 +3,10 @@
 ; Wait for low pulse, measure duration, push cycle count.
     wait 1 pin 0     ; idle high
     wait 0 pin 0     ; falling edge
-    set x, 0xffff
+    set x, 31
+    mov y, x
+    in null, 32
+    mov x, isr
 count_low:
     jmp pin done
     jmp x-- count_low
