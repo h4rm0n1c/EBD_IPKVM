@@ -23,6 +23,7 @@ void adb_pio_init(adb_pio_t *ctx, PIO pio, uint sm_rx, uint sm_tx, uint pin_recv
     pio_sm_config rx_cfg = adb_rx_program_get_default_config(ctx->offset_rx);
     sm_config_set_in_pins(&rx_cfg, pin_recv);
     sm_config_set_jmp_pin(&rx_cfg, pin_recv);
+    sm_config_set_fifo_join(&rx_cfg, PIO_FIFO_JOIN_RX);
     sm_config_set_clkdiv(&rx_cfg, adb_pio_clkdiv);
     pio_sm_init(pio, sm_rx, ctx->offset_rx, &rx_cfg);
     pio_sm_set_enabled(pio, sm_rx, true);

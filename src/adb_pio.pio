@@ -10,7 +10,7 @@ count_low:
     jmp x-- count_low
 done:
     mov isr, x
-    push block
+    push noblock
     wait 1 pin 6     ; wait for release
     jmp 0            ; loop
 
