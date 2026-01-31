@@ -9,7 +9,6 @@
 #define ADB_PULSE_MIN_US 50u
 #define ADB_PULSE_MAX_US 1000u
 #define ADB_MAX_PULSES_PER_POLL 64u
-#define ADB_RX_PAUSE_US 1000u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
@@ -22,7 +21,6 @@ static volatile uint32_t adb_events_consumed = 0;
 static volatile bool adb_rx_latched = false;
 static volatile uint32_t adb_rx_raw_pulses = 0;
 static volatile uint32_t adb_last_pulse_us = 0;
-static volatile uint32_t adb_rx_pause_until_us = 0;
 
 void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pin_recv = pin_recv;
@@ -45,7 +43,6 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_latched = false;
     adb_rx_raw_pulses = 0;
     adb_last_pulse_us = 0;
-    adb_rx_pause_until_us = 0;
 }
 
 static inline void adb_note_rx_pulse(uint32_t pulse_us) {
@@ -63,23 +60,15 @@ bool adb_bus_poll(void) {
     bool did_work = false;
     uint32_t pulse_count = 0;
     uint32_t pulses_handled = 0;
-    uint32_t now_us = time_us_32();
-    bool rx_paused = ((int32_t)(now_us - __atomic_load_n(&adb_rx_pause_until_us, __ATOMIC_ACQUIRE)) < 0);
-    if (!rx_paused) {
-        while (pulses_handled < ADB_MAX_PULSES_PER_POLL
-               && adb_pio_rx_pop(&adb_pio, &pulse_count)) {
-            uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
-            adb_note_rx_pulse(pulse_us);
-            did_work = true;
-            pulses_handled++;
-        }
-        if (pulses_handled >= ADB_MAX_PULSES_PER_POLL && adb_pio_rx_has_data(&adb_pio)) {
-            __atomic_fetch_add(&adb_rx_overruns, 1u, __ATOMIC_RELAXED);
-            __atomic_store_n(&adb_rx_pause_until_us, now_us + ADB_RX_PAUSE_US, __ATOMIC_RELEASE);
-            adb_pio_rx_flush(&adb_pio);
-            did_work = true;
-        }
-    } else if (adb_pio_rx_has_data(&adb_pio)) {
+    while (pulses_handled < ADB_MAX_PULSES_PER_POLL
+           && adb_pio_rx_pop(&adb_pio, &pulse_count)) {
+        uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
+        adb_note_rx_pulse(pulse_us);
+        did_work = true;
+        pulses_handled++;
+    }
+    if (pulses_handled >= ADB_MAX_PULSES_PER_POLL && adb_pio_rx_has_data(&adb_pio)) {
+        __atomic_fetch_add(&adb_rx_overruns, 1u, __ATOMIC_RELAXED);
         adb_pio_rx_flush(&adb_pio);
         did_work = true;
     }
