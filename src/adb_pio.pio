@@ -1,8 +1,8 @@
 ; ADB PIO helpers (RX pulse width capture + TX low pulse)
 .program adb_rx
 ; Wait for low pulse, measure duration, push cycle count.
-    wait 1 pin       ; idle high
-    wait 0 pin       ; falling edge
+    wait 1 pin 0     ; idle high
+    wait 0 pin 0     ; falling edge
     set x, 0xffff
 count_low:
     jmp pin done
@@ -10,7 +10,7 @@ count_low:
 done:
     mov isr, x
     push block
-    wait 1 pin       ; wait for release
+    wait 1 pin 0     ; wait for release
     jmp 0            ; loop
 
 .program adb_tx
