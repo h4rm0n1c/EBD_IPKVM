@@ -8,6 +8,7 @@
 - 2026-02-02: Hardwired adb_pio RX waits to GPIO6 and removed redundant GPIO sampling to avoid spurious activity during ADB bring-up.
 - 2026-02-02: Moved ADB RECV/XMIT pins to GPIO6/GPIO14 for ADB pulse-capture bring-up testing.
 - 2026-02-02: Set ADB PIO RX/TX clock divider to 8 and convert RX counts to microseconds before filtering so pulse capture uses real ADB timing.
+- 2026-02-02: Exposed ADB raw pulse counts and last pulse width in CDC1 status output to debug missing RX activity.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.
 - 2026-02-02: Updated the ADB plan to refer to core1 as KVMCore and to include a rate-limited ADB RX indicator on the CDC test channel.
 - 2026-02-02: Noted that ADB validation should cross-check the reference implementations available under /opt/adb.

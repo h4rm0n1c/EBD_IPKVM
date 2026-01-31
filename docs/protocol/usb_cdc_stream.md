@@ -69,6 +69,13 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
+ADB status is emitted on CDC1 as:
+
+- `[EBD_IPKVM] adb rx=<filtered> raw=<total> last=<us> ev=<events> drop=<drops>`
+  - `rx` counts pulses that pass the ADB pulse-width filter (µs window).
+  - `raw` counts all observed low pulses, even if they are too short/long.
+  - `last` is the most recent observed low-pulse width in microseconds.
+
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
