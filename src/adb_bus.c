@@ -5,6 +5,7 @@
 #include "pico/stdlib.h"
 
 #include "adb_pio.h"
+#include "adb_pio.pio.h"
 
 #define ADB_RESET_MIN_US 2500u
 #define ADB_ATTENTION_MIN_US 700u
