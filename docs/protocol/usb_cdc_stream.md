@@ -82,7 +82,7 @@ ADB status is emitted on CDC2 as:
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
-- The `A` command (sent on CDC1) emits ADB pulse diagnostics on CDC2.
+- The `A` command (sent on CDC1 or CDC2) emits ADB pulse diagnostics on CDC2.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).

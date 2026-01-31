@@ -22,6 +22,7 @@ typedef struct {
 
 static adb_ansi_state_t ansi_state;
 static uint8_t mouse_buttons = 0;
+static volatile bool adb_diag_requested = false;
 
 static void adb_enqueue_key(uint8_t keycode, bool pressed) {
     adb_event_t ev = {
@@ -185,6 +186,7 @@ static void adb_handle_csi(char code) {
 void adb_test_cdc_init(void) {
     memset(&ansi_state, 0, sizeof(ansi_state));
     mouse_buttons = 0;
+    adb_diag_requested = false;
 }
 
 bool adb_test_cdc_poll(void) {
@@ -197,6 +199,11 @@ bool adb_test_cdc_poll(void) {
         uint8_t ch = 0;
         if (tud_cdc_n_read(CDC_ADB, &ch, 1) != 1) {
             break;
+        }
+        if (ch == 'A' || ch == 'a') {
+            adb_diag_requested = true;
+            did_work = true;
+            continue;
         }
         did_work = true;
 
@@ -239,4 +246,8 @@ bool adb_test_cdc_poll(void) {
     }
 
     return did_work;
+}
+
+bool adb_test_cdc_take_diag_request(void) {
+    return __atomic_exchange_n(&adb_diag_requested, false, __ATOMIC_ACQ_REL);
 }

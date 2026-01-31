@@ -491,7 +491,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' (CDC1) for CDC2 pulse stats.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' (CDC1/CDC2) for CDC2 pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
 
@@ -520,6 +520,9 @@ void app_core_poll(void) {
     active_start = time_us_32();
     if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    if (adb_test_cdc_take_diag_request() && can_emit_adb_text()) {
+        emit_adb_diag();
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */

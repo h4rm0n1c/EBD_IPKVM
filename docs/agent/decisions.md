@@ -45,3 +45,4 @@
 - 2026-02-03: When ADB RX backlog overruns the per-poll cap, flush the RX FIFO so core1 stays responsive while still sampling new bus activity.
 - 2026-02-03: Treat ~30–1000 µs low pulses as valid ADB RX activity and use the PIO pin base to select the ADB RX input pin.
 - 2026-02-03: Emit ADB diagnostic/status output on CDC2 so CDC1 remains dedicated to control/status.
+- 2026-02-03: Allow ADB diag requests on CDC2 in addition to CDC1 to match the ADB test workflow.
