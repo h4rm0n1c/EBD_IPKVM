@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select
+import os, sys, time, struct, fcntl, termios, select, errno
 
 SEND_RESET = True
 SEND_STOP = True
@@ -213,16 +213,46 @@ def pop_one_packet(buf: bytearray):
     del buf[:total_len]
     return pkt
 
+def open_ctrl_fd() -> int:
+    fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+    set_raw_and_dtr(fd)
+    return fd
+
+def ensure_ctrl_writable(fd: int, retries: int = 3) -> int:
+    for _ in range(retries):
+        _, w, _ = select.select([], [fd], [], 0.25)
+        if w:
+            return fd
+    return fd
+
+def ctrl_write(fd: int, payload: bytes) -> int:
+    try:
+        os.write(fd, payload)
+        return fd
+    except OSError as exc:
+        if exc.errno not in (errno.EIO, errno.ENXIO, errno.EBADF):
+            raise
+    log("[host] control port error; reopening ctrl device")
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    fd = open_ctrl_fd()
+    ensure_ctrl_writable(fd)
+    os.write(fd, payload)
+    return fd
+
 stream_fd = os.open(STREAM_DEV, os.O_RDWR | os.O_NOCTTY)
-ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+ctrl_fd = open_ctrl_fd()
 set_raw_and_dtr(stream_fd)
-set_raw_and_dtr(ctrl_fd)
 
 if SEND_BOOT:
-    os.write(ctrl_fd, b"P")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"P")
 
 if SEND_STOP:
-    os.write(ctrl_fd, b"X")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"X")
     time.sleep(0.05)
 
 if DIAG_SECS > 0:
@@ -253,16 +283,20 @@ if BOOT_WAIT > 0:
 
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
-    os.write(ctrl_fd, b"R")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"R")
     time.sleep(0.05)
 if RLE_MODE is True:
-    os.write(ctrl_fd, b"E")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"E")
     time.sleep(0.01)
 elif RLE_MODE is False:
-    os.write(ctrl_fd, b"e")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"e")
     time.sleep(0.01)
 if PROBE_ONLY:
-    os.write(ctrl_fd, b"U")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"U")
     time.sleep(0.2)
     probe_deadline = time.time() + 1.0
     probe_bytes = 0
@@ -276,13 +310,16 @@ if PROBE_ONLY:
     print(f"[host] probe bytes received: {probe_bytes}")
     sys.exit(0)
 if TEST_START:
-    os.write(ctrl_fd, b"T")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"T")
     FORCE_AFTER = 0.0
     FORCE_START = False
 elif FORCE_START:
-    os.write(ctrl_fd, b"F")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"F")
 else:
-    os.write(ctrl_fd, b"S")
+    ensure_ctrl_writable(ctrl_fd)
+    ctrl_fd = ctrl_write(ctrl_fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
@@ -313,11 +350,13 @@ try:
         if not r:
             now = time.time()
             if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
-                os.write(ctrl_fd, b"F")
+                ensure_ctrl_writable(ctrl_fd)
+                ctrl_fd = ctrl_write(ctrl_fd, b"F")
                 force_sent = True
                 log(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
             if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
-                os.write(ctrl_fd, b"T")
+                ensure_ctrl_writable(ctrl_fd)
+                ctrl_fd = ctrl_write(ctrl_fd, b"T")
                 test_sent = True
                 log(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:

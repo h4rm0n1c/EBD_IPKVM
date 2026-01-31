@@ -6,7 +6,7 @@
 #include "adb_events.h"
 #include "adb_pio.h"
 
-#define ADB_PULSE_MIN_US 50u
+#define ADB_PULSE_MIN_US 30u
 #define ADB_PULSE_MAX_US 1000u
 #define ADB_MAX_PULSES_PER_POLL 64u
 
