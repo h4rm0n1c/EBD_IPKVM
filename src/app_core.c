@@ -272,6 +272,16 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.sync_pulses,
                     (unsigned long)adb_stats.last_pulse_us,
                     (unsigned long)adb_events_get_drop_count());
+    cdc_adb_printf("[EBD_IPKVM] adb bins: min=%luus max=%luus <30=%lu 30-60=%lu 60-90=%lu 90-200=%lu 200-600=%lu 600-1100=%lu >1100=%lu\n",
+                    (unsigned long)adb_stats.min_pulse_us,
+                    (unsigned long)adb_stats.max_pulse_us,
+                    (unsigned long)adb_stats.pulse_lt_30_us,
+                    (unsigned long)adb_stats.pulse_30_60_us,
+                    (unsigned long)adb_stats.pulse_60_90_us,
+                    (unsigned long)adb_stats.pulse_90_200_us,
+                    (unsigned long)adb_stats.pulse_200_600_us,
+                    (unsigned long)adb_stats.pulse_600_1100_us,
+                    (unsigned long)adb_stats.pulse_gt_1100_us);
 }
 
 static inline void request_adb_diag(void) {

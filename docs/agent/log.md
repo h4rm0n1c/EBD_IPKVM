@@ -102,3 +102,4 @@
 - 2026-02-03: Emit the 1Hz ADB status line on CDC2 even when CDC1 is disconnected.
 - 2026-02-03: Chunk and flush CDC2 ADB status writes to avoid silent drops when write space is low.
 - 2026-02-03: Widened the ADB attention pulse window during bring-up to catch attention edges shortened by capture skew.
+- 2026-02-03: Added ADB pulse-width bin counters and min/max reporting to the CDC2 ADB diagnostic output.

@@ -76,9 +76,11 @@ ADB status is emitted on CDC2 (independent of CDC1 control status) as:
 - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
   - `raw` counts all observed low pulses, even if they are too short/long.
   - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
-  - `att` counts low pulses in the attention-width window (~700–900 µs).
+  - `att` counts low pulses in the attention-width window (~600–1100 µs, widened during bring-up).
   - `syn` counts low pulses in the sync-width window (~60–90 µs).
   - `last` is the most recent observed low-pulse width in microseconds.
+- On-demand diagnostic output (`A`) also includes a second line with pulse-width bins and min/max:
+  - `[EBD_IPKVM] adb bins: min=<us> max=<us> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-1100=<n> >1100=<n>`
 
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
