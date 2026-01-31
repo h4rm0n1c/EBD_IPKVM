@@ -15,25 +15,30 @@
 
 These sources anchor our bus timing expectations, device register behaviors, and address handling.
 
+- Cross-check behavior against the reference implementations in `/opt/adb` as we validate timing, register contents, and SRQ behavior.
+
 ## Architecture overview
 
 ### 1) PIO layer (bit timing + open-collector control)
 
-- **Purpose:** Provide deterministic ADB line sampling and drive timing using a single PIO state machine.
+- **Purpose:** Provide deterministic ADB line sampling and drive timing using dedicated PIO programs for RX and TX.
 - **Signal model:** ADB is open-collector. We should drive the line low via GPIO output enable and release to float high (external pull-up).
 - **PIO placement:** Use **PIO1** for ADB to avoid contention with PIO0, which already hosts classic video capture.
+- **PIO program split:** Plan for two PIO programs (or state machines) on PIO1: one tuned for RX capture and one for TX bit-cell generation. This mirrors the bidirectional nature of ADB and keeps timing logic simple per direction.
 - **PIO responsibilities:**
   - Detect attention, sync, and start/stop bits.
   - Read/serialize 8-bit data payloads and stop bits into RX FIFO.
   - Emit per-bit pulse sequences for Talk responses and SRQ assertion.
 
-### 2) Core1: ADB real-time service loop
+### 2) Core1 (KVMCore): ADB real-time service loop
 
 - **Purpose:** Interpret PIO edge/data events, handle exact bus timing, and manage device register access.
 - **Scheduling target:** ADB handling should run every ~50–70 µs to avoid missing line transitions (per trabular timing notes) and respect bit timing windows.
 - **Responsibilities:**
   - Parse command bytes (Talk/Listen/Flush/Reset) from PIO RX FIFO.
   - Detect address collisions and follow address resolution rules.
+  - Ignore our own transmissions on the shared ADB line during normal operation (RX/TX pins are tied together on-bus); optionally gate a loopback/echo path when validating TX timing in isolation.
+  - Latch RX activity so the CDC test channel can emit a rate-limited “ADB RX seen” line (e.g., every few seconds) when we decode valid bus traffic from the host.
   - Assert SRQ when keyboard/mouse buffers have new data.
   - Serialize Talk responses from per-device register state.
   - Apply Listen writes to device registers.
@@ -48,6 +53,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
     - Arrow keys -> mouse move (configurable step size).
     - Right Shift -> mouse button click.
     - Other printable characters -> ADB keyboard events.
+    - Periodic RX indicator: if valid ADB traffic was observed, emit a short “ADB RX seen” line no more than once every few seconds (latched/ratelimited).
   - Forward events to core1 via `core_bridge` queues.
 
 ### 4) Core bridge between cores
@@ -100,7 +106,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - `src/adb_mouse.c/.h`
   - Mouse register model + event queue.
 - `src/adb_core.c/.h`
-  - Core1 dispatch loop wrapper that integrates with `video_core` and PIO ISR.
+  - Core1 dispatch loop wrapper that integrates with `kvm_core` and PIO ISR.
 - `src/adb_test_cdc.c/.h`
   - CDC test channel parser and ADB event injection for development.
 
@@ -115,9 +121,9 @@ These sources anchor our bus timing expectations, device register behaviors, and
 ## Coexistence with video capture
 
 - Use PIO1 for ADB to avoid interfering with PIO0 video capture.
-- Keep ADB service time in core1 to a tight budget and avoid blocking operations.
+- Keep ADB service time in core1 (KVMCore) to a tight budget and avoid blocking operations.
 - Use lightweight queues to minimize lock contention and avoid interfering with the existing frame TX queue.
-- Instrument core1 utilization around ADB work so we can confirm we stay well within the remaining budget (video core reports ~12% usage currently).
+- Instrument core1 utilization around ADB work so we can confirm we stay well within the remaining budget (KVMCore reports ~12% usage currently).
 
 ## Implementation steps
 
@@ -126,7 +132,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 3. **Keyboard/mouse models**: implement register logic and event queues, including default addresses/handler IDs and Listen/Flush behaviors.
 4. **Core bridge**: add ADB event queues and event injection APIs on core0.
 5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and Right Shift, map to ADB events.
-6. **Integrate with main**: init ADB modules alongside video core; ensure idle states do not affect capture.
+6. **Integrate with main**: init ADB modules alongside KVMCore; ensure idle states do not affect capture.
 7. **Instrumentation + docs**: add optional diagnostics for SRQ/traffic and update docs (protocol + ADB plan/log/notes).
 
 ## Test plan

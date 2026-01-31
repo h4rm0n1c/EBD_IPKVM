@@ -5,6 +5,8 @@
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
 - 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
 - 2026-02-02: Assign ADB RECV to GPIO7 (via 74LVC245) and ADB XMIT to GPIO8 (via ULN2803) on the shared ADB data line.
+- 2026-02-02: Plan ADB PIO work as two programs/state machines (RX + TX) and ignore self-transmit on the shared ADB line except for optional loopback validation.
+- 2026-02-02: Refer to the core1 real-time service loop as KVMCore and add a rate-limited ADB RX indicator on the CDC test channel for visibility.
 - 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.
 - 2026-01-30: Default capture mode to continuous 60 fps streaming to prioritize long-form testing runs.
 - 2026-01-30: Default host capture output to PBM for compact 1-bpp frames, keeping PGM as an opt-in option for 8-bit output.
