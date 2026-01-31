@@ -31,6 +31,8 @@ After any non-trivial change:
 ## Documentation usage
 - Use `docs/` as the source of truth for protocol/behavior decisions.
 - If instructions conflict, update the documentation and note the change in `docs/agent/log.md`.
+- Capture new workflow rules, tooling quirks, and debugging discoveries in `docs/agent/notes.md` as we go.
+- When behavior changes, update the relevant `docs/protocol/` page and add a brief entry to `docs/agent/log.md`.
 
 ## Safety
 - Assume upstream signals may be 5V TTL.
