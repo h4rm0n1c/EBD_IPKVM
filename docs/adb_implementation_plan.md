@@ -5,7 +5,12 @@
 - Emulate ADB keyboard + mouse as on-bus peripherals for IP KVM use.
 - Follow the existing core split pattern: PIO does bit-level timing, core1 handles real-time bus work, core0 exposes a higher-level API for the app and CDC testing.
 - Keep the ADB implementation modular and consistent with existing firmware structure (peripheral-specific files + shared core bridge).
-- Add a CDC test channel so we can drive mouse movement via arrow keys, click via right shift, and pass through typed characters to the ADB keyboard.
+- Add a CDC test channel so we can drive mouse movement via arrow keys, toggle the mouse button (currently `!`), and pass through typed characters to the ADB keyboard.
+
+## Implementation status (active)
+
+- ADB device emulation is **actively being implemented** (not deferred). The first goal is a minimal keyboard + mouse device that can pass a basic Mac desktop input test (move cursor, click, type characters) over the shared ADB bus.
+- Use the steps in **First bring-up attempt** to get to the initial hardware/firmware validation run.
 
 ## Reference grounding (from /opt/adb)
 
@@ -22,6 +27,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 ### 1) PIO layer (bit timing + open-collector control)
 
 - **Purpose:** Provide deterministic ADB line sampling and drive timing using dedicated PIO programs for RX and TX.
+- **Status:** Initial `adb_pio` RX/TX programs are now in-tree to capture low-pulse widths and drive low pulses; full bit-cell timing and command framing still need to be implemented.
 - **Signal model:** ADB is open-collector. We should drive the line low via GPIO output enable and release to float high (external pull-up).
 - **PIO placement:** Use **PIO1** for ADB to avoid contention with PIO0, which already hosts classic video capture.
 - **PIO program split:** Plan for two PIO programs (or state machines) on PIO1: one tuned for RX capture and one for TX bit-cell generation. This mirrors the bidirectional nature of ADB and keeps timing logic simple per direction.
@@ -51,7 +57,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
   - Translate higher-level input events into register payloads (keyboard register 0/2, mouse register 0).
   - Manage testing input on the third CDC interface:
     - Arrow keys -> mouse move (configurable step size).
-    - Right Shift -> mouse button click.
+    - `!` toggles the mouse button state.
     - Other printable characters -> ADB keyboard events.
     - Periodic RX indicator: if valid ADB traffic was observed, emit a short “ADB RX seen” line no more than once every few seconds (latched/ratelimited).
   - Forward events to core1 via `core_bridge` queues.
@@ -89,7 +95,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - Add **CDC2** in `usb_descriptors.c` and update TUSB configuration.
 - In `app_core`, add a small terminal parser:
   - Arrow keys (escape sequences): update mouse X/Y deltas.
-  - Right Shift: click press/release toggle (press on keydown, release on keyup).
+  - `!` toggles the mouse button state (temporary until true key up/down tracking is added).
   - Other characters: map to ADB keyboard keycodes and enqueue a press/release.
 - Keep this in a separate `adb_test_cdc.c/.h` module for cleanliness.
 
@@ -131,16 +137,34 @@ These sources anchor our bus timing expectations, device register behaviors, and
 2. **Core1 ADB engine**: implement bus state machine (`adb_bus`) with command parsing and SRQ emission.
 3. **Keyboard/mouse models**: implement register logic and event queues, including default addresses/handler IDs and Listen/Flush behaviors.
 4. **Core bridge**: add ADB event queues and event injection APIs on core0.
-5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and Right Shift, map to ADB events.
+5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and `!` toggle, map to ADB events.
 6. **Integrate with main**: init ADB modules alongside KVMCore; ensure idle states do not affect capture.
 7. **Instrumentation + docs**: add optional diagnostics for SRQ/traffic and update docs (protocol + ADB plan/log/notes).
+
+## First bring-up attempt (initial ADB test)
+
+- **Hardware sanity**:
+  - Confirm ADB line level shifting: 74LVC245 on GPIO7 (RECV) + ULN2803 open-collector on GPIO8 (XMIT).
+  - Ensure shared ADB data line with external pull-up and common ground; do not drive high directly.
+- **PIO1 wiring**:
+  - Load RX + TX programs on PIO1, with RX SM sampling the RECV pin and TX SM toggling XMIT output enable.
+  - Verify that TX is idle (line released) unless a Talk response or SRQ is scheduled.
+- **Core1 timing loop**:
+  - Schedule the ADB service loop to run every ~50–70 µs and parse attention/sync/bit cells.
+  - Gate local TX echo unless explicitly in loopback validation mode.
+- **Core0 bridge + CDC2**:
+  - Add CDC2 descriptors and parser so arrow keys/`!`/typed characters enqueue ADB events.
+  - Emit a rate-limited “ADB RX seen” line when valid host traffic is decoded.
+- **On-bus validation**:
+  - On a real Mac, watch for ADB reset + Talk polling; confirm SRQ pulses when events are queued.
+  - Cross-check bit timing and register contents against `/opt/adb` references during scope validation.
 
 ## Test plan
 
 - **Basic bus health**: scope the ADB line for attention/sync, Talk responses, and SRQ pulses.
 - **Terminal-driven test**: open CDC2 from Linux and verify:
   - Arrow keys move the Mac cursor.
-  - Right Shift clicks.
+  - `!` toggles the mouse button.
   - Typed characters appear on the Mac.
 - **Collision/address resolution**: connect a real ADB keyboard or mouse and ensure our device reassigns or coexists properly.
 - **Performance**: check core0/core1 utilization counters while exercising ADB input + full-rate video capture.

@@ -10,6 +10,9 @@
 #include "hardware/watchdog.h"
 #include "tusb.h"
 
+#include "adb_bus.h"
+#include "adb_events.h"
+#include "adb_test_cdc.h"
 #include "core_bridge.h"
 #include "stream_protocol.h"
 #include "video_capture.h"
@@ -42,6 +45,7 @@ static volatile uint32_t diag_video_edges = 0;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
+static absolute_time_t adb_rx_next;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -403,16 +407,19 @@ static inline bool service_txq(void) {
 
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
+    adb_test_cdc_init();
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
-    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status, CDC2=ADB test\n");
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
+    adb_rx_next = make_timeout_time_ms(3000);
 }
 
 void app_core_poll(void) {
@@ -422,6 +429,10 @@ void app_core_poll(void) {
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    active_start = time_us_32();
+    if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
@@ -476,6 +487,20 @@ void app_core_poll(void) {
                             (unsigned long)ve,
                             (unsigned long)core0_pct,
                             (unsigned long)core1_pct);
+
+            adb_bus_stats_t adb_stats = {0};
+            adb_bus_get_stats(&adb_stats);
+            cdc_ctrl_printf("[EBD_IPKVM] adb rx=%lu ev=%lu drop=%lu\n",
+                            (unsigned long)adb_stats.rx_pulses,
+                            (unsigned long)adb_stats.events_consumed,
+                            (unsigned long)adb_events_get_drop_count());
+
+            if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
+                if (adb_bus_take_rx_seen()) {
+                    adb_rx_next = delayed_by_ms(get_absolute_time(), 3000);
+                    cdc_ctrl_printf("[EBD_IPKVM] adb rx seen\n");
+                }
+            }
         }
     }
 

@@ -8,6 +8,7 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 
+#include "adb_bus.h"
 #include "classic_line.pio.h"
 #include "core_bridge.h"
 
@@ -62,6 +63,8 @@ static uint sm = 0;
 static uint offset_fall_pixrise = 0;
 static uint pin_video = 0;
 static uint pin_vsync = 0;
+static uint pin_adb_recv = 0;
+static uint pin_adb_xmit = 0;
 static volatile bool vsync_fall_edge = true;
 
 static void gpio_irq(uint gpio, uint32_t events);
@@ -427,6 +430,11 @@ static void core1_entry(void) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
+        active_start = time_us_32();
+        if (adb_bus_poll()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
         tight_loop_contents();
         uint32_t loop_end = time_us_32();
 
@@ -442,6 +450,8 @@ void video_core_init(const video_core_config_t *cfg) {
     offset_fall_pixrise = cfg->offset_fall_pixrise;
     pin_video = cfg->pin_video;
     pin_vsync = cfg->pin_vsync;
+    pin_adb_recv = cfg->pin_adb_recv;
+    pin_adb_xmit = cfg->pin_adb_xmit;
 
     vsync_fall_edge = true;
     __atomic_store_n(&capture_mode, CAPTURE_MODE_CONTINUOUS_60FPS, __ATOMIC_RELEASE);
@@ -465,6 +475,7 @@ void video_core_init(const video_core_config_t *cfg) {
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
+    adb_bus_init(pin_adb_recv, pin_adb_xmit);
 }
 
 void video_core_launch(void) {

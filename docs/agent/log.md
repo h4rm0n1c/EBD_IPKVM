@@ -1,5 +1,9 @@
 # Log (running)
 
+- 2026-02-02: Marked ADB work as in-progress in project state and added a first bring-up checklist to the ADB implementation plan.
+- 2026-02-02: Documented that ADB implementation is active and added status guidance in the ADB protocol notes.
+- 2026-02-02: Added initial ADB event queue plumbing, CDC2 test input parsing, and RX activity latching for early on-bus validation.
+- 2026-02-02: Added initial ADB PIO RX/TX programs plus a PIO1-backed RX pulse capture path in the ADB bus scaffold.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.
 - 2026-02-02: Updated the ADB plan to refer to core1 as KVMCore and to include a rate-limited ADB RX indicator on the CDC test channel.
 - 2026-02-02: Noted that ADB validation should cross-check the reference implementations available under /opt/adb.

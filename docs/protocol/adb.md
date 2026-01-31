@@ -1,5 +1,11 @@
 # ADB wiring + control notes
 
+## Status
+
+- ADB keyboard/mouse emulation is **in progress**. The immediate focus is enabling a first on-bus test: observe host polling, respond to Talk, and inject basic keyboard/mouse events via CDC2 per the implementation plan.
+- Current firmware exposes CDC2 for ADB test input and latches basic RX activity on the shared bus; full Talk/Listen response handling is still being built.
+- Initial PIO RX/TX programs are in place to capture ADB low-pulse widths and drive low pulses on the bus (PIO1, separate RX/TX state machines).
+
 ## GPIO assignment
 
 | Signal | GPIO | Direction | Level shifting | Notes |

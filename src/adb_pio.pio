@@ -1,0 +1,25 @@
+; ADB PIO helpers (RX pulse width capture + TX low pulse)
+.program adb_rx
+; Wait for low pulse, measure duration, push cycle count.
+    wait 1 pin       ; idle high
+    wait 0 pin       ; falling edge
+    set x, 0xffff
+count_low:
+    jmp pin done
+    jmp x-- count_low
+done:
+    mov isr, x
+    push block
+    wait 1 pin       ; wait for release
+    jmp 0            ; loop
+
+.program adb_tx
+; Drive line low for N cycles (N pulled from TX FIFO).
+; Uses SET PINDIRS to emulate open-collector: output low when driving, input when released.
+    pull block
+    mov x, osr
+    set pindirs, 1   ; drive low
+drive_low:
+    jmp x-- drive_low
+    set pindirs, 0   ; release line
+    jmp 0            ; wait for next pulse

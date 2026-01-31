@@ -1,22 +1,25 @@
 # USB CDC line stream protocol
 
-The firmware exposes two USB CDC interfaces:
+The firmware exposes three USB CDC interfaces:
 
 - CDC0: video stream (binary packets).
 - CDC1: control + status (ASCII commands and logs).
+- CDC2: ADB test input (keyboard/mouse event injection).
 
 Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
 ### Identifying CDC0 vs CDC1 on Linux
-The USB interface strings are set to `EBD_IPKVM stream` and `EBD_IPKVM control`,
+The USB interface strings are set to `EBD_IPKVM stream`, `EBD_IPKVM control`,
+and `EBD_IPKVM adb`,
 which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
 also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
 number:
 
 - `...-if00` → CDC0 (stream)
 - `...-if02` → CDC1 (control)
+- `...-if04` → CDC2 (ADB test)
 
 ## Packet layout (variable length)
 
@@ -65,6 +68,11 @@ read without interfering with the CDC0 video stream. Utilization percentages
 (`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
 work (only when those operations perform work), rather than total loop
 occupancy.
+
+## ADB test channel (CDC2)
+- ANSI arrow keys inject mouse deltas (default 5 counts per press).
+- `!` toggles the mouse button state.
+- Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).

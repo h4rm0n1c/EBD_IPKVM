@@ -31,9 +31,10 @@ Above output is current project output as of PR #19.
 - Line capture begins on the selected HSYNC edge.
 
 ## USB CDC interfaces
-The firmware exposes two CDC interfaces:
+The firmware exposes three CDC interfaces:
 - **CDC0 (stream)**: binary line packets (video data).
 - **CDC1 (control)**: ASCII commands + status text.
+- **CDC2 (ADB test)**: keyboard/mouse test input (arrow keys for mouse, `!` toggles button).
 
 See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
 

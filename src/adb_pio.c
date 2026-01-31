@@ -1,0 +1,58 @@
+#include "adb_pio.h"
+
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+#include "adb_pio.pio.h"
+
+void adb_pio_init(adb_pio_t *ctx, PIO pio, uint sm_rx, uint sm_tx, uint pin_recv, uint pin_xmit) {
+    if (!ctx) {
+        return;
+    }
+
+    ctx->pio = pio;
+    ctx->sm_rx = sm_rx;
+    ctx->sm_tx = sm_tx;
+    ctx->pin_recv = pin_recv;
+    ctx->pin_xmit = pin_xmit;
+    ctx->offset_rx = pio_add_program(pio, &adb_rx_program);
+    ctx->offset_tx = pio_add_program(pio, &adb_tx_program);
+
+    pio_sm_config rx_cfg = adb_rx_program_get_default_config(ctx->offset_rx);
+    sm_config_set_in_pins(&rx_cfg, pin_recv);
+    sm_config_set_jmp_pin(&rx_cfg, pin_recv);
+    sm_config_set_clkdiv(&rx_cfg, 1.0f);
+    pio_sm_init(pio, sm_rx, ctx->offset_rx, &rx_cfg);
+    pio_sm_set_enabled(pio, sm_rx, true);
+
+    pio_sm_config tx_cfg = adb_tx_program_get_default_config(ctx->offset_tx);
+    sm_config_set_set_pins(&tx_cfg, pin_xmit, 1);
+    sm_config_set_clkdiv(&tx_cfg, 1.0f);
+    pio_sm_init(pio, sm_tx, ctx->offset_tx, &tx_cfg);
+    pio_sm_set_enabled(pio, sm_tx, true);
+
+    pio_sm_set_consecutive_pindirs(pio, sm_rx, pin_recv, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm_tx, pin_xmit, 1, false);
+
+    gpio_set_function(pin_recv, GPIO_FUNC_PIO1);
+    gpio_set_function(pin_xmit, GPIO_FUNC_PIO1);
+}
+
+bool adb_pio_rx_pop(adb_pio_t *ctx, uint16_t *out_count) {
+    if (!ctx || !out_count) {
+        return false;
+    }
+    if (pio_sm_is_rx_fifo_empty(ctx->pio, ctx->sm_rx)) {
+        return false;
+    }
+    uint32_t raw = pio_sm_get(ctx->pio, ctx->sm_rx);
+    *out_count = (uint16_t)(0xFFFFu - (raw & 0xFFFFu));
+    return true;
+}
+
+void adb_pio_tx_pulse(adb_pio_t *ctx, uint16_t cycles) {
+    if (!ctx) {
+        return;
+    }
+    pio_sm_put_blocking(ctx->pio, ctx->sm_tx, cycles);
+}
