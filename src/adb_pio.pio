@@ -5,8 +5,9 @@
 ; Clock divider should be set to 1.0 for 1 MHz sampling.
 
 .wrap_target
-    wait 1 pin
-    wait 0 pin
+wrap_target:
+    wait 1 pin 0
+    wait 0 pin 0
     mov x, ~null
 low_count:
     jmp pin low_done
@@ -17,10 +18,9 @@ low_done:
 
     mov x, ~null
 high_count:
-    jmp !pin high_done
-    jmp x-- high_count
+    jmp pin high_count
 high_done:
     mov isr, x
     push
-    jmp .wrap_target
+    jmp wrap_target
 .wrap
