@@ -5,7 +5,6 @@
 #include "pico/stdlib.h"
 
 #include "adb_pio.h"
-#include "adb_pio.pio.h"
 
 #define ADB_RESET_MIN_US 2500u
 #define ADB_ATTENTION_MIN_US 700u
@@ -57,7 +56,7 @@ void adb_bus_init(PIO pio, uint sm, uint pin_adb) {
     adb_bus.sm = sm;
     adb_bus.pin = pin_adb;
 
-    uint offset = pio_add_program(pio, &adb_edge_sampler_program);
+    uint offset = adb_pio_add_program(pio);
     adb_pio_init(pio, sm, offset, pin_adb);
     adb_bus.state = ADB_BUS_IDLE;
 }

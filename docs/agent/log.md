@@ -76,4 +76,4 @@
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
 - 2026-02-03: Added initial ADB event plumbing (core bridge queue + core1 handlers) and a CDC2 test channel for keyboard/mouse injection.
 - 2026-02-03: Implemented an ADB PIO edge sampler on PIO1 and a core1 decoder for attention/sync/command bits.
-- 2026-02-03: Included the generated ADB PIO header in adb_bus to expose the edge sampler program symbol at build time.
+- 2026-02-03: Wrapped the ADB PIO program add in adb_pio so adb_bus no longer depends on generated headers.

@@ -2,6 +2,10 @@
 
 #include "adb_pio.pio.h"
 
+uint adb_pio_add_program(PIO pio) {
+    return pio_add_program(pio, &adb_edge_sampler_program);
+}
+
 void adb_pio_init(PIO pio, uint sm, uint offset, uint pin_adb) {
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
