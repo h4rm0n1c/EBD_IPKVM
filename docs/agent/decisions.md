@@ -47,3 +47,4 @@
 - 2026-02-03: Emit ADB diagnostic/status output on CDC2 so CDC1 remains dedicated to control/status.
 - 2026-02-03: Accept ADB diag requests only on CDC2 to keep CDC1 reserved for control/status traffic.
 - 2026-02-03: Widen the ADB attention pulse detect window (600–1100 µs) during bring-up to account for capture-path skew.
+- 2026-02-03: Scale ADB RX pulse widths by 2 ticks to match the RX PIO loop's two-cycle decrement cadence.

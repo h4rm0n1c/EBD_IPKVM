@@ -81,5 +81,5 @@ uint32_t adb_pio_ticks_to_us(const adb_pio_t *ctx, uint32_t ticks) {
     if (!ctx || ctx->tick_hz == 0u) {
         return 0u;
     }
-    return (uint32_t)(((uint64_t)ticks * 1000000ull) / ctx->tick_hz);
+    return (uint32_t)(((uint64_t)ticks * 2ull * 1000000ull) / ctx->tick_hz);
 }
