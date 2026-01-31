@@ -100,3 +100,4 @@
 - 2026-02-03: Added attention/sync pulse counters to CDC2 ADB status output for early frame-boundary validation.
 - 2026-02-03: Added a --no-setup option to cdc_cmd.py to skip termios/DTR when sending BOOTSEL commands.
 - 2026-02-03: Emit the 1Hz ADB status line on CDC2 even when CDC1 is disconnected.
+- 2026-02-03: Chunk and flush CDC2 ADB status writes to avoid silent drops when write space is low.
