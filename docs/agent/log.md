@@ -103,3 +103,4 @@
 - 2026-02-03: Chunk and flush CDC2 ADB status writes to avoid silent drops when write space is low.
 - 2026-02-03: Widened the ADB attention pulse window during bring-up to catch attention edges shortened by capture skew.
 - 2026-02-03: Added ADB pulse-width bin counters and min/max reporting to the CDC2 ADB diagnostic output.
+- 2026-02-03: Treat zero-length RX pulse samples as a separate bin to avoid skewing min/max during ADB capture debugging.

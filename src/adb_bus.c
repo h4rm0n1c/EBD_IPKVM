@@ -29,6 +29,7 @@ static volatile uint32_t adb_rx_raw_pulses = 0;
 static volatile uint32_t adb_last_pulse_us = 0;
 static volatile uint32_t adb_min_pulse_us = UINT32_MAX;
 static volatile uint32_t adb_max_pulse_us = 0;
+static volatile uint32_t adb_pulse_zero_us = 0;
 static volatile uint32_t adb_pulse_lt_30_us = 0;
 static volatile uint32_t adb_pulse_30_60_us = 0;
 static volatile uint32_t adb_pulse_60_90_us = 0;
@@ -62,6 +63,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_last_pulse_us = 0;
     adb_min_pulse_us = UINT32_MAX;
     adb_max_pulse_us = 0;
+    adb_pulse_zero_us = 0;
     adb_pulse_lt_30_us = 0;
     adb_pulse_30_60_us = 0;
     adb_pulse_60_90_us = 0;
@@ -73,6 +75,10 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
 
 static inline void adb_note_rx_pulse(uint32_t pulse_us) {
     __atomic_fetch_add(&adb_rx_raw_pulses, 1u, __ATOMIC_RELAXED);
+    if (pulse_us == 0u) {
+        __atomic_fetch_add(&adb_pulse_zero_us, 1u, __ATOMIC_RELAXED);
+        return;
+    }
     __atomic_store_n(&adb_last_pulse_us, pulse_us, __ATOMIC_RELEASE);
     uint32_t min_pulse = __atomic_load_n(&adb_min_pulse_us, __ATOMIC_ACQUIRE);
     if (pulse_us < min_pulse) {
@@ -158,6 +164,7 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     }
     out_stats->min_pulse_us = min_pulse;
     out_stats->max_pulse_us = __atomic_load_n(&adb_max_pulse_us, __ATOMIC_ACQUIRE);
+    out_stats->pulse_zero_us = __atomic_load_n(&adb_pulse_zero_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_lt_30_us = __atomic_load_n(&adb_pulse_lt_30_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_30_60_us = __atomic_load_n(&adb_pulse_30_60_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_60_90_us = __atomic_load_n(&adb_pulse_60_90_us, __ATOMIC_ACQUIRE);

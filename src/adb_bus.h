@@ -16,6 +16,7 @@ typedef struct {
     uint32_t last_pulse_us;
     uint32_t min_pulse_us;
     uint32_t max_pulse_us;
+    uint32_t pulse_zero_us;
     uint32_t pulse_lt_30_us;
     uint32_t pulse_30_60_us;
     uint32_t pulse_60_90_us;
