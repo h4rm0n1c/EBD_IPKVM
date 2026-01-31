@@ -404,8 +404,6 @@ static bool poll_cdc_commands(void) {
                 run_gpio_diag();
                 core_bridge_send(CORE_BRIDGE_CMD_DIAG_DONE, 0);
             }
-        } else if (ch == 'A' || ch == 'a') {
-            request_adb_diag();
         } else if (ch == 'V' || ch == 'v') {
             bool new_edge = !video_core_get_vsync_edge();
             video_core_set_vsync_edge(new_edge);
@@ -494,7 +492,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' (CDC1/CDC2) for CDC2 pulse stats.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
 
@@ -530,8 +528,6 @@ void app_core_poll(void) {
     if (__atomic_exchange_n(&adb_diag_pending, false, __ATOMIC_ACQ_REL)) {
         if (can_emit_adb_text()) {
             emit_adb_diag();
-        } else if (can_emit_text()) {
-            cdc_ctrl_printf("[EBD_IPKVM] adb diag requested but CDC2 is not connected\n");
         }
     }
 

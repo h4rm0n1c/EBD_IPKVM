@@ -96,4 +96,4 @@
 - 2026-02-03: Moved ADB diagnostic/status output to CDC2 to keep CDC1 focused on control/status traffic.
 - 2026-02-03: Allow ADB diagnostic requests to be triggered from CDC2 as well as CDC1.
 - 2026-02-03: Make scripts/cdc_cmd.py tolerate CDC disconnects and add a --no-read option for reset/BOOTSEL commands.
-- 2026-02-03: Queue ADB diag requests and emit a CDC1 warning if CDC2 is not connected.
+- 2026-02-03: Handle ADB diag requests only on CDC2 to keep CDC1 control traffic clean.
