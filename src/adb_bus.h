@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "pico/stdlib.h"
+
 typedef struct {
     uint32_t rx_pulses;
     uint32_t rx_seen;
