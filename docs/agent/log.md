@@ -95,3 +95,4 @@
 - 2026-02-03: Allow ~35 µs ADB low pulses in the RX filter window and tie ADB RX PIO waits to the configured pin base.
 - 2026-02-03: Moved ADB diagnostic/status output to CDC2 to keep CDC1 focused on control/status traffic.
 - 2026-02-03: Allow ADB diagnostic requests to be triggered from CDC2 as well as CDC1.
+- 2026-02-03: Make scripts/cdc_cmd.py tolerate CDC disconnects and add a --no-read option for reset/BOOTSEL commands.

@@ -38,24 +38,38 @@ def main() -> int:
                         help="CDC control device path (CDC1 by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")
+    parser.add_argument("--no-read", action="store_true", help="Exit immediately after sending the command.")
     args = parser.parse_args()
 
-    if args.read_secs <= 0:
-        raise SystemExit("--read-secs must be > 0")
+    if args.read_secs <= 0 and not args.no_read:
+        raise SystemExit("--read-secs must be > 0 (or use --no-read)")
 
-    fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY)
+    fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     try:
         set_raw_and_dtr(fd)
-        os.write(fd, args.cmd.encode("ascii"))
+        try:
+            os.write(fd, args.cmd.encode("ascii"))
+        except OSError:
+            return 1
+        if args.no_read:
+            return 0
         end = time.time() + args.read_secs
         buf = bytearray()
         while time.time() < end:
-            r, _, _ = select.select([fd], [], [], 0.25)
+            try:
+                r, _, _ = select.select([fd], [], [], 0.25)
+            except OSError:
+                break
             if not r:
                 continue
-            chunk = os.read(fd, 4096)
-            if not chunk:
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
                 continue
+            except OSError:
+                break
+            if not chunk:
+                break
             buf.extend(chunk)
             while b"\n" in buf:
                 line, _, remainder = buf.partition(b"\n")
