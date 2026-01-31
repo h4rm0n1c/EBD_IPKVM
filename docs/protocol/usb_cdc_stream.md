@@ -58,6 +58,7 @@ The firmware is host-controlled over CDC1 (control channel):
 | `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
+| `A` | Emit ADB pin levels + pulse stats (non-intrusive; does not stop capture). |
 | `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
 | `M` | Toggle capture cadence between ~30 fps test mode (100-frame cap) and continuous ~60 fps streaming. |
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |

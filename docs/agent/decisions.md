@@ -8,6 +8,7 @@
 - 2026-02-02: Run ADB PIO RX/TX at clkdiv=8 and convert tick counts to microseconds before applying pulse-width filters.
 - 2026-02-02: Extend CDC1 ADB status output to include raw pulse counts and last pulse width for bring-up debugging.
 - 2026-02-02: Configure ADB PIO RX to use a joined RX FIFO and non-blocking push so RX capture does not stall on FIFO saturation.
+- 2026-02-02: Add a non-intrusive `A` command on CDC1 to report ADB pin levels and pulse stats without stopping capture.
 - 2026-02-02: Plan ADB PIO work as two programs/state machines (RX + TX) and ignore self-transmit on the shared ADB line except for optional loopback validation.
 - 2026-02-02: Refer to the core1 real-time service loop as KVMCore and add a rate-limited ADB RX indicator on the CDC test channel for visibility.
 - 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.

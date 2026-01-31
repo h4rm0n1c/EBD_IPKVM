@@ -187,6 +187,21 @@ static void run_gpio_diag(void) {
                     (unsigned long)diag_video_edges);
 }
 
+static void emit_adb_diag(void) {
+    adb_bus_stats_t adb_stats = {0};
+    adb_bus_get_stats(&adb_stats);
+    bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
+    bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
+
+    cdc_ctrl_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu last=%luus drop=%lu\n",
+                    adb_recv ? 1 : 0,
+                    adb_xmit ? 1 : 0,
+                    (unsigned long)adb_stats.rx_pulses,
+                    (unsigned long)adb_stats.rx_raw_pulses,
+                    (unsigned long)adb_stats.last_pulse_us,
+                    (unsigned long)adb_events_get_drop_count());
+}
+
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
 
@@ -332,6 +347,10 @@ static bool poll_cdc_commands(void) {
                 run_gpio_diag();
                 core_bridge_send(CORE_BRIDGE_CMD_DIAG_DONE, 0);
             }
+        } else if (ch == 'A' || ch == 'a') {
+            if (can_emit_text()) {
+                emit_adb_diag();
+            }
         } else if (ch == 'V' || ch == 'v') {
             bool new_edge = !video_core_get_vsync_edge();
             video_core_set_vsync_edge(new_edge);
@@ -420,6 +439,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' for pin levels + pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
 
