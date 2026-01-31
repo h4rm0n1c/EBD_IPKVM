@@ -6,7 +6,10 @@
 - 2026-02-01: Split USB CDC into stream (CDC0) and control/status (CDC1) interfaces so status traffic no longer shares the video stream.
 - 2026-02-01: Updated host Python tooling to target CDC0 for the stream and CDC1 for control commands by default.
 - 2026-02-01: Documented how to identify CDC0/CDC1 in Linux via interface strings and /dev/serial/by-id symlinks.
+- 2026-02-02: Documented ADB GPIO7/GPIO8 wiring and electrical constraints for the shared ADB data line.
+- 2026-02-02: Documented /opt/adb reference locations in agents.md for local ADB research sources.
 - 2026-02-01: Avoid partial CDC1 status writes so log lines don't interleave when control FIFO is tight.
+- 2026-02-02: Captured external ADB implementation references and Apple docs links in notes for future input-device emulation work.
 - 2026-02-01: Split CDC1 debug/status output into shorter lines so the control interface can emit updates reliably.
 - 2026-02-01: Emit CRLF on CDC1 output to keep terminal line breaks aligned across host serial tools.
 - 2026-02-01: Disabled frame file writes when streaming raw host data so raw capture no longer fills disks with PGM/PBM output.

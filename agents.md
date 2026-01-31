@@ -21,6 +21,7 @@ After any non-trivial change:
 ## Reference sources
 - Use `/opt/MacDevDocs` (Apple legacy Mac documentation) as a local reference when relevant to this project.
 - The `docs/mac_classic_video_protocol/` folder contains PDFs/snapshots for classic Mac video timing and sync behavior; use `pdftotext` to mine details before changing capture logic.
+- ADB references are available under `/opt/adb` (project snapshots) and `/opt/adb/miscdocs` (ADB Manager PDF, hardware technotes).
 
 ## Preferred reporting style
 - Cite file paths.
