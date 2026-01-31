@@ -44,3 +44,4 @@
 - 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
 - 2026-02-03: When ADB RX backlog overruns the per-poll cap, flush the RX FIFO so core1 stays responsive while still sampling new bus activity.
 - 2026-02-03: Treat ~30–1000 µs low pulses as valid ADB RX activity and use the PIO pin base to select the ADB RX input pin.
+- 2026-02-03: Emit ADB diagnostic/status output on CDC2 so CDC1 remains dedicated to control/status.

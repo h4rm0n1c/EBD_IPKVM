@@ -93,3 +93,4 @@
 - 2026-02-03: Capped ADB RX pulse handling per poll iteration and exposed an overrun counter to avoid core1 starvation when the ADB line is active.
 - 2026-02-03: Flush ADB RX FIFO on backlog overruns so core1 stays responsive while still sampling new ADB activity.
 - 2026-02-03: Allow ~35 µs ADB low pulses in the RX filter window and tie ADB RX PIO waits to the configured pin base.
+- 2026-02-03: Moved ADB diagnostic/status output to CDC2 to keep CDC1 focused on control/status traffic.

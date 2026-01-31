@@ -70,7 +70,7 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
-ADB status is emitted on CDC1 as:
+ADB status is emitted on CDC2 as:
 
 - `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> last=<us> ev=<events> drop=<drops>`
 - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
@@ -82,6 +82,7 @@ ADB status is emitted on CDC1 as:
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
+- The `A` command (sent on CDC1) emits ADB pulse diagnostics on CDC2.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).
