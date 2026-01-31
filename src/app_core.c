@@ -46,6 +46,8 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
+static bool cdc1_prev_connected = false;
+static uint32_t cdc1_disconnects = 0;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -426,6 +428,14 @@ void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
     tud_task();
+    bool cdc1_connected = tud_cdc_n_connected(CDC_CTRL);
+    if (cdc1_prev_connected && !cdc1_connected) {
+        cdc1_disconnects++;
+    } else if (!cdc1_prev_connected && cdc1_connected) {
+        cdc_ctrl_printf("[EBD_IPKVM] cdc1 reconnected drops=%lu\n",
+                        (unsigned long)cdc1_disconnects);
+    }
+    cdc1_prev_connected = cdc1_connected;
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {
@@ -480,13 +490,14 @@ void app_core_poll(void) {
                             (unsigned long)per_s,
                             (unsigned long)l,
                             (unsigned long)video_core_get_frames_done());
-            cdc_ctrl_printf("[EBD_IPKVM] dr=%lu usb=%lu ov=%lu vs/s=%lu c0=%lu%% c1=%lu%%\n",
+            cdc_ctrl_printf("[EBD_IPKVM] dr=%lu usb=%lu ov=%lu vs/s=%lu c0=%lu%% c1=%lu%% cdc1d=%lu\n",
                             (unsigned long)video_core_get_lines_drop(),
                             (unsigned long)usb_drops,
                             (unsigned long)video_core_get_frame_overrun(),
                             (unsigned long)ve,
                             (unsigned long)core0_pct,
-                            (unsigned long)core1_pct);
+                            (unsigned long)core1_pct,
+                            (unsigned long)cdc1_disconnects);
 
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
