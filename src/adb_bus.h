@@ -14,6 +14,16 @@ typedef struct {
     uint32_t sync_pulses;
     uint32_t events_consumed;
     uint32_t last_pulse_us;
+    uint32_t min_pulse_us;
+    uint32_t max_pulse_us;
+    uint32_t pulse_zero_us;
+    uint32_t pulse_lt_30_us;
+    uint32_t pulse_30_60_us;
+    uint32_t pulse_60_90_us;
+    uint32_t pulse_90_200_us;
+    uint32_t pulse_200_600_us;
+    uint32_t pulse_600_1100_us;
+    uint32_t pulse_gt_1100_us;
 } adb_bus_stats_t;
 
 void adb_bus_init(uint pin_recv, uint pin_xmit);
