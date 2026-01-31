@@ -72,9 +72,10 @@ occupancy.
 
 ADB status is emitted on CDC1 as:
 
-- `[EBD_IPKVM] adb rx=<filtered> raw=<total> last=<us> ev=<events> drop=<drops>`
+- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> last=<us> ev=<events> drop=<drops>`
   - `rx` counts pulses that pass the ADB pulse-width filter (µs window).
   - `raw` counts all observed low pulses, even if they are too short/long.
+  - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
   - `last` is the most recent observed low-pulse width in microseconds.
 
 ## ADB test channel (CDC2)

@@ -193,11 +193,12 @@ static void emit_adb_diag(void) {
     bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
     bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
-    cdc_ctrl_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu last=%luus drop=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu last=%luus drop=%lu\n",
                     adb_recv ? 1 : 0,
                     adb_xmit ? 1 : 0,
                     (unsigned long)adb_stats.rx_pulses,
                     (unsigned long)adb_stats.rx_raw_pulses,
+                    (unsigned long)adb_stats.rx_overruns,
                     (unsigned long)adb_stats.last_pulse_us,
                     (unsigned long)adb_events_get_drop_count());
 }
@@ -525,9 +526,10 @@ void app_core_poll(void) {
 
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
-            cdc_ctrl_printf("[EBD_IPKVM] adb rx=%lu raw=%lu last=%luus ev=%lu drop=%lu\n",
+            cdc_ctrl_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu last=%luus ev=%lu drop=%lu\n",
                             (unsigned long)adb_stats.rx_pulses,
                             (unsigned long)adb_stats.rx_raw_pulses,
+                            (unsigned long)adb_stats.rx_overruns,
                             (unsigned long)adb_stats.last_pulse_us,
                             (unsigned long)adb_stats.events_consumed,
                             (unsigned long)adb_events_get_drop_count());

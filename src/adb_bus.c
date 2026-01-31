@@ -8,6 +8,7 @@
 
 #define ADB_PULSE_MIN_US 50u
 #define ADB_PULSE_MAX_US 1000u
+#define ADB_MAX_PULSES_PER_POLL 64u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
@@ -15,6 +16,7 @@ static adb_pio_t adb_pio = {0};
 
 static volatile uint32_t adb_rx_pulses = 0;
 static volatile uint32_t adb_rx_seen = 0;
+static volatile uint32_t adb_rx_overruns = 0;
 static volatile uint32_t adb_events_consumed = 0;
 static volatile bool adb_rx_latched = false;
 static volatile uint32_t adb_rx_raw_pulses = 0;
@@ -36,6 +38,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
 
     adb_rx_pulses = 0;
     adb_rx_seen = 0;
+    adb_rx_overruns = 0;
     adb_events_consumed = 0;
     adb_rx_latched = false;
     adb_rx_raw_pulses = 0;
@@ -56,9 +59,16 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
 bool adb_bus_poll(void) {
     bool did_work = false;
     uint32_t pulse_count = 0;
-    while (adb_pio_rx_pop(&adb_pio, &pulse_count)) {
+    uint32_t pulses_handled = 0;
+    while (pulses_handled < ADB_MAX_PULSES_PER_POLL
+           && adb_pio_rx_pop(&adb_pio, &pulse_count)) {
         uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
         adb_note_rx_pulse(pulse_us);
+        did_work = true;
+        pulses_handled++;
+    }
+    if (pulses_handled >= ADB_MAX_PULSES_PER_POLL && adb_pio_rx_has_data(&adb_pio)) {
+        __atomic_fetch_add(&adb_rx_overruns, 1u, __ATOMIC_RELAXED);
         did_work = true;
     }
 
@@ -82,6 +92,7 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     out_stats->rx_raw_pulses = __atomic_load_n(&adb_rx_raw_pulses, __ATOMIC_ACQUIRE);
     out_stats->rx_pulses = __atomic_load_n(&adb_rx_pulses, __ATOMIC_ACQUIRE);
     out_stats->rx_seen = __atomic_load_n(&adb_rx_seen, __ATOMIC_ACQUIRE);
+    out_stats->rx_overruns = __atomic_load_n(&adb_rx_overruns, __ATOMIC_ACQUIRE);
     out_stats->events_consumed = __atomic_load_n(&adb_events_consumed, __ATOMIC_ACQUIRE);
     out_stats->last_pulse_us = __atomic_load_n(&adb_last_pulse_us, __ATOMIC_ACQUIRE);
 }

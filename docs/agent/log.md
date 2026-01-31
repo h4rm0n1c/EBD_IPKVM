@@ -90,3 +90,4 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+- 2026-02-03: Capped ADB RX pulse handling per poll iteration and exposed an overrun counter to avoid core1 starvation when the ADB line is active.
