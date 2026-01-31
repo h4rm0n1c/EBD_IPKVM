@@ -7,6 +7,7 @@
 
 #include "app_core.h"
 #include "classic_line.pio.h"
+#include "adb_bus.h"
 #include "video_core.h"
 
 #define PIN_PIXCLK 0
@@ -14,6 +15,8 @@
 #define PIN_HSYNC  2   // active-low
 #define PIN_VIDEO  3
 #define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
+#define PIN_ADB_RECV 7
+#define PIN_ADB_XMIT 8
 
 int main(void) {
     stdio_init_all();
@@ -28,6 +31,8 @@ int main(void) {
     // VSYNC must remain SIO GPIO for IRQ to work
     gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_disable_pulls(PIN_VSYNC);
     gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
+    gpio_init(PIN_ADB_RECV); gpio_set_dir(PIN_ADB_RECV, GPIO_IN); gpio_disable_pulls(PIN_ADB_RECV);
+    gpio_init(PIN_ADB_XMIT); gpio_set_dir(PIN_ADB_XMIT, GPIO_IN); gpio_disable_pulls(PIN_ADB_XMIT);
 
     // Clear any stale IRQ state, core1 will enable callback
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
@@ -58,6 +63,7 @@ int main(void) {
         .pin_vsync = PIN_VSYNC,
     };
     video_core_init(&video_cfg);
+    adb_bus_init(pio1, 0, PIN_ADB_RECV);
     video_core_launch();
 
     app_core_config_t app_cfg = {

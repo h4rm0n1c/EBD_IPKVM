@@ -11,6 +11,7 @@
 #include "tusb.h"
 
 #include "core_bridge.h"
+#include "adb_test_cdc.h"
 #include "stream_protocol.h"
 #include "video_capture.h"
 #include "video_core.h"
@@ -21,6 +22,7 @@
 
 #define CDC_STREAM 0
 #define CDC_CTRL 1
+#define CDC_ADB 2
 
 static app_core_config_t app_cfg;
 
@@ -406,6 +408,7 @@ void app_core_init(const app_core_config_t *cfg) {
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] CDC2=ADB test input (arrow keys/mouse + ASCII keyboard)\n");
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
@@ -413,6 +416,8 @@ void app_core_init(const app_core_config_t *cfg) {
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
+
+    adb_test_cdc_init();
 }
 
 void app_core_poll(void) {
@@ -424,6 +429,10 @@ void app_core_poll(void) {
     if (did_work) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
+
+    active_start = time_us_32();
+    adb_test_cdc_poll();
+    active_us += (uint32_t)(time_us_32() - active_start);
 
     /* Send queued binary packets from thread context (NOT IRQ). */
     if (probe_pending) {

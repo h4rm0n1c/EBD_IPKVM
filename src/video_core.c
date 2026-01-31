@@ -9,6 +9,8 @@
 #include "hardware/irq.h"
 
 #include "classic_line.pio.h"
+#include "adb_bus.h"
+#include "adb_core.h"
 #include "core_bridge.h"
 
 #define TXQ_DEPTH 512
@@ -396,6 +398,7 @@ static void core1_handle_command(uint32_t cmd) {
 }
 
 static void core1_entry(void) {
+    adb_core_init();
     configure_vsync_irq();
 
     while (true) {
@@ -406,8 +409,17 @@ static void core1_entry(void) {
             core1_handle_command(cmd);
         }
 
+        uint32_t active_start = time_us_32();
+        if (adb_bus_task()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
+        active_start = time_us_32();
+        adb_core_task();
+        active_us += (uint32_t)(time_us_32() - active_start);
+
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
-            uint32_t active_start = time_us_32();
+            active_start = time_us_32();
             if (video_capture_finalize_frame(&capture, frame_id)) {
                 frame_id++;
                 frames_done++;
@@ -417,7 +429,7 @@ static void core1_entry(void) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
-        uint32_t active_start = time_us_32();
+        active_start = time_us_32();
         if (service_test_frame()) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
@@ -465,6 +477,7 @@ void video_core_init(const video_core_config_t *cfg) {
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
+    core_bridge_adb_reset();
 }
 
 void video_core_launch(void) {

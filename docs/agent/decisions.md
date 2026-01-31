@@ -36,3 +36,4 @@
 - 2026-01-25: Add runtime CDC toggle for PIXCLK edge selection to diagnose sampling phase.
 
 - 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
+- 2026-02-03: Use CDC2 as the dedicated ADB test input channel, mapping arrow keys to mouse deltas and Shift+Tab to a click pulse for development input.

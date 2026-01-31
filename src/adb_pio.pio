@@ -1,0 +1,26 @@
+.program adb_edge_sampler
+
+; Sample low/high pulse widths in microseconds.
+; RX FIFO: low_count_remaining, high_count_remaining (0xFFFFFFFF - duration_us)
+; Clock divider should be set to 1.0 for 1 MHz sampling.
+
+.wrap_target
+    wait 1 pin
+    wait 0 pin
+    mov x, ~null
+low_count:
+    jmp pin low_done
+    jmp x-- low_count
+low_done:
+    mov isr, x
+    push
+
+    mov x, ~null
+high_count:
+    jmp !pin high_done
+    jmp x-- high_count
+high_done:
+    mov isr, x
+    push
+    jmp .wrap_target
+.wrap

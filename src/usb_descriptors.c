@@ -21,7 +21,7 @@
 #define USBD_PRODUCT "EBD_IPKVM"
 #endif
 
-#define USBD_DESC_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN * 2)
+#define USBD_DESC_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN * 3)
 #define USBD_CONFIGURATION_DESCRIPTOR_ATTRIBUTE (0)
 #define USBD_MAX_POWER_MA (250)
 
@@ -30,6 +30,8 @@ enum {
     ITF_NUM_CDC_STREAM_DATA,
     ITF_NUM_CDC_CTRL,
     ITF_NUM_CDC_CTRL_DATA,
+    ITF_NUM_CDC_ADB,
+    ITF_NUM_CDC_ADB_DATA,
     ITF_NUM_TOTAL
 };
 
@@ -39,6 +41,7 @@ enum {
 #define USBD_STR_SERIAL (0x03)
 #define USBD_STR_STREAM (0x04)
 #define USBD_STR_CTRL (0x05)
+#define USBD_STR_ADB (0x06)
 
 static const tusb_desc_device_t usbd_desc_device = {
     .bLength = sizeof(tusb_desc_device_t),
@@ -63,6 +66,7 @@ static const uint8_t usbd_desc_cfg[USBD_DESC_LEN] = {
 
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_STREAM, USBD_STR_STREAM, 0x81, 8, 0x01, 0x82, 64),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_CTRL, USBD_STR_CTRL, 0x83, 8, 0x02, 0x84, 64),
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_ADB, USBD_STR_ADB, 0x85, 8, 0x03, 0x86, 64),
 };
 
 static char usbd_serial_str[PICO_UNIQUE_BOARD_ID_SIZE_BYTES * 2 + 1];
@@ -73,6 +77,7 @@ static const char *const usbd_desc_str[] = {
     [USBD_STR_SERIAL] = usbd_serial_str,
     [USBD_STR_STREAM] = "EBD_IPKVM stream",
     [USBD_STR_CTRL] = "EBD_IPKVM control",
+    [USBD_STR_ADB] = "EBD_IPKVM ADB test",
 };
 
 const uint8_t *tud_descriptor_device_cb(void) {
