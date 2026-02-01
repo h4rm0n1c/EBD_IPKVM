@@ -4,7 +4,7 @@
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
 - 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
-- 2026-02-02: Assign ADB RECV to GPIO6 (via 74LVC245) and ADB XMIT to GPIO14 (via ULN2803) on the shared ADB data line.
+- 2026-02-02: Assign ADB RECV to GPIO6 (via 74LVC245) and ADB XMIT to GPIO12 (via ULN2803, 10k pulldown) on the shared ADB data line.
 - 2026-02-02: Run ADB PIO RX/TX at clkdiv=8 and convert tick counts to microseconds before applying pulse-width filters.
 - 2026-02-02: Extend CDC1 ADB status output to include raw pulse counts and last pulse width for bring-up debugging.
 - 2026-02-02: Configure ADB PIO RX to use a joined RX FIFO and non-blocking push so RX capture does not stall on FIFO saturation.
@@ -52,4 +52,5 @@
 - 2026-02-04: Auto-trigger the ROM-boot key hold once after the first decoded ADB command byte during testing.
 - 2026-02-04: Hold the ROM-boot key combo for ~30 seconds during automated testing.
 - 2026-02-04: Implement a minimal keyboard Talk response (address 2, reg 0) to transmit queued ADB key events before full Listen/SRQ support.
+- 2026-02-04: Implement minimal Listen reg 3 handling to accept address/handler updates and add Talk reg 3 responses during ADB bring-up.
 - 2026-02-04: Subtract one cycle from TX low-pulse conversion to account for the PIO `set pindirs` assert in the ADB TX loop.

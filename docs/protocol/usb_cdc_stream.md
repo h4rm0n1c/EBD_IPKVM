@@ -21,6 +21,13 @@ number:
 - `...-if02` → CDC1 (control)
 - `...-if04` → CDC2 (ADB test)
 
+Prefer the `/dev/serial/by-id/*EBD_IPKVM*ifXX` symlinks in scripts and terminal
+tools so changing `/dev/ttyACM*` enumeration does not break your workflows. If
+you only have a `/dev/ttyACM*` device, run `udevadm info -n /dev/ttyACM2 |
+rg "ID_MODEL|ID_SERIAL|ID_USB_INTERFACE_NUM"` to confirm the interface number
+before connecting. BOOTSEL mode enumerates as USB mass storage (no CDC ACM
+nodes), so flashing targets will not appear under `/dev/ttyACM*`.
+
 ## Packet layout (variable length)
 
 | Offset | Size | Field | Notes |
@@ -70,7 +77,8 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
-ADB status is emitted on CDC2 (independent of CDC1 control status) as:
+ADB status is emitted on CDC2 (independent of CDC1 control status) once per
+second as:
 
 - `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> pend=<events> last=<us> ev=<events> drop=<drops>`
 - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
@@ -82,16 +90,17 @@ ADB status is emitted on CDC2 (independent of CDC1 control status) as:
   - `cmds` counts decoded command bytes.
   - `pend` counts queued ADB events waiting to be transmitted.
   - `last` is the most recent observed low-pulse width in microseconds.
-- On-demand diagnostic output (`A`) also includes a second line with pulse-width bins and min/max:
+- A second diagnostic line with pulse-width bins and min/max is also emitted once
+  per second:
   - `[EBD_IPKVM] adb bins: min=<us> max=<us> zero=<n> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-700=<n> 700-900=<n> 900-1100=<n> >1100=<n>`
 
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
+- `t` emits a single ADB TX pulse (2 ms) for verifying GPIO12/ULN2803 wiring.
 - `Ctrl+B` holds Command+Option+X+O for ~30 seconds (ROM boot combo).
 - Firmware auto-triggers the same hold once after the first decoded ADB command byte to confirm the bus is alive.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
-- The `A` command (sent on CDC2) emits ADB pulse diagnostics on CDC2.
 
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).

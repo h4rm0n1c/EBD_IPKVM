@@ -15,7 +15,7 @@ Macintosh Classic KVM:
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
   - `GPIO6` ADB RECV (input via 74LVC245 from Mac ADB data)
-  - `GPIO14` ADB XMIT (output via ULN2803 to Mac ADB data, open-collector)
+  - `GPIO12` ADB XMIT (output via ULN2803 to Mac ADB data, open-collector; 10k pulldown)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.

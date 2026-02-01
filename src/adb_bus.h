@@ -35,3 +35,4 @@ void adb_bus_init(uint pin_recv, uint pin_xmit);
 bool adb_bus_poll(void);
 bool adb_bus_take_rx_seen(void);
 void adb_bus_get_stats(adb_bus_stats_t *out_stats);
+bool adb_bus_tx_test_pulse_us(uint32_t low_us);

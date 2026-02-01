@@ -35,7 +35,7 @@ void adb_pio_init(adb_pio_t *ctx, PIO pio, uint sm_rx, uint sm_tx, uint pin_recv
     pio_sm_set_enabled(pio, sm_tx, true);
 
     pio_sm_set_consecutive_pindirs(pio, sm_rx, pin_recv, 1, false);
-    pio_sm_set_consecutive_pindirs(pio, sm_tx, pin_xmit, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm_tx, pin_xmit, 1, true);
 
     gpio_set_function(pin_recv, GPIO_FUNC_PIO1);
     gpio_set_function(pin_xmit, GPIO_FUNC_PIO1);

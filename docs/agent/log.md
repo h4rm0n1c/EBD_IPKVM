@@ -1,12 +1,27 @@
 # Log (running)
 
+- 2026-02-04: Removed the cached ADB pending-events counter and read adb_events_pending() when emitting stats.
+- 2026-02-04: Emit ADB diagnostic lines on CDC2 every second instead of gating on a manual request.
+- 2026-02-04: Always respond to ADB keyboard Talk reg0 with 0xFF 0xFF when no key events are queued.
+- 2026-02-04: Configure the ADB TX PIO state machine to drive the transmit pin as an output.
+- 2026-02-04: Documented stable CDC identification via /dev/serial/by-id and udevadm interface numbers.
+- 2026-02-04: Updated host tooling defaults to use /dev/serial/by-id *ifXX* symlinks instead of ttyACM numbers.
+- 2026-02-04: Pinned host tooling defaults to the current Raspberry Pi EBD_IPKVM by-id symlinks.
+- 2026-02-04: Added a CDC2 debug line that decodes the last ADB command into addr/type/reg.
+- 2026-02-04: Added basic ADB Talk reg3 responses and Listen reg3 handling for address/handler updates.
+- 2026-02-04: Adjusted ADB TX PIO to drive ULN2803 high for bus-low pulses (active-high open-collector).
+- 2026-02-04: Added a CDC2 't' TX pulse command to verify GPIO12/ULN2803 output.
+- 2026-02-04: Moved ADB XMIT from GPIO14 to GPIO12 to use the 10k pulldown in front of the ULN2803.
+- 2026-02-04: Assert ADB TX pindirs before set pins so GPIO12 drives immediately during test pulses.
+- 2026-02-04: Allow the CDC2 TX test pulse to fire regardless of bus idle and extend it to 2 ms for easier probing.
+- 2026-02-04: Fix ADB PIO init order so pin mux isn't reset after PIO setup (restores TX drive).
 - 2026-02-02: Marked ADB work as in-progress in project state and added a first bring-up checklist to the ADB implementation plan.
 - 2026-02-02: Documented that ADB implementation is active and added status guidance in the ADB protocol notes.
 - 2026-02-02: Added initial ADB event queue plumbing, CDC2 test input parsing, and RX activity latching for early on-bus validation.
 - 2026-02-02: Added initial ADB PIO RX/TX programs plus a PIO1-backed RX pulse capture path in the ADB bus scaffold.
 - 2026-02-02: Added CDC1 reconnect/drop counters to aid debugging control channel disconnects during capture.
 - 2026-02-02: Hardwired adb_pio RX waits to GPIO6 and removed redundant GPIO sampling to avoid spurious activity during ADB bring-up.
-- 2026-02-02: Moved ADB RECV/XMIT pins to GPIO6/GPIO14 for ADB pulse-capture bring-up testing.
+- 2026-02-02: Moved ADB RECV/XMIT pins to GPIO6/GPIO12 for ADB pulse-capture bring-up testing.
 - 2026-02-02: Set ADB PIO RX/TX clock divider to 8 and convert RX counts to microseconds before filtering so pulse capture uses real ADB timing.
 - 2026-02-02: Exposed ADB raw pulse counts and last pulse width in CDC1 status output to debug missing RX activity.
 - 2026-02-02: Set ADB PIO RX to use a joined RX FIFO and non-blocking pushes to avoid stalling when pulses arrive faster than the poller drains.

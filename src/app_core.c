@@ -47,10 +47,10 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
-static volatile bool adb_diag_pending = false;
 static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
+static const uint32_t adb_tx_test_pulse_us = 2000u;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -291,9 +291,6 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.pulse_gt_1100_us);
 }
 
-static inline void request_adb_diag(void) {
-    __atomic_store_n(&adb_diag_pending, true, __ATOMIC_RELEASE);
-}
 
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
@@ -529,7 +526,8 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: emitted on CDC2 once per second.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): send 't' to emit a TX pulse on GPIO12.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
@@ -565,12 +563,12 @@ void app_core_poll(void) {
         adb_test_cdc_trigger_rom_boot();
         adb_auto_rom_boot_done = true;
     }
-    if (adb_test_cdc_take_diag_request()) {
-        request_adb_diag();
-    }
-    if (__atomic_exchange_n(&adb_diag_pending, false, __ATOMIC_ACQ_REL)) {
+    if (adb_test_cdc_take_tx_test_request()) {
+        bool ok = adb_bus_tx_test_pulse_us(adb_tx_test_pulse_us);
         if (can_emit_adb_text()) {
-            emit_adb_diag();
+            cdc_adb_printf("[EBD_IPKVM] adb tx test: %s (%luus)\n",
+                           ok ? "ok" : "skipped",
+                           (unsigned long)adb_tx_test_pulse_us);
         }
     }
 
@@ -631,6 +629,10 @@ void app_core_poll(void) {
         if (can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
+            uint8_t adb_addr = (uint8_t)(adb_stats.last_cmd >> 4);
+            uint8_t adb_cmd = (uint8_t)(adb_stats.last_cmd & 0x0Fu);
+            uint8_t adb_reg = (uint8_t)(adb_stats.last_cmd & 0x03u);
+            uint8_t adb_type = (uint8_t)((adb_stats.last_cmd >> 2) & 0x03u);
             cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu pend=%lu last=%luus ev=%lu drop=%lu\n",
                            (unsigned long)adb_stats.rx_pulses,
                            (unsigned long)adb_stats.rx_raw_pulses,
@@ -643,6 +645,12 @@ void app_core_poll(void) {
                            (unsigned long)adb_stats.last_pulse_us,
                            (unsigned long)adb_stats.events_consumed,
                            (unsigned long)adb_events_get_drop_count());
+            cdc_adb_printf("[EBD_IPKVM] adb cmd decode: addr=%u cmd=%u type=%u reg=%u\n",
+                           adb_addr,
+                           adb_cmd,
+                           adb_type,
+                           adb_reg);
+            emit_adb_diag();
 
             if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
                 if (adb_bus_take_rx_seen()) {

@@ -18,7 +18,7 @@ Above output is current project output as of PR #19.
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
 - `GPIO6` — ADB RECV (input via 74LVC245 from Mac ADB data)
-- `GPIO14` — ADB XMIT (output via ULN2803 to Mac ADB data, open-collector)
+- `GPIO12` — ADB XMIT (output via ULN2803 to Mac ADB data, open-collector; 10k pulldown)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
@@ -35,6 +35,11 @@ The firmware exposes three CDC interfaces:
 - **CDC0 (stream)**: binary line packets (video data).
 - **CDC1 (control)**: ASCII commands + status text.
 - **CDC2 (ADB test)**: keyboard/mouse test input (arrow keys for mouse, `!` toggles button).
+
+On Linux, prefer `/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00|if02|if04`
+instead of `/dev/ttyACM*` so enumeration changes do not break scripts. Use
+`udevadm info -n /dev/ttyACM2 | rg "ID_MODEL|ID_SERIAL|ID_USB_INTERFACE_NUM"`
+to map a new `/dev/ttyACM*` node to the correct interface number if needed.
 
 See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
 
@@ -55,7 +60,8 @@ lines if RLE does not compress.
 ## Host capture helper
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --ctrl-device=/dev/ttyACM1
+python3 src/host_recv_frames.py /dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00 frames \
+  --ctrl-device=/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02
 ```
 
 This test script:
@@ -74,7 +80,7 @@ This test script:
 Example: stream raw 512×342 8-bit frames to ffplay on stdout:
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --stream-raw \
+python3 src/host_recv_frames.py /dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00 frames --stream-raw \
   | ffplay -f rawvideo -pixel_format gray -video_size 512x342 -framerate 60 -
 ```
 

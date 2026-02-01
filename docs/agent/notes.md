@@ -9,8 +9,9 @@
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
 - Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
-- Host scripts default to `/dev/ttyACM0` for the CDC0 stream and `/dev/ttyACM1` for CDC1 control unless overridden.
+- Host scripts default to `/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00` for CDC0 and `/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02` for CDC1 unless overridden.
 - Linux udev symlinks include `if00` (CDC0 stream) and `if02` (CDC1 control); use `/dev/serial/by-id` for stable naming.
+- When `/dev/ttyACM*` numbers jump, use `udevadm info -n /dev/ttyACM2 | rg "ID_USB_INTERFACE_NUM"` to map the node to CDC0/1/2.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
@@ -19,6 +20,7 @@
 - ADB timing reference: trabular notes that the serial handler must run roughly every 50–70 µs and defines timing windows for attention/sync/bit pulses in its ADB bus implementation.
 - ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
+- Current bring-up shares the ADB bus with an existing keyboard; expect host polling and device responses to interleave with the real keyboard during diagnostics.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
 - PIO timing gotcha: each PIO loop iteration can span multiple cycles (and extra setup instructions), so always convert tick counts using the loop’s actual cycles-per-iteration and document RX/TX cadence separately.

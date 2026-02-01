@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import glob
 import os
 import struct
 import subprocess
@@ -33,8 +34,17 @@ def set_raw_and_dtr(fd: int) -> None:
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
 
 
+def resolve_device(path: str) -> str:
+    if "*" not in path and "?" not in path and "[" not in path:
+        return path
+    matches = sorted(glob.glob(path))
+    if not matches:
+        return path
+    return matches[0]
+
+
 def send_cmd(dev: str, payload: bytes, settle_s: float = 0.1) -> None:
-    fd = os.open(dev, os.O_RDWR | os.O_NOCTTY)
+    fd = os.open(resolve_device(dev), os.O_RDWR | os.O_NOCTTY)
     try:
         set_raw_and_dtr(fd)
         os.write(fd, payload)
@@ -55,8 +65,10 @@ def run_host_capture(dev: str, ctrl_dev: str, outdir: str, max_frames: int, host
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="A/B test VIDEO inversion with capture runs.")
-    parser.add_argument("--stream-device", default="/dev/ttyACM0", help="CDC stream device (CDC0).")
-    parser.add_argument("--ctrl-device", default="/dev/ttyACM1", help="CDC control device (CDC1).")
+    parser.add_argument("--stream-device", default="/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00",
+                        help="CDC stream device (CDC0).")
+    parser.add_argument("--ctrl-device", default="/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02",
+                        help="CDC control device (CDC1).")
     parser.add_argument("--outdir", default="frames_ab", help="Output base directory.")
     parser.add_argument("--max-frames", type=int, default=30, help="Frames per run.")
     parser.add_argument("--settle", type=float, default=1.0, help="Seconds to wait after toggling inversion.")

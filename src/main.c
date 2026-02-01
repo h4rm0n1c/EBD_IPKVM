@@ -15,7 +15,7 @@
 #define PIN_HSYNC  2   // active-low
 #define PIN_VIDEO  3
 #define PIN_ADB_RECV 6
-#define PIN_ADB_XMIT 14
+#define PIN_ADB_XMIT 12
 #define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
 
 int main(void) {
