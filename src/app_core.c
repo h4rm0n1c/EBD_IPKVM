@@ -48,6 +48,7 @@ static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
 static volatile bool adb_diag_pending = false;
+static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
 
@@ -520,6 +521,7 @@ static inline bool service_txq(void) {
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
     adb_test_cdc_init();
+    adb_auto_rom_boot_done = false;
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status, CDC2=ADB test\n");
@@ -528,7 +530,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O (auto after first ADB cmd).\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -555,6 +557,12 @@ void app_core_poll(void) {
     active_start = time_us_32();
     if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    adb_bus_stats_t adb_stats = {0};
+    adb_bus_get_stats(&adb_stats);
+    if (!adb_auto_rom_boot_done && adb_stats.cmd_bytes > 0) {
+        adb_test_cdc_trigger_rom_boot();
+        adb_auto_rom_boot_done = true;
     }
     if (adb_test_cdc_take_diag_request()) {
         request_adb_diag();

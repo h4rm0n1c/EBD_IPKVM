@@ -65,6 +65,10 @@ static void adb_rom_boot_start(void) {
     adb_enqueue_key(ADB_KEY_O, true);
 }
 
+void adb_test_cdc_trigger_rom_boot(void) {
+    adb_rom_boot_start();
+}
+
 static bool adb_rom_boot_poll(void) {
     if (!rom_boot_active) {
         return false;
