@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-04: Make CDC1 writes chunked with a short wait loop (matching CDC2) so control/status output doesn't depend on other interfaces.
 - 2026-02-04: Decode ADB RX bits by comparing low/high pulse widths with a deadband to reject ambiguous transitions.
 - 2026-02-04: Enforced ADB start/stop bits when decoding low+high pulse pairs so frames align with the host start/stop timing.
 - 2026-02-04: Adjusted ADB RX to capture low+high pulse pairs and decode bits from short/long transitions (short-low/long-high = 1, long-low/short-high = 0).
