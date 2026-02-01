@@ -89,6 +89,9 @@ uint16_t adb_pio_us_to_cycles(const adb_pio_t *ctx, uint32_t us) {
         return 0u;
     }
     uint64_t cycles = ((uint64_t)us * ctx->tick_hz) / 1000000ull;
+    if (cycles > 1u) {
+        cycles -= 1u;
+    }
     if (cycles == 0u) {
         cycles = 1u;
     }

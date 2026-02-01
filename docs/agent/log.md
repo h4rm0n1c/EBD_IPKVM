@@ -113,3 +113,4 @@
 - 2026-02-04: Increased the ROM-boot key hold duration to ~30 seconds for better startup coverage.
 - 2026-02-04: Expose pending ADB event counts in CDC2 status output to confirm ROM-boot key holds are queued.
 - 2026-02-04: Added a minimal ADB Talk response for keyboard register 0 (address 2) so queued CDC2 key events can transmit on-bus.
+- 2026-02-04: Adjusted ADB TX pulse cycle conversion to account for the single-cycle TX loop and the `set pindirs` assert overhead.

@@ -25,3 +25,4 @@
 - RX pushes are non-blocking with a joined RX FIFO so bursts cannot stall the state machine.
 - The attention pulse detector is tightened to 700–900 µs now that capture skew is under control; sync remains 60–90 µs.
 - A minimal Talk response is now emitted for keyboard address 2, register 0, using queued CDC2 key events; Listen/SRQ handling is still pending.
+- TX low-pulse timing uses the PIO TX loop (1 cycle per decrement) with a one-cycle adjustment for the `set pindirs` assert.
