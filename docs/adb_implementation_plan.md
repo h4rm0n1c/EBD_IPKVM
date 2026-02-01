@@ -11,6 +11,7 @@
 
 - ADB device emulation is **actively being implemented** (not deferred). The first goal is a minimal keyboard + mouse device that can pass a basic Mac desktop input test (move cursor, click, type characters) over the shared ADB bus.
 - Use the steps in **First bring-up attempt** to get to the initial hardware/firmware validation run.
+- Current firmware can decode command bytes and emit a minimal Talk response for keyboard register 0 (address 2) using queued CDC2 key events; Listen/SRQ handling is still pending.
 
 ## Reference grounding (from /opt/adb)
 

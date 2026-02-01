@@ -16,6 +16,11 @@
 #define ADB_BIT_ZERO_MAX_US 60u
 #define ADB_BIT_ONE_MIN_US 60u
 #define ADB_BIT_ONE_MAX_US 90u
+#define ADB_KBD_ADDR 2u
+#define ADB_TX_BIT_CELL_US 100u
+#define ADB_TX_BIT_ONE_LOW_US 35u
+#define ADB_TX_BIT_ZERO_LOW_US 65u
+#define ADB_TX_TALK_DELAY_US 190u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
@@ -54,6 +59,7 @@ static volatile uint32_t adb_pulse_gt_1100_us = 0;
 static adb_rx_state_t adb_rx_state = ADB_RX_IDLE;
 static uint8_t adb_rx_bit_count = 0;
 static uint8_t adb_rx_shift = 0;
+static uint32_t adb_cmd_bytes_handled = 0;
 
 void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pin_recv = pin_recv;
@@ -96,6 +102,83 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_state = ADB_RX_IDLE;
     adb_rx_bit_count = 0;
     adb_rx_shift = 0;
+    adb_cmd_bytes_handled = 0;
+}
+
+static inline bool adb_line_idle(void) {
+    return gpio_get(adb_pin_recv);
+}
+
+static void adb_tx_bit(bool one) {
+    uint32_t low_us = one ? ADB_TX_BIT_ONE_LOW_US : ADB_TX_BIT_ZERO_LOW_US;
+    uint32_t high_us = ADB_TX_BIT_CELL_US - low_us;
+    uint16_t cycles = adb_pio_us_to_cycles(&adb_pio, low_us);
+    adb_pio_tx_pulse(&adb_pio, cycles);
+    sleep_us(high_us);
+}
+
+static bool adb_tx_bytes(const uint8_t *data, size_t len) {
+    if (!data || len == 0u) {
+        return false;
+    }
+    if (!adb_line_idle()) {
+        return false;
+    }
+    sleep_us(ADB_TX_TALK_DELAY_US);
+    if (!adb_line_idle()) {
+        return false;
+    }
+    adb_tx_bit(true);
+    for (size_t i = 0; i < len; i++) {
+        uint8_t byte = data[i];
+        for (int bit = 7; bit >= 0; bit--) {
+            bool one = (byte & (1u << bit)) != 0u;
+            adb_tx_bit(one);
+        }
+    }
+    adb_tx_bit(false);
+    return true;
+}
+
+static bool adb_try_keyboard_reg0(void) {
+    uint8_t bytes[2] = {0xFFu, 0xFFu};
+    uint32_t consumed = 0;
+    adb_event_t ev;
+    while (consumed < 2u && adb_events_pop(&ev)) {
+        if (ev.type != ADB_EVENT_KEY) {
+            continue;
+        }
+        uint8_t code = ev.a;
+        if (!ev.b) {
+            code |= 0x80u;
+        }
+        bytes[consumed] = code;
+        consumed++;
+    }
+    if (consumed == 0u) {
+        return false;
+    }
+    if (!adb_tx_bytes(bytes, 2u)) {
+        return false;
+    }
+    __atomic_fetch_add(&adb_events_consumed, consumed, __ATOMIC_RELAXED);
+    return true;
+}
+
+static void adb_handle_command(uint8_t cmd) {
+    uint8_t address = (uint8_t)(cmd >> 4);
+    uint8_t lcmd = (uint8_t)(cmd & 0x0Fu);
+    if (lcmd == 1u) {
+        return;
+    }
+    lcmd >>= 2;
+    if (lcmd != 3u) {
+        return;
+    }
+    uint8_t reg = (uint8_t)(cmd & 0x03u);
+    if (address == ADB_KBD_ADDR && reg == 0u) {
+        adb_try_keyboard_reg0();
+    }
 }
 
 static inline void adb_note_rx_state(uint32_t pulse_us) {
@@ -207,6 +290,13 @@ bool adb_bus_poll(void) {
         __atomic_fetch_add(&adb_rx_overruns, 1u, __ATOMIC_RELAXED);
         adb_pio_rx_flush(&adb_pio);
         did_work = true;
+    }
+
+    uint32_t cmd_bytes = __atomic_load_n(&adb_cmd_bytes, __ATOMIC_ACQUIRE);
+    if (cmd_bytes != adb_cmd_bytes_handled) {
+        adb_cmd_bytes_handled = cmd_bytes;
+        uint8_t cmd = (uint8_t)__atomic_load_n(&adb_last_cmd, __ATOMIC_ACQUIRE);
+        adb_handle_command(cmd);
     }
 
     uint16_t pending = adb_events_pending();

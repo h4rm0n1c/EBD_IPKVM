@@ -22,3 +22,4 @@ bool adb_pio_rx_has_data(const adb_pio_t *ctx);
 void adb_pio_rx_flush(adb_pio_t *ctx);
 void adb_pio_tx_pulse(adb_pio_t *ctx, uint16_t cycles);
 uint32_t adb_pio_ticks_to_us(const adb_pio_t *ctx, uint32_t ticks);
+uint16_t adb_pio_us_to_cycles(const adb_pio_t *ctx, uint32_t us);
