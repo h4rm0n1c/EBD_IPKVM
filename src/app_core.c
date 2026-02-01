@@ -88,30 +88,18 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
         return;
     }
 
-    size_t offset = 0;
-    absolute_time_t deadline = make_timeout_time_ms(3);
-    while (offset < len) {
-        int avail = tud_cdc_n_write_available(CDC_CTRL);
-        if (avail <= 0) {
-            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
-                break;
-            }
-            tud_task();
-            continue;
-        }
-        size_t chunk = len - offset;
-        if (chunk > (size_t)avail) {
-            chunk = (size_t)avail;
-        }
-        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &buf[offset], chunk);
-        if (wrote == 0) {
-            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
-                break;
-            }
-            tud_task();
-            continue;
-        }
-        offset += wrote;
+    int avail = tud_cdc_n_write_available(CDC_CTRL);
+    if (avail <= 0) {
+        return;
+    }
+    size_t chunk = len;
+    if (chunk > (size_t)avail) {
+        chunk = (size_t)avail;
+    }
+    if (chunk == 0) {
+        return;
+    }
+    if (tud_cdc_n_write(CDC_CTRL, buf, chunk) > 0) {
         tud_cdc_n_write_flush(CDC_CTRL);
     }
 }
