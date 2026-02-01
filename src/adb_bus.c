@@ -150,6 +150,15 @@ static bool adb_tx_bytes(const uint8_t *data, size_t len) {
     return true;
 }
 
+bool adb_bus_tx_test_pulse_us(uint32_t low_us) {
+    if (!adb_line_idle() || low_us == 0u) {
+        return false;
+    }
+    uint16_t cycles = adb_pio_us_to_cycles(&adb_pio, low_us);
+    adb_pio_tx_pulse(&adb_pio, cycles);
+    return true;
+}
+
 static bool adb_try_keyboard_reg0(void) {
     uint8_t bytes[2] = {0xFFu, 0xFFu};
     uint32_t consumed = 0;

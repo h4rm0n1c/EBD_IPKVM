@@ -50,6 +50,7 @@ static absolute_time_t adb_rx_next;
 static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
+static const uint32_t adb_tx_test_pulse_us = 200u;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -526,6 +527,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB diag: emitted on CDC2 once per second.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): send 't' to emit a TX pulse on GPIO14.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
@@ -560,6 +562,14 @@ void app_core_poll(void) {
     if (!adb_auto_rom_boot_done && adb_stats.cmd_bytes > 0) {
         adb_test_cdc_trigger_rom_boot();
         adb_auto_rom_boot_done = true;
+    }
+    if (adb_test_cdc_take_tx_test_request()) {
+        bool ok = adb_bus_tx_test_pulse_us(adb_tx_test_pulse_us);
+        if (can_emit_adb_text()) {
+            cdc_adb_printf("[EBD_IPKVM] adb tx test: %s (%luus)\n",
+                           ok ? "ok" : "skipped",
+                           (unsigned long)adb_tx_test_pulse_us);
+        }
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */

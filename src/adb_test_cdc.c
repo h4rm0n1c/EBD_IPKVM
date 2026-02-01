@@ -31,6 +31,7 @@ static adb_ansi_state_t ansi_state;
 static uint8_t mouse_buttons = 0;
 static bool rom_boot_active = false;
 static uint64_t rom_boot_release_at = 0;
+static volatile bool adb_tx_test_requested = false;
 
 static void adb_enqueue_key(uint8_t keycode, bool pressed) {
     adb_event_t ev = {
@@ -227,6 +228,7 @@ void adb_test_cdc_init(void) {
     mouse_buttons = 0;
     rom_boot_active = false;
     rom_boot_release_at = 0;
+    adb_tx_test_requested = false;
 }
 
 bool adb_test_cdc_poll(void) {
@@ -242,6 +244,11 @@ bool adb_test_cdc_poll(void) {
         }
         if (ch == ADB_ROM_BOOT_TRIGGER) {
             adb_rom_boot_start();
+            did_work = true;
+            continue;
+        }
+        if (ch == 'T' || ch == 't') {
+            adb_tx_test_requested = true;
             did_work = true;
             continue;
         }
@@ -286,4 +293,8 @@ bool adb_test_cdc_poll(void) {
     }
 
     return did_work;
+}
+
+bool adb_test_cdc_take_tx_test_request(void) {
+    return __atomic_exchange_n(&adb_tx_test_requested, false, __ATOMIC_ACQ_REL);
 }
