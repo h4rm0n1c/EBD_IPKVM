@@ -28,3 +28,4 @@
 - ADB Manager lookup command: `pdftotext /opt/adb/miscdocs/ADB_Manager.pdf - | rg -n "address|addr|keyboard|8"`.
 - ADB command bits: per ADB Manager docs and adb-usb host constants, command bits 3–2 use 0b11 for Talk and 0b10 for Listen (e.g., adb-usb uses 0x2C for Talk reg0 and 0x28 for Listen reg0 for address $2), while the legacy Flush command is encoded as low nibble 0x01. Use `/opt/adb/adb-usb/adb.h` for the 0x28/0x2C constants if needed.
 - ADB bus timing guard: defer Talk replies and SRQ pulses until the bus has been idle for a short guard window (≈260 µs) after the most recent RX pulse to avoid driving in the middle of host transmissions.
+- SRQ timing refinement: only arm SRQ after receiving a command byte not addressed to us, and emit the SRQ pulse within a short post-command window (≈260 µs) so SRQ stays aligned with the stop-bit timing rather than arbitrary mid-traffic asserts.

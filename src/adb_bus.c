@@ -29,6 +29,7 @@
 #define ADB_SRQ_COOLDOWN_US 2000u
 #define ADB_TX_IDLE_GUARD_US 260u
 #define ADB_SRQ_IDLE_GUARD_US 260u
+#define ADB_SRQ_WINDOW_US 260u
 #define ADB_CMD_FLUSH 0u
 #define ADB_CMD_LISTEN 2u
 #define ADB_CMD_TALK 3u
@@ -96,6 +97,8 @@ static int8_t adb_mouse_last_dx = 0;
 static int8_t adb_mouse_last_dy = 0;
 static uint64_t adb_srq_next_at = 0;
 static uint8_t adb_pending_talk = 0;
+static bool adb_srq_armed = false;
+static uint64_t adb_srq_arm_time_us = 0;
 
 enum {
     ADB_LISTEN_NONE = 0,
@@ -181,6 +184,8 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_mouse_last_dy = 0;
     adb_srq_next_at = 0;
     adb_pending_talk = ADB_PENDING_NONE;
+    adb_srq_armed = false;
+    adb_srq_arm_time_us = 0;
 }
 
 static inline bool adb_line_idle(void) {
@@ -297,9 +302,17 @@ static bool adb_should_srq(void) {
 
 static bool adb_try_srq_pulse(uint64_t now_us) {
     if (!adb_should_srq()) {
+        adb_srq_armed = false;
+        return false;
+    }
+    if (!adb_srq_armed) {
         return false;
     }
     if (now_us < adb_srq_next_at) {
+        return false;
+    }
+    if (now_us - adb_srq_arm_time_us > ADB_SRQ_WINDOW_US) {
+        adb_srq_armed = false;
         return false;
     }
     uint64_t last_rx = __atomic_load_n(&adb_last_rx_time_us, __ATOMIC_ACQUIRE);
@@ -310,6 +323,7 @@ static bool adb_try_srq_pulse(uint64_t now_us) {
     adb_pio_tx_pulse(&adb_pio, cycles);
     adb_srq_next_at = now_us + (uint64_t)ADB_SRQ_COOLDOWN_US;
     __atomic_fetch_add(&adb_srq_pulses, 1u, __ATOMIC_RELAXED);
+    adb_srq_armed = false;
     return true;
 }
 
@@ -416,6 +430,10 @@ static void adb_handle_command(uint8_t cmd) {
     bool is_mouse = address == mouse_addr;
     if (!is_kbd && !is_mouse) {
         __atomic_fetch_add(&adb_cmd_addr_miss, 1u, __ATOMIC_RELAXED);
+        if (adb_should_srq()) {
+            adb_srq_armed = true;
+            adb_srq_arm_time_us = time_us_64();
+        }
         return;
     }
     if (low_nibble == 0x01u) {
