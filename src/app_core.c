@@ -105,6 +105,9 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
 }
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        return;
+    }
     char buf[320];
     char out[360];
     va_list args;
@@ -131,7 +134,8 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     if (out_len == 0) {
         return;
     }
-    if (tud_cdc_n_write_available(CDC_CTRL) < (int)out_len) {
+    if (!tud_cdc_n_connected(CDC_CTRL)
+        || tud_cdc_n_write_available(CDC_CTRL) < (int)out_len) {
         return;
     }
     cdc_ctrl_write(out, out_len);
@@ -159,6 +163,9 @@ static void cdc_adb_write(const char *buf, size_t len) {
 }
 
 static void cdc_adb_printf(const char *fmt, ...) {
+    if (!tud_cdc_n_connected(CDC_ADB)) {
+        return;
+    }
     char buf[320];
     char out[360];
     va_list args;
@@ -185,7 +192,8 @@ static void cdc_adb_printf(const char *fmt, ...) {
     if (out_len == 0) {
         return;
     }
-    if (tud_cdc_n_write_available(CDC_ADB) < (int)out_len) {
+    if (!tud_cdc_n_connected(CDC_ADB)
+        || tud_cdc_n_write_available(CDC_ADB) < (int)out_len) {
         return;
     }
     cdc_adb_write(out, out_len);
@@ -614,7 +622,7 @@ void app_core_poll(void) {
         uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
         uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
-        if (can_emit_text()) {
+        if (tud_ready() && can_emit_text()) {
             cdc_ctrl_printf("[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
                             video_core_is_armed() ? 1 : 0,
                             video_core_capture_enabled() ? 1 : 0,
@@ -632,7 +640,7 @@ void app_core_poll(void) {
                             (unsigned long)cdc1_disconnects);
         }
 
-        if (can_emit_adb_text()) {
+        if (tud_ready() && can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
             if (adb_stats.rx_raw_pulses > 0u || adb_stats.attention_pulses > 0u

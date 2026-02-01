@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-04: Guard CDC1/CDC2 diagnostic formatting with connection checks and `tud_ready()` to avoid USB-disconnect crashes.
 - 2026-02-04: Skip CDC1/CDC2 diagnostic writes when the CDC buffer can't fit a full line to avoid torn output.
 - 2026-02-04: Gate periodic ADB CDC2 diagnostics so they only emit after RX activity (avoid zero spam).
 - 2026-02-04: Make CDC2 ADB debug writes non-blocking to avoid stalling time-sensitive loops.
