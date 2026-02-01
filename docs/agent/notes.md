@@ -21,3 +21,4 @@
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
+- PIO timing gotcha: each PIO loop iteration can span multiple cycles (and extra setup instructions), so always convert tick counts using the loop’s actual cycles-per-iteration and document RX/TX cadence separately.

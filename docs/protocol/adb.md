@@ -26,3 +26,9 @@
 - The attention pulse detector is tightened to 700–900 µs now that capture skew is under control; sync remains 60–90 µs.
 - A minimal Talk response is now emitted for keyboard address 2, register 0, using queued CDC2 key events; Listen/SRQ handling is still pending.
 - TX low-pulse timing uses the PIO TX loop (1 cycle per decrement) with a one-cycle adjustment for the `set pindirs` assert.
+
+### PIO timing takeaways (ADB RX/TX)
+- Treat PIO loops as **multi-cycle timers**: count cycles per iteration and convert tick counts using that cadence, not just instruction count.
+- If the loop includes extra work (e.g., `set pindirs`, `wait`, or a branch delay), fold that into the conversion so pulses match real-time microseconds.
+- RX and TX loops can have different cycles-per-iteration, so document each program’s cadence separately instead of sharing a single “ticks-to-us” formula.
+- When tuning pulse-width filters, always validate with a scope or diagnostic bins to catch off-by-one-cycle errors early.
