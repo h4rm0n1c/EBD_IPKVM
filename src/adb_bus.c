@@ -13,10 +13,19 @@
 #define ADB_ATTENTION_MAX_US 900u
 #define ADB_SYNC_MIN_US 60u
 #define ADB_SYNC_MAX_US 90u
+#define ADB_BIT_ZERO_MAX_US 60u
+#define ADB_BIT_ONE_MIN_US 60u
+#define ADB_BIT_ONE_MAX_US 90u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
 static adb_pio_t adb_pio = {0};
+
+typedef enum {
+    ADB_RX_IDLE = 0,
+    ADB_RX_GOT_ATTENTION,
+    ADB_RX_BITS,
+} adb_rx_state_t;
 
 static volatile uint32_t adb_rx_pulses = 0;
 static volatile uint32_t adb_rx_seen = 0;
@@ -24,6 +33,8 @@ static volatile uint32_t adb_rx_overruns = 0;
 static volatile uint32_t adb_attention_pulses = 0;
 static volatile uint32_t adb_sync_pulses = 0;
 static volatile uint32_t adb_events_consumed = 0;
+static volatile uint32_t adb_cmd_bytes = 0;
+static volatile uint32_t adb_last_cmd = 0;
 static volatile bool adb_rx_latched = false;
 static volatile uint32_t adb_rx_raw_pulses = 0;
 static volatile uint32_t adb_last_pulse_us = 0;
@@ -39,6 +50,9 @@ static volatile uint32_t adb_pulse_600_700_us = 0;
 static volatile uint32_t adb_pulse_700_900_us = 0;
 static volatile uint32_t adb_pulse_900_1100_us = 0;
 static volatile uint32_t adb_pulse_gt_1100_us = 0;
+static adb_rx_state_t adb_rx_state = ADB_RX_IDLE;
+static uint8_t adb_rx_bit_count = 0;
+static uint8_t adb_rx_shift = 0;
 
 void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pin_recv = pin_recv;
@@ -60,6 +74,8 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_attention_pulses = 0;
     adb_sync_pulses = 0;
     adb_events_consumed = 0;
+    adb_cmd_bytes = 0;
+    adb_last_cmd = 0;
     adb_rx_latched = false;
     adb_rx_raw_pulses = 0;
     adb_last_pulse_us = 0;
@@ -75,6 +91,55 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pulse_700_900_us = 0;
     adb_pulse_900_1100_us = 0;
     adb_pulse_gt_1100_us = 0;
+    adb_rx_state = ADB_RX_IDLE;
+    adb_rx_bit_count = 0;
+    adb_rx_shift = 0;
+}
+
+static inline void adb_note_rx_state(uint32_t pulse_us) {
+    if (pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
+        adb_rx_state = ADB_RX_GOT_ATTENTION;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+        return;
+    }
+
+    if (adb_rx_state == ADB_RX_GOT_ATTENTION) {
+        if (pulse_us >= ADB_SYNC_MIN_US && pulse_us <= ADB_SYNC_MAX_US) {
+            adb_rx_state = ADB_RX_BITS;
+            adb_rx_bit_count = 0;
+            adb_rx_shift = 0;
+        } else {
+            adb_rx_state = ADB_RX_IDLE;
+        }
+        return;
+    }
+
+    if (adb_rx_state != ADB_RX_BITS) {
+        return;
+    }
+
+    uint8_t bit = 0;
+    if (pulse_us < ADB_BIT_ZERO_MAX_US && pulse_us >= ADB_PULSE_MIN_US) {
+        bit = 0;
+    } else if (pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US) {
+        bit = 1;
+    } else {
+        adb_rx_state = ADB_RX_IDLE;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+        return;
+    }
+
+    adb_rx_shift = (uint8_t)((adb_rx_shift << 1u) | bit);
+    adb_rx_bit_count++;
+    if (adb_rx_bit_count >= 8u) {
+        __atomic_store_n(&adb_last_cmd, adb_rx_shift, __ATOMIC_RELEASE);
+        __atomic_fetch_add(&adb_cmd_bytes, 1u, __ATOMIC_RELAXED);
+        adb_rx_state = ADB_RX_IDLE;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+    }
 }
 
 static inline void adb_note_rx_pulse(uint32_t pulse_us) {
@@ -116,6 +181,7 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
     } else if (pulse_us >= ADB_SYNC_MIN_US && pulse_us <= ADB_SYNC_MAX_US) {
         __atomic_fetch_add(&adb_sync_pulses, 1u, __ATOMIC_RELAXED);
     }
+    adb_note_rx_state(pulse_us);
     if (pulse_us < ADB_PULSE_MIN_US || pulse_us > ADB_PULSE_MAX_US) {
         return;
     }
@@ -165,6 +231,8 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     out_stats->attention_pulses = __atomic_load_n(&adb_attention_pulses, __ATOMIC_ACQUIRE);
     out_stats->sync_pulses = __atomic_load_n(&adb_sync_pulses, __ATOMIC_ACQUIRE);
     out_stats->events_consumed = __atomic_load_n(&adb_events_consumed, __ATOMIC_ACQUIRE);
+    out_stats->cmd_bytes = __atomic_load_n(&adb_cmd_bytes, __ATOMIC_ACQUIRE);
+    out_stats->last_cmd = __atomic_load_n(&adb_last_cmd, __ATOMIC_ACQUIRE);
     out_stats->last_pulse_us = __atomic_load_n(&adb_last_pulse_us, __ATOMIC_ACQUIRE);
     uint32_t min_pulse = __atomic_load_n(&adb_min_pulse_us, __ATOMIC_ACQUIRE);
     if (min_pulse == UINT32_MAX) {

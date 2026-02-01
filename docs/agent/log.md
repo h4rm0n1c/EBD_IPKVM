@@ -107,3 +107,5 @@
 - 2026-02-03: Corrected ADB RX pulse-width conversion to account for two PIO cycles per loop iteration in the RX counter.
 - 2026-02-04: Tightened the ADB attention pulse window to 700–900 µs after reviewing diagnostic buckets.
 - 2026-02-04: Split ADB pulse-width bins around the attention window to report 600–700, 700–900, and 900–1100 µs counts separately.
+- 2026-02-04: Added a basic ADB RX state machine to decode attention+sync command bytes and expose cmd/cmds in CDC2 status output.
+- 2026-02-04: Added a CDC2 Ctrl-B macro to hold Command+Option+X+O for ROM-boot testing and documented bus coexistence planning.

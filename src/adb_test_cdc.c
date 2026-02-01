@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "pico/stdlib.h"
 #include "tusb.h"
 
 #include "adb_events.h"
@@ -10,9 +11,15 @@
 #define CDC_ADB 2
 
 #define ADB_KEY_LEFT_SHIFT 0x38
+#define ADB_KEY_LEFT_COMMAND 0x37
+#define ADB_KEY_LEFT_OPTION 0x3A
+#define ADB_KEY_X 0x07
+#define ADB_KEY_O 0x1F
 
 #define ADB_MOUSE_STEP 5
 #define ADB_MOUSE_BUTTON_LEFT 0x01
+#define ADB_ROM_BOOT_TRIGGER 0x02
+#define ADB_ROM_BOOT_HOLD_US (15u * 1000000u)
 
 typedef struct {
     bool esc_active;
@@ -23,6 +30,8 @@ typedef struct {
 static adb_ansi_state_t ansi_state;
 static uint8_t mouse_buttons = 0;
 static volatile bool adb_diag_requested = false;
+static bool rom_boot_active = false;
+static uint64_t rom_boot_release_at = 0;
 
 static void adb_enqueue_key(uint8_t keycode, bool pressed) {
     adb_event_t ev = {
@@ -42,6 +51,33 @@ static void adb_enqueue_mouse(int8_t dx, int8_t dy, uint8_t buttons) {
         .c = dy,
     };
     adb_events_push(&ev);
+}
+
+static void adb_rom_boot_start(void) {
+    if (rom_boot_active) {
+        return;
+    }
+    rom_boot_active = true;
+    rom_boot_release_at = time_us_64() + (uint64_t)ADB_ROM_BOOT_HOLD_US;
+    adb_enqueue_key(ADB_KEY_LEFT_COMMAND, true);
+    adb_enqueue_key(ADB_KEY_LEFT_OPTION, true);
+    adb_enqueue_key(ADB_KEY_X, true);
+    adb_enqueue_key(ADB_KEY_O, true);
+}
+
+static bool adb_rom_boot_poll(void) {
+    if (!rom_boot_active) {
+        return false;
+    }
+    if (time_us_64() < rom_boot_release_at) {
+        return false;
+    }
+    adb_enqueue_key(ADB_KEY_O, false);
+    adb_enqueue_key(ADB_KEY_X, false);
+    adb_enqueue_key(ADB_KEY_LEFT_OPTION, false);
+    adb_enqueue_key(ADB_KEY_LEFT_COMMAND, false);
+    rom_boot_active = false;
+    return true;
 }
 
 typedef struct {
@@ -187,18 +223,25 @@ void adb_test_cdc_init(void) {
     memset(&ansi_state, 0, sizeof(ansi_state));
     mouse_buttons = 0;
     adb_diag_requested = false;
+    rom_boot_active = false;
+    rom_boot_release_at = 0;
 }
 
 bool adb_test_cdc_poll(void) {
+    bool did_work = adb_rom_boot_poll();
     if (!tud_cdc_n_connected(CDC_ADB)) {
-        return false;
+        return did_work;
     }
 
-    bool did_work = false;
     while (tud_cdc_n_available(CDC_ADB)) {
         uint8_t ch = 0;
         if (tud_cdc_n_read(CDC_ADB, &ch, 1) != 1) {
             break;
+        }
+        if (ch == ADB_ROM_BOOT_TRIGGER) {
+            adb_rom_boot_start();
+            did_work = true;
+            continue;
         }
         if (ch == 'A' || ch == 'a') {
             adb_diag_requested = true;

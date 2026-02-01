@@ -13,6 +13,8 @@ typedef struct {
     uint32_t attention_pulses;
     uint32_t sync_pulses;
     uint32_t events_consumed;
+    uint32_t cmd_bytes;
+    uint32_t last_cmd;
     uint32_t last_pulse_us;
     uint32_t min_pulse_us;
     uint32_t max_pulse_us;

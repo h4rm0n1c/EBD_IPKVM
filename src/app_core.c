@@ -262,7 +262,7 @@ static void emit_adb_diag(void) {
     bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
     bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
-    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus drop=%lu\n",
+    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu last=%luus drop=%lu\n",
                     adb_recv ? 1 : 0,
                     adb_xmit ? 1 : 0,
                     (unsigned long)adb_stats.rx_pulses,
@@ -270,6 +270,8 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.rx_overruns,
                     (unsigned long)adb_stats.attention_pulses,
                     (unsigned long)adb_stats.sync_pulses,
+                    (unsigned long)adb_stats.last_cmd,
+                    (unsigned long)adb_stats.cmd_bytes,
                     (unsigned long)adb_stats.last_pulse_us,
                     (unsigned long)adb_events_get_drop_count());
     cdc_adb_printf("[EBD_IPKVM] adb bins: min=%luus max=%luus zero=%lu <30=%lu 30-60=%lu 60-90=%lu 90-200=%lu 200-600=%lu 600-700=%lu 700-900=%lu 900-1100=%lu >1100=%lu\n",
@@ -526,7 +528,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -620,12 +622,14 @@ void app_core_poll(void) {
         if (can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
-            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus ev=%lu drop=%lu\n",
+            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu last=%luus ev=%lu drop=%lu\n",
                            (unsigned long)adb_stats.rx_pulses,
                            (unsigned long)adb_stats.rx_raw_pulses,
                            (unsigned long)adb_stats.rx_overruns,
                            (unsigned long)adb_stats.attention_pulses,
                            (unsigned long)adb_stats.sync_pulses,
+                           (unsigned long)adb_stats.last_cmd,
+                           (unsigned long)adb_stats.cmd_bytes,
                            (unsigned long)adb_stats.last_pulse_us,
                            (unsigned long)adb_stats.events_consumed,
                            (unsigned long)adb_events_get_drop_count());

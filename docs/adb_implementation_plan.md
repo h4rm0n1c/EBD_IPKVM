@@ -89,6 +89,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 
 - Use the ADB Manager’s address resolution flow: if multiple devices share an address, respond per the bus collision rules and allow host reassign via Listen.
 - Track collision flags per device like trabular does, clearing once a new address is assigned.
+- Assume an existing keyboard/mouse may share the bus; support address reassignment so the KVM device can coexist without blocking local input.
 
 ## CDC test interface (third CDC channel)
 
