@@ -263,7 +263,7 @@ static void emit_adb_diag(void) {
     bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
     bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
-    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus drop=%lu\n",
+    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus drop=%lu\n",
                     adb_recv ? 1 : 0,
                     adb_xmit ? 1 : 0,
                     (unsigned long)adb_stats.rx_pulses,
@@ -274,6 +274,7 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.last_cmd,
                     (unsigned long)adb_stats.cmd_bytes,
                     (unsigned long)adb_stats.cmd_addr_miss,
+                    (unsigned long)adb_stats.srq_pulses,
                     (unsigned long)adb_stats.events_pending,
                     (unsigned long)adb_stats.tx_success,
                     (unsigned long)adb_stats.tx_attempts,
@@ -638,7 +639,7 @@ void app_core_poll(void) {
             uint8_t adb_cmd = (uint8_t)(adb_stats.last_cmd & 0x0Fu);
             uint8_t adb_reg = (uint8_t)(adb_stats.last_cmd & 0x03u);
             uint8_t adb_type = (uint8_t)((adb_stats.last_cmd >> 2) & 0x03u);
-            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus ev=%lu drop=%lu\n",
+            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus ev=%lu drop=%lu\n",
                            (unsigned long)adb_stats.rx_pulses,
                            (unsigned long)adb_stats.rx_raw_pulses,
                            (unsigned long)adb_stats.rx_overruns,
@@ -647,6 +648,7 @@ void app_core_poll(void) {
                            (unsigned long)adb_stats.last_cmd,
                            (unsigned long)adb_stats.cmd_bytes,
                            (unsigned long)adb_stats.cmd_addr_miss,
+                           (unsigned long)adb_stats.srq_pulses,
                            (unsigned long)adb_stats.events_pending,
                            (unsigned long)adb_stats.tx_success,
                            (unsigned long)adb_stats.tx_attempts,

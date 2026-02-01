@@ -54,3 +54,4 @@
 - 2026-02-04: Implement a minimal keyboard Talk response (address 2, reg 0) to transmit queued ADB key events before full Listen/SRQ support.
 - 2026-02-04: Implement minimal Listen reg 3 handling to accept address/handler updates and add Talk reg 3 responses during ADB bring-up.
 - 2026-02-04: Subtract one cycle from TX low-pulse conversion to account for the PIO `set pindirs` assert in the ADB TX loop.
+- 2026-02-04: Implement ADB mouse reg 0 packets as 7-bit deltas with button bits in the high positions and assert SRQ when keyboard/mouse data is pending.
