@@ -41,6 +41,11 @@ static volatile uint32_t adb_sync_pulses = 0;
 static volatile uint32_t adb_events_consumed = 0;
 static volatile uint32_t adb_cmd_bytes = 0;
 static volatile uint32_t adb_last_cmd = 0;
+static volatile uint32_t adb_cmd_addr_miss = 0;
+static volatile uint32_t adb_tx_attempts = 0;
+static volatile uint32_t adb_tx_success = 0;
+static volatile uint32_t adb_tx_busy = 0;
+static volatile uint32_t adb_tx_late_busy = 0;
 static volatile uint8_t adb_kbd_addr = ADB_KBD_ADDR;
 static volatile uint8_t adb_kbd_handler_id = ADB_KBD_HANDLER_ID;
 static volatile bool adb_rx_latched = false;
@@ -88,6 +93,11 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_events_consumed = 0;
     adb_cmd_bytes = 0;
     adb_last_cmd = 0;
+    adb_cmd_addr_miss = 0;
+    adb_tx_attempts = 0;
+    adb_tx_success = 0;
+    adb_tx_busy = 0;
+    adb_tx_late_busy = 0;
     adb_kbd_addr = ADB_KBD_ADDR;
     adb_kbd_handler_id = ADB_KBD_HANDLER_ID;
     adb_rx_latched = false;
@@ -131,11 +141,14 @@ static bool adb_tx_bytes(const uint8_t *data, size_t len) {
     if (!data || len == 0u) {
         return false;
     }
+    __atomic_fetch_add(&adb_tx_attempts, 1u, __ATOMIC_RELAXED);
     if (!adb_line_idle()) {
+        __atomic_fetch_add(&adb_tx_busy, 1u, __ATOMIC_RELAXED);
         return false;
     }
     sleep_us(ADB_TX_TALK_DELAY_US);
     if (!adb_line_idle()) {
+        __atomic_fetch_add(&adb_tx_late_busy, 1u, __ATOMIC_RELAXED);
         return false;
     }
     adb_tx_bit(true);
@@ -147,6 +160,7 @@ static bool adb_tx_bytes(const uint8_t *data, size_t len) {
         }
     }
     adb_tx_bit(false);
+    __atomic_fetch_add(&adb_tx_success, 1u, __ATOMIC_RELAXED);
     return true;
 }
 
@@ -206,6 +220,7 @@ static void adb_handle_command(uint8_t cmd) {
     uint8_t reg = (uint8_t)(cmd & 0x03u);
     uint8_t active_addr = __atomic_load_n(&adb_kbd_addr, __ATOMIC_ACQUIRE);
     if (address != active_addr) {
+        __atomic_fetch_add(&adb_cmd_addr_miss, 1u, __ATOMIC_RELAXED);
         return;
     }
     if (cmd_type == 1u && reg == 0u) {
@@ -380,6 +395,11 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     out_stats->events_pending = adb_events_pending();
     out_stats->cmd_bytes = __atomic_load_n(&adb_cmd_bytes, __ATOMIC_ACQUIRE);
     out_stats->last_cmd = __atomic_load_n(&adb_last_cmd, __ATOMIC_ACQUIRE);
+    out_stats->cmd_addr_miss = __atomic_load_n(&adb_cmd_addr_miss, __ATOMIC_ACQUIRE);
+    out_stats->tx_attempts = __atomic_load_n(&adb_tx_attempts, __ATOMIC_ACQUIRE);
+    out_stats->tx_success = __atomic_load_n(&adb_tx_success, __ATOMIC_ACQUIRE);
+    out_stats->tx_busy = __atomic_load_n(&adb_tx_busy, __ATOMIC_ACQUIRE);
+    out_stats->tx_late_busy = __atomic_load_n(&adb_tx_late_busy, __ATOMIC_ACQUIRE);
     out_stats->last_pulse_us = __atomic_load_n(&adb_last_pulse_us, __ATOMIC_ACQUIRE);
     uint32_t min_pulse = __atomic_load_n(&adb_min_pulse_us, __ATOMIC_ACQUIRE);
     if (min_pulse == UINT32_MAX) {
