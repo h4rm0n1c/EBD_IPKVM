@@ -27,6 +27,8 @@
 #define ADB_KBD_QUEUE_DEPTH 16u
 #define ADB_SRQ_PULSE_US 300u
 #define ADB_SRQ_COOLDOWN_US 2000u
+#define ADB_TX_IDLE_GUARD_US 260u
+#define ADB_SRQ_IDLE_GUARD_US 260u
 #define ADB_CMD_FLUSH 0u
 #define ADB_CMD_LISTEN 2u
 #define ADB_CMD_TALK 3u
@@ -62,6 +64,7 @@ static volatile uint8_t adb_mouse_handler_id = ADB_MOUSE_HANDLER_ID;
 static volatile bool adb_rx_latched = false;
 static volatile uint32_t adb_rx_raw_pulses = 0;
 static volatile uint32_t adb_last_pulse_us = 0;
+static volatile uint64_t adb_last_rx_time_us = 0;
 static volatile uint32_t adb_min_pulse_us = UINT32_MAX;
 static volatile uint32_t adb_max_pulse_us = 0;
 static volatile uint32_t adb_pulse_zero_us = 0;
@@ -92,11 +95,20 @@ static int16_t adb_mouse_dy = 0;
 static int8_t adb_mouse_last_dx = 0;
 static int8_t adb_mouse_last_dy = 0;
 static uint64_t adb_srq_next_at = 0;
+static uint8_t adb_pending_talk = 0;
 
 enum {
     ADB_LISTEN_NONE = 0,
     ADB_LISTEN_KBD = 1,
     ADB_LISTEN_MOUSE = 2,
+};
+
+enum {
+    ADB_PENDING_NONE = 0,
+    ADB_PENDING_KBD_REG0,
+    ADB_PENDING_KBD_REG3,
+    ADB_PENDING_MOUSE_REG0,
+    ADB_PENDING_MOUSE_REG3,
 };
 
 void adb_bus_init(uint pin_recv, uint pin_xmit) {
@@ -134,6 +146,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_latched = false;
     adb_rx_raw_pulses = 0;
     adb_last_pulse_us = 0;
+    adb_last_rx_time_us = 0;
     adb_min_pulse_us = UINT32_MAX;
     adb_max_pulse_us = 0;
     adb_pulse_zero_us = 0;
@@ -167,6 +180,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_mouse_last_dx = 0;
     adb_mouse_last_dy = 0;
     adb_srq_next_at = 0;
+    adb_pending_talk = ADB_PENDING_NONE;
 }
 
 static inline bool adb_line_idle(void) {
@@ -229,12 +243,24 @@ static void adb_tx_bit(bool one) {
     sleep_us(high_us);
 }
 
+static bool adb_can_tx_now(uint64_t now_us) {
+    if (!adb_line_idle()) {
+        return false;
+    }
+    uint64_t last_rx = __atomic_load_n(&adb_last_rx_time_us, __ATOMIC_ACQUIRE);
+    if (now_us - last_rx < ADB_TX_IDLE_GUARD_US) {
+        return false;
+    }
+    return true;
+}
+
 static bool adb_tx_bytes(const uint8_t *data, size_t len) {
     if (!data || len == 0u) {
         return false;
     }
     __atomic_fetch_add(&adb_tx_attempts, 1u, __ATOMIC_RELAXED);
-    if (!adb_line_idle()) {
+    uint64_t now_us = time_us_64();
+    if (!adb_can_tx_now(now_us)) {
         __atomic_fetch_add(&adb_tx_busy, 1u, __ATOMIC_RELAXED);
         return false;
     }
@@ -276,7 +302,8 @@ static bool adb_try_srq_pulse(uint64_t now_us) {
     if (now_us < adb_srq_next_at) {
         return false;
     }
-    if (!adb_line_idle()) {
+    uint64_t last_rx = __atomic_load_n(&adb_last_rx_time_us, __ATOMIC_ACQUIRE);
+    if (!adb_line_idle() || (now_us - last_rx < ADB_SRQ_IDLE_GUARD_US)) {
         return false;
     }
     uint16_t cycles = adb_pio_us_to_cycles(&adb_pio, ADB_SRQ_PULSE_US);
@@ -400,19 +427,11 @@ static void adb_handle_command(uint8_t cmd) {
         return;
     }
     if (cmd_type == ADB_CMD_TALK && reg == 0u) {
-        if (is_kbd) {
-            adb_try_keyboard_reg0();
-        } else {
-            adb_try_mouse_reg0();
-        }
+        adb_pending_talk = is_kbd ? ADB_PENDING_KBD_REG0 : ADB_PENDING_MOUSE_REG0;
         return;
     }
     if (cmd_type == ADB_CMD_TALK && reg == 3u) {
-        if (is_kbd) {
-            adb_try_keyboard_reg3();
-        } else {
-            adb_try_mouse_reg3();
-        }
+        adb_pending_talk = is_kbd ? ADB_PENDING_KBD_REG3 : ADB_PENDING_MOUSE_REG3;
     }
 }
 
@@ -507,6 +526,7 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
         __atomic_fetch_add(&adb_pulse_zero_us, 1u, __ATOMIC_RELAXED);
         return;
     }
+    __atomic_store_n(&adb_last_rx_time_us, time_us_64(), __ATOMIC_RELEASE);
     __atomic_store_n(&adb_last_pulse_us, pulse_us, __ATOMIC_RELEASE);
     uint32_t min_pulse = __atomic_load_n(&adb_min_pulse_us, __ATOMIC_ACQUIRE);
     if (pulse_us < min_pulse) {
@@ -549,6 +569,35 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
     __atomic_store_n(&adb_rx_latched, true, __ATOMIC_RELEASE);
 }
 
+static bool adb_try_pending_talk(void) {
+    uint8_t pending = adb_pending_talk;
+    if (pending == ADB_PENDING_NONE) {
+        return false;
+    }
+    bool ok = false;
+    switch (pending) {
+    case ADB_PENDING_KBD_REG0:
+        ok = adb_try_keyboard_reg0();
+        break;
+    case ADB_PENDING_KBD_REG3:
+        ok = adb_try_keyboard_reg3();
+        break;
+    case ADB_PENDING_MOUSE_REG0:
+        ok = adb_try_mouse_reg0();
+        break;
+    case ADB_PENDING_MOUSE_REG3:
+        ok = adb_try_mouse_reg3();
+        break;
+    default:
+        ok = false;
+        break;
+    }
+    if (ok) {
+        adb_pending_talk = ADB_PENDING_NONE;
+    }
+    return ok;
+}
+
 bool adb_bus_poll(void) {
     bool did_work = false;
     uint32_t pulse_count = 0;
@@ -588,6 +637,10 @@ bool adb_bus_poll(void) {
         adb_cmd_bytes_handled = cmd_bytes;
         uint8_t cmd = (uint8_t)__atomic_load_n(&adb_last_cmd, __ATOMIC_ACQUIRE);
         adb_handle_command(cmd);
+        did_work = true;
+    }
+
+    if (adb_try_pending_talk()) {
         did_work = true;
     }
 
