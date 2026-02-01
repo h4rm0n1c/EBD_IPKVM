@@ -66,6 +66,7 @@ static volatile bool adb_rx_latched = false;
 static volatile uint32_t adb_rx_raw_pulses = 0;
 static volatile uint32_t adb_last_pulse_us = 0;
 static volatile uint64_t adb_last_rx_time_us = 0;
+static volatile uint64_t adb_last_cmd_time_us = 0;
 static volatile uint32_t adb_min_pulse_us = UINT32_MAX;
 static volatile uint32_t adb_max_pulse_us = 0;
 static volatile uint32_t adb_pulse_zero_us = 0;
@@ -150,6 +151,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_raw_pulses = 0;
     adb_last_pulse_us = 0;
     adb_last_rx_time_us = 0;
+    adb_last_cmd_time_us = 0;
     adb_min_pulse_us = UINT32_MAX;
     adb_max_pulse_us = 0;
     adb_pulse_zero_us = 0;
@@ -259,7 +261,7 @@ static bool adb_can_tx_now(uint64_t now_us) {
     return true;
 }
 
-static bool adb_tx_bytes(const uint8_t *data, size_t len) {
+static bool adb_tx_bytes(const uint8_t *data, size_t len, bool apply_tlt_delay) {
     if (!data || len == 0u) {
         return false;
     }
@@ -269,7 +271,9 @@ static bool adb_tx_bytes(const uint8_t *data, size_t len) {
         __atomic_fetch_add(&adb_tx_busy, 1u, __ATOMIC_RELAXED);
         return false;
     }
-    sleep_us(ADB_TX_TALK_DELAY_US);
+    if (apply_tlt_delay) {
+        sleep_us(ADB_TX_TALK_DELAY_US);
+    }
     if (!adb_line_idle()) {
         __atomic_fetch_add(&adb_tx_late_busy, 1u, __ATOMIC_RELAXED);
         return false;
@@ -344,7 +348,7 @@ static bool adb_try_keyboard_reg0(void) {
         bytes[consumed] = code;
         consumed++;
     }
-    if (!adb_tx_bytes(bytes, 2u)) {
+    if (!adb_tx_bytes(bytes, 2u, false)) {
         return false;
     }
     __atomic_fetch_add(&adb_events_consumed, consumed, __ATOMIC_RELAXED);
@@ -356,7 +360,7 @@ static bool adb_try_keyboard_reg3(void) {
     uint8_t handler = __atomic_load_n(&adb_kbd_handler_id, __ATOMIC_ACQUIRE);
     uint8_t high = (uint8_t)(0x60u | (address & 0x0Fu));
     uint8_t bytes[2] = {high, handler};
-    return adb_tx_bytes(bytes, 2u);
+    return adb_tx_bytes(bytes, 2u, false);
 }
 
 static void adb_apply_kbd_listen_reg3(uint8_t high, uint8_t low) {
@@ -391,7 +395,7 @@ static bool adb_try_mouse_reg0(void) {
     byte0 |= (uint8_t)(((~buttons) & 0x01u) << 7);
     byte1 |= (uint8_t)(((~buttons) & 0x02u) << 6);
     uint8_t bytes[2] = {byte0, byte1};
-    if (!adb_tx_bytes(bytes, 2u)) {
+    if (!adb_tx_bytes(bytes, 2u, false)) {
         return false;
     }
     adb_mouse_reported = buttons;
@@ -405,7 +409,7 @@ static bool adb_try_mouse_reg3(void) {
     uint8_t handler = __atomic_load_n(&adb_mouse_handler_id, __ATOMIC_ACQUIRE);
     uint8_t high = (uint8_t)(0x60u | (address & 0x0Fu));
     uint8_t bytes[2] = {high, handler};
-    return adb_tx_bytes(bytes, 2u);
+    return adb_tx_bytes(bytes, 2u, false);
 }
 
 static void adb_apply_mouse_listen_reg3(uint8_t high, uint8_t low) {
@@ -512,6 +516,7 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
         } else {
             __atomic_store_n(&adb_last_cmd, adb_rx_shift, __ATOMIC_RELEASE);
             __atomic_fetch_add(&adb_cmd_bytes, 1u, __ATOMIC_RELAXED);
+            __atomic_store_n(&adb_last_cmd_time_us, time_us_64(), __ATOMIC_RELEASE);
             uint8_t address = (uint8_t)(adb_rx_shift >> 4);
             uint8_t cmd_type = (uint8_t)((adb_rx_shift >> 2) & 0x03u);
             uint8_t reg = (uint8_t)(adb_rx_shift & 0x03u);
@@ -590,6 +595,11 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
 static bool adb_try_pending_talk(void) {
     uint8_t pending = adb_pending_talk;
     if (pending == ADB_PENDING_NONE) {
+        return false;
+    }
+    uint64_t last_cmd = __atomic_load_n(&adb_last_cmd_time_us, __ATOMIC_ACQUIRE);
+    uint64_t now_us = time_us_64();
+    if (now_us < last_cmd + ADB_TX_TALK_DELAY_US) {
         return false;
     }
     bool ok = false;

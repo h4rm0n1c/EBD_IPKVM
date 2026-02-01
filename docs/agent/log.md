@@ -136,3 +136,4 @@
 - 2026-02-04: Fixed ADB command decode to treat command bits 0b11 as Talk and 0b10 as Listen, plus handle the 0x01 Flush command for keyboard/mouse buffers.
 - 2026-02-04: Defer ADB Talk replies until the bus has been idle for a guard window to avoid colliding with host transmissions; also guard SRQ pulses on recent RX activity.
 - 2026-02-04: Arm SRQ only after a non-addressed command byte and limit pulses to a short post-command window to avoid arbitrary mid-transaction SRQ asserts.
+- 2026-02-04: Track the command-byte timestamp and only emit Talk replies after the nominal Tlt delay has elapsed, instead of sleeping inside the transmit path.
