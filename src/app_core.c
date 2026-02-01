@@ -131,6 +131,9 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     if (out_len == 0) {
         return;
     }
+    if (tud_cdc_n_write_available(CDC_CTRL) < (int)out_len) {
+        return;
+    }
     cdc_ctrl_write(out, out_len);
 }
 
@@ -180,6 +183,9 @@ static void cdc_adb_printf(const char *fmt, ...) {
         out[out_len++] = buf[i];
     }
     if (out_len == 0) {
+        return;
+    }
+    if (tud_cdc_n_write_available(CDC_ADB) < (int)out_len) {
         return;
     }
     cdc_adb_write(out, out_len);
