@@ -36,3 +36,4 @@
 - Talk reg0 behavior: only emit keyboard/mouse reg0 responses when data is pending (key queue entries, mouse delta/button changes) to match ADB expectations and avoid hosts continuously polling on empty reg0 replies.
 - ADB reset hook: core1 resets ADB state on capture stop (and on PS_ON deassert via core bridge) so repeated boot/capture tests can be run without watchdog resets.
 - SRQ arming scope: only arm SRQ on non-addressed Talk reg0 polls (not reg3 address scans) to avoid spurious SRQ pulses during host address resolution.
+- Host reset detection: if the ADB bus shows a ~3.8–4.1 ms low reset pulse, reset the local ADB state so the device reverts to defaults before the subsequent Talk reg3 scan.

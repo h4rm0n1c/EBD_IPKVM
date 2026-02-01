@@ -30,6 +30,8 @@
 #define ADB_TX_IDLE_GUARD_US 260u
 #define ADB_SRQ_IDLE_GUARD_US 260u
 #define ADB_SRQ_WINDOW_US 260u
+#define ADB_RESET_MIN_US 3800u
+#define ADB_RESET_MAX_US 4100u
 #define ADB_CMD_FLUSH 0u
 #define ADB_CMD_LISTEN 2u
 #define ADB_CMD_TALK 3u
@@ -715,6 +717,10 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
     __atomic_fetch_add(&adb_rx_raw_pulses, 1u, __ATOMIC_RELAXED);
     if (pulse_us == 0u) {
         __atomic_fetch_add(&adb_pulse_zero_us, 1u, __ATOMIC_RELAXED);
+        return;
+    }
+    if (pulse_us >= ADB_RESET_MIN_US && pulse_us <= ADB_RESET_MAX_US) {
+        adb_bus_reset();
         return;
     }
     __atomic_store_n(&adb_last_rx_time_us, time_us_64(), __ATOMIC_RELEASE);

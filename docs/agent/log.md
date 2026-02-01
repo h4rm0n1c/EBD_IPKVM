@@ -143,3 +143,4 @@
 - 2026-02-04: Only respond to Talk reg0 when keyboard/mouse data is pending so hosts stop looping on empty reg0 polls.
 - 2026-02-04: Reset ADB state when capture is stopped or when PS_ON is deasserted to support repeated boot/test cycles without watchdog resets.
 - 2026-02-04: Only arm SRQ on non-addressed Talk reg0 polls so address-scans (Talk reg3) don’t spuriously trigger SRQ pulses.
+- 2026-02-04: Reset ADB state on host reset pulses (~3.8–4.1 ms) detected on the bus to align with power-on behavior.
