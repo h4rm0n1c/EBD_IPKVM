@@ -139,3 +139,4 @@
 - 2026-02-04: Track the command-byte timestamp and only emit Talk replies after the nominal Tlt delay has elapsed, instead of sleeping inside the transmit path.
 - 2026-02-04: Documented ADB bring-up timing so ADB polling starts as soon as core1 launches, ahead of capture.
 - 2026-02-04: Clear SRQ arming when a command is addressed to us to avoid stale SRQ pulses after Talk responses.
+- 2026-02-04: Added keyboard register 2 handling (Talk reg2 + Listen reg2 LED bits) and modifier tracking for basic ADB bring-up.

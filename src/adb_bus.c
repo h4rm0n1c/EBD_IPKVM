@@ -33,6 +33,27 @@
 #define ADB_CMD_FLUSH 0u
 #define ADB_CMD_LISTEN 2u
 #define ADB_CMD_TALK 3u
+#define ADB_KBD_KEY_COMMAND 0x37u
+#define ADB_KBD_KEY_OPTION 0x3Au
+#define ADB_KBD_KEY_OPTION_RIGHT 0x7Cu
+#define ADB_KBD_KEY_SHIFT 0x38u
+#define ADB_KBD_KEY_SHIFT_RIGHT 0x7Bu
+#define ADB_KBD_KEY_CONTROL 0x36u
+#define ADB_KBD_KEY_CONTROL_RIGHT 0x7Du
+#define ADB_KBD_KEY_CAPS_LOCK 0x39u
+#define ADB_KBD_KEY_DELETE 0x33u
+#define ADB_KBD_KEY_POWER 0x7Fu
+#define ADB_KBD_KEY_NUM_LOCK 0x47u
+#define ADB_KBD_KEY_SCROLL_LOCK 0x71u
+#define ADB_KBD_REG2_CMD_BIT 0u
+#define ADB_KBD_REG2_OPT_BIT 1u
+#define ADB_KBD_REG2_SHFT_BIT 2u
+#define ADB_KBD_REG2_CNTL_BIT 3u
+#define ADB_KBD_REG2_RST_BIT 4u
+#define ADB_KBD_REG2_CPSL_BIT 5u
+#define ADB_KBD_REG2_DEL_BIT 6u
+#define ADB_KBD_REG2_SCRL_BIT 6u
+#define ADB_KBD_REG2_NUML_BIT 7u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
@@ -90,6 +111,8 @@ static uint8_t adb_listen_target = 0;
 static uint8_t adb_kbd_queue[ADB_KBD_QUEUE_DEPTH] = {0};
 static uint8_t adb_kbd_q_read = 0;
 static uint8_t adb_kbd_q_write = 0;
+static uint8_t adb_kbd_reg2_high = 0xFFu;
+static uint8_t adb_kbd_reg2_low = 0xFFu;
 static uint8_t adb_mouse_buttons = 0;
 static uint8_t adb_mouse_reported = 0;
 static int16_t adb_mouse_dx = 0;
@@ -104,12 +127,14 @@ static uint64_t adb_srq_arm_time_us = 0;
 enum {
     ADB_LISTEN_NONE = 0,
     ADB_LISTEN_KBD = 1,
-    ADB_LISTEN_MOUSE = 2,
+    ADB_LISTEN_KBD_REG2 = 2,
+    ADB_LISTEN_MOUSE = 3,
 };
 
 enum {
     ADB_PENDING_NONE = 0,
     ADB_PENDING_KBD_REG0,
+    ADB_PENDING_KBD_REG2,
     ADB_PENDING_KBD_REG3,
     ADB_PENDING_MOUSE_REG0,
     ADB_PENDING_MOUSE_REG3,
@@ -178,6 +203,8 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     for (uint8_t i = 0; i < ADB_KBD_QUEUE_DEPTH; i++) {
         adb_kbd_queue[i] = 0;
     }
+    adb_kbd_reg2_high = 0xFFu;
+    adb_kbd_reg2_low = 0xFFu;
     adb_mouse_buttons = 0;
     adb_mouse_reported = 0;
     adb_mouse_dx = 0;
@@ -224,6 +251,59 @@ static uint8_t adb_kbd_queue_count(void) {
         return (uint8_t)(adb_kbd_q_write - adb_kbd_q_read);
     }
     return (uint8_t)(ADB_KBD_QUEUE_DEPTH - adb_kbd_q_read + adb_kbd_q_write);
+}
+
+static void adb_kbd_set_reg2_bit(uint8_t bit, bool pressed) {
+    if (pressed) {
+        adb_kbd_reg2_high &= (uint8_t)~(1u << bit);
+    } else {
+        adb_kbd_reg2_high |= (uint8_t)(1u << bit);
+    }
+}
+
+static void adb_kbd_set_reg2_low_bit(uint8_t bit, bool pressed) {
+    if (pressed) {
+        adb_kbd_reg2_low &= (uint8_t)~(1u << bit);
+    } else {
+        adb_kbd_reg2_low |= (uint8_t)(1u << bit);
+    }
+}
+
+static void adb_kbd_update_reg2(uint8_t keycode, bool pressed) {
+    switch (keycode) {
+    case ADB_KBD_KEY_COMMAND:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_CMD_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_OPTION:
+    case ADB_KBD_KEY_OPTION_RIGHT:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_OPT_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_SHIFT:
+    case ADB_KBD_KEY_SHIFT_RIGHT:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_SHFT_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_CONTROL:
+    case ADB_KBD_KEY_CONTROL_RIGHT:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_CNTL_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_POWER:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_RST_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_CAPS_LOCK:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_CPSL_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_DELETE:
+        adb_kbd_set_reg2_bit(ADB_KBD_REG2_DEL_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_NUM_LOCK:
+        adb_kbd_set_reg2_low_bit(ADB_KBD_REG2_NUML_BIT, pressed);
+        break;
+    case ADB_KBD_KEY_SCROLL_LOCK:
+        adb_kbd_set_reg2_low_bit(ADB_KBD_REG2_SCRL_BIT, pressed);
+        break;
+    default:
+        break;
+    }
 }
 
 static void adb_flush_keyboard(void) {
@@ -355,6 +435,11 @@ static bool adb_try_keyboard_reg0(void) {
     return true;
 }
 
+static bool adb_try_keyboard_reg2(void) {
+    uint8_t bytes[2] = {adb_kbd_reg2_high, adb_kbd_reg2_low};
+    return adb_tx_bytes(bytes, 2u, false);
+}
+
 static bool adb_try_keyboard_reg3(void) {
     uint8_t address = __atomic_load_n(&adb_kbd_addr, __ATOMIC_ACQUIRE);
     uint8_t handler = __atomic_load_n(&adb_kbd_handler_id, __ATOMIC_ACQUIRE);
@@ -372,6 +457,11 @@ static void adb_apply_kbd_listen_reg3(uint8_t high, uint8_t low) {
     if (handler == 0x02u || handler == 0x03u) {
         __atomic_store_n(&adb_kbd_handler_id, handler, __ATOMIC_RELEASE);
     }
+}
+
+static void adb_apply_kbd_listen_reg2(uint8_t high, uint8_t low) {
+    (void)high;
+    adb_kbd_reg2_low = (uint8_t)((adb_kbd_reg2_low & 0xF8u) | (low & 0x07u));
 }
 
 static bool adb_try_mouse_reg0(void) {
@@ -453,6 +543,10 @@ static void adb_handle_command(uint8_t cmd) {
         adb_pending_talk = is_kbd ? ADB_PENDING_KBD_REG0 : ADB_PENDING_MOUSE_REG0;
         return;
     }
+    if (cmd_type == ADB_CMD_TALK && reg == 2u && is_kbd) {
+        adb_pending_talk = ADB_PENDING_KBD_REG2;
+        return;
+    }
     if (cmd_type == ADB_CMD_TALK && reg == 3u) {
         adb_pending_talk = is_kbd ? ADB_PENDING_KBD_REG3 : ADB_PENDING_MOUSE_REG3;
     }
@@ -505,6 +599,8 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
                 if (adb_rx_data_expected == 2u) {
                     if (adb_listen_target == ADB_LISTEN_KBD) {
                         adb_apply_kbd_listen_reg3(adb_rx_data[0], adb_rx_data[1]);
+                    } else if (adb_listen_target == ADB_LISTEN_KBD_REG2) {
+                        adb_apply_kbd_listen_reg2(adb_rx_data[0], adb_rx_data[1]);
                     } else if (adb_listen_target == ADB_LISTEN_MOUSE) {
                         adb_apply_mouse_listen_reg3(adb_rx_data[0], adb_rx_data[1]);
                     }
@@ -523,8 +619,12 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
             uint8_t reg = (uint8_t)(adb_rx_shift & 0x03u);
             uint8_t active_addr = __atomic_load_n(&adb_kbd_addr, __ATOMIC_ACQUIRE);
             uint8_t mouse_addr = __atomic_load_n(&adb_mouse_addr, __ATOMIC_ACQUIRE);
-            if (cmd_type == ADB_CMD_LISTEN && reg == 3u) {
-                if (address == active_addr) {
+            if (cmd_type == ADB_CMD_LISTEN && (reg == 2u || reg == 3u)) {
+                if (address == active_addr && reg == 2u) {
+                    adb_rx_data_expected = 2u;
+                    adb_rx_data_count = 0;
+                    adb_listen_target = ADB_LISTEN_KBD_REG2;
+                } else if (address == active_addr && reg == 3u) {
                     adb_rx_data_expected = 2u;
                     adb_rx_data_count = 0;
                     adb_listen_target = ADB_LISTEN_KBD;
@@ -608,6 +708,9 @@ static bool adb_try_pending_talk(void) {
     case ADB_PENDING_KBD_REG0:
         ok = adb_try_keyboard_reg0();
         break;
+    case ADB_PENDING_KBD_REG2:
+        ok = adb_try_keyboard_reg2();
+        break;
     case ADB_PENDING_KBD_REG3:
         ok = adb_try_keyboard_reg3();
         break;
@@ -652,6 +755,7 @@ bool adb_bus_poll(void) {
             if (!ev.b) {
                 code |= 0x80u;
             }
+            adb_kbd_update_reg2(ev.a, ev.b != 0);
             adb_kbd_queue_push(code);
         } else if (ev.type == ADB_EVENT_MOUSE) {
             adb_mouse_buttons = ev.a;
