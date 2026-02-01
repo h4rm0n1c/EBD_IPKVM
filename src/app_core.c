@@ -58,11 +58,11 @@ static inline void set_ps_on(bool on) {
 }
 
 static inline bool can_emit_text(void) {
-    return tud_cdc_n_connected(CDC_CTRL);
+    return tud_ready() && tud_cdc_n_connected(CDC_CTRL);
 }
 
 static inline bool can_emit_adb_text(void) {
-    return tud_cdc_n_connected(CDC_ADB);
+    return tud_ready() && tud_cdc_n_connected(CDC_ADB);
 }
 
 static inline void reset_diag_counts(void) {
@@ -84,7 +84,7 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
 }
 
 static void cdc_ctrl_write(const char *buf, size_t len) {
-    if (!tud_cdc_n_connected(CDC_CTRL) || len == 0) {
+    if (!tud_ready() || !tud_cdc_n_connected(CDC_CTRL) || len == 0) {
         return;
     }
 
@@ -142,7 +142,7 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
 }
 
 static void cdc_adb_write(const char *buf, size_t len) {
-    if (!tud_cdc_n_connected(CDC_ADB) || len == 0) {
+    if (!tud_ready() || !tud_cdc_n_connected(CDC_ADB) || len == 0) {
         return;
     }
 
