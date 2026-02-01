@@ -29,7 +29,6 @@ typedef struct {
 
 static adb_ansi_state_t ansi_state;
 static uint8_t mouse_buttons = 0;
-static volatile bool adb_diag_requested = false;
 static bool rom_boot_active = false;
 static uint64_t rom_boot_release_at = 0;
 
@@ -226,7 +225,6 @@ static void adb_handle_csi(char code) {
 void adb_test_cdc_init(void) {
     memset(&ansi_state, 0, sizeof(ansi_state));
     mouse_buttons = 0;
-    adb_diag_requested = false;
     rom_boot_active = false;
     rom_boot_release_at = 0;
 }
@@ -244,11 +242,6 @@ bool adb_test_cdc_poll(void) {
         }
         if (ch == ADB_ROM_BOOT_TRIGGER) {
             adb_rom_boot_start();
-            did_work = true;
-            continue;
-        }
-        if (ch == 'A' || ch == 'a') {
-            adb_diag_requested = true;
             did_work = true;
             continue;
         }
@@ -293,8 +286,4 @@ bool adb_test_cdc_poll(void) {
     }
 
     return did_work;
-}
-
-bool adb_test_cdc_take_diag_request(void) {
-    return __atomic_exchange_n(&adb_diag_requested, false, __ATOMIC_ACQ_REL);
 }

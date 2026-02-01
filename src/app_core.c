@@ -47,7 +47,6 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
-static volatile bool adb_diag_pending = false;
 static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
@@ -291,9 +290,6 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.pulse_gt_1100_us);
 }
 
-static inline void request_adb_diag(void) {
-    __atomic_store_n(&adb_diag_pending, true, __ATOMIC_RELEASE);
-}
 
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
@@ -529,7 +525,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: emitted on CDC2 once per second.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
@@ -564,14 +560,6 @@ void app_core_poll(void) {
     if (!adb_auto_rom_boot_done && adb_stats.cmd_bytes > 0) {
         adb_test_cdc_trigger_rom_boot();
         adb_auto_rom_boot_done = true;
-    }
-    if (adb_test_cdc_take_diag_request()) {
-        request_adb_diag();
-    }
-    if (__atomic_exchange_n(&adb_diag_pending, false, __ATOMIC_ACQ_REL)) {
-        if (can_emit_adb_text()) {
-            emit_adb_diag();
-        }
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */
@@ -643,6 +631,7 @@ void app_core_poll(void) {
                            (unsigned long)adb_stats.last_pulse_us,
                            (unsigned long)adb_stats.events_consumed,
                            (unsigned long)adb_events_get_drop_count());
+            emit_adb_diag();
 
             if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
                 if (adb_bus_take_rx_seen()) {
