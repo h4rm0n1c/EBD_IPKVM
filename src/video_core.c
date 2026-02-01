@@ -352,6 +352,7 @@ static void core1_stop_capture_and_reset(void) {
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
+    adb_bus_reset();
 }
 
 static void core1_handle_command(uint32_t cmd) {
@@ -392,6 +393,9 @@ static void core1_handle_command(uint32_t cmd) {
         break;
     case CORE_BRIDGE_CMD_DIAG_DONE:
         store_bool(&diag_active, false);
+        break;
+    case CORE_BRIDGE_CMD_RESET_ADB:
+        adb_bus_reset();
         break;
     default:
         break;

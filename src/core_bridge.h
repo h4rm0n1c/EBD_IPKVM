@@ -12,6 +12,7 @@ typedef enum {
     CORE_BRIDGE_CMD_CONFIG_VSYNC = 5,
     CORE_BRIDGE_CMD_DIAG_PREP = 6,
     CORE_BRIDGE_CMD_DIAG_DONE = 7,
+    CORE_BRIDGE_CMD_RESET_ADB = 8,
 } core_bridge_cmd_t;
 
 uint32_t core_bridge_pack(core_bridge_cmd_t code, uint16_t param);

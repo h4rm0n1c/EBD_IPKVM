@@ -397,6 +397,7 @@ static bool poll_cdc_commands(void) {
             }
         } else if (ch == 'p') {
             set_ps_on(false);
+            core_bridge_send(CORE_BRIDGE_CMD_RESET_ADB, 0);
             if (can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ps_on=0\n");
             }

@@ -141,3 +141,4 @@
 - 2026-02-04: Clear SRQ arming when a command is addressed to us to avoid stale SRQ pulses after Talk responses.
 - 2026-02-04: Added keyboard register 2 handling (Talk reg2 + Listen reg2 LED bits) and modifier tracking for basic ADB bring-up.
 - 2026-02-04: Only respond to Talk reg0 when keyboard/mouse data is pending so hosts stop looping on empty reg0 polls.
+- 2026-02-04: Reset ADB state when capture is stopped or when PS_ON is deasserted to support repeated boot/test cycles without watchdog resets.

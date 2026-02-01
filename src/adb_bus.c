@@ -217,6 +217,67 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_srq_arm_time_us = 0;
 }
 
+void adb_bus_reset(void) {
+    adb_rx_pulses = 0;
+    adb_rx_seen = 0;
+    adb_rx_overruns = 0;
+    adb_attention_pulses = 0;
+    adb_sync_pulses = 0;
+    adb_events_consumed = 0;
+    adb_cmd_bytes = 0;
+    adb_last_cmd = 0;
+    adb_cmd_addr_miss = 0;
+    adb_srq_pulses = 0;
+    adb_tx_attempts = 0;
+    adb_tx_success = 0;
+    adb_tx_busy = 0;
+    adb_tx_late_busy = 0;
+    adb_rx_latched = false;
+    adb_rx_raw_pulses = 0;
+    adb_last_pulse_us = 0;
+    adb_last_rx_time_us = 0;
+    adb_last_cmd_time_us = 0;
+    adb_min_pulse_us = UINT32_MAX;
+    adb_max_pulse_us = 0;
+    adb_pulse_zero_us = 0;
+    adb_pulse_lt_30_us = 0;
+    adb_pulse_30_60_us = 0;
+    adb_pulse_60_90_us = 0;
+    adb_pulse_90_200_us = 0;
+    adb_pulse_200_600_us = 0;
+    adb_pulse_600_700_us = 0;
+    adb_pulse_700_900_us = 0;
+    adb_pulse_900_1100_us = 0;
+    adb_pulse_gt_1100_us = 0;
+    adb_rx_state = ADB_RX_IDLE;
+    adb_rx_bit_count = 0;
+    adb_rx_shift = 0;
+    adb_cmd_bytes_handled = 0;
+    adb_rx_data_expected = 0;
+    adb_rx_data_count = 0;
+    adb_rx_data[0] = 0;
+    adb_rx_data[1] = 0;
+    adb_listen_target = ADB_LISTEN_NONE;
+    adb_kbd_q_read = 0;
+    adb_kbd_q_write = 0;
+    for (uint8_t i = 0; i < ADB_KBD_QUEUE_DEPTH; i++) {
+        adb_kbd_queue[i] = 0;
+    }
+    adb_kbd_reg2_high = 0xFFu;
+    adb_kbd_reg2_low = 0xFFu;
+    adb_mouse_buttons = 0;
+    adb_mouse_reported = 0;
+    adb_mouse_dx = 0;
+    adb_mouse_dy = 0;
+    adb_mouse_last_dx = 0;
+    adb_mouse_last_dy = 0;
+    adb_srq_next_at = 0;
+    adb_pending_talk = ADB_PENDING_NONE;
+    adb_srq_armed = false;
+    adb_srq_arm_time_us = 0;
+    adb_pio_rx_flush(&adb_pio);
+}
+
 static inline bool adb_line_idle(void) {
     return gpio_get(adb_pin_recv);
 }
