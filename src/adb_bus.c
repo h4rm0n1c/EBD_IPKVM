@@ -428,6 +428,9 @@ static bool adb_try_keyboard_reg0(void) {
         bytes[consumed] = code;
         consumed++;
     }
+    if (consumed == 0u) {
+        return false;
+    }
     if (!adb_tx_bytes(bytes, 2u, false)) {
         return false;
     }
@@ -467,6 +470,10 @@ static void adb_apply_kbd_listen_reg2(uint8_t high, uint8_t low) {
 static bool adb_try_mouse_reg0(void) {
     int16_t dx = adb_mouse_dx;
     int16_t dy = adb_mouse_dy;
+    uint8_t buttons = adb_mouse_buttons;
+    if (dx == 0 && dy == 0 && buttons == adb_mouse_reported) {
+        return false;
+    }
     if (dx < -64) {
         dx = -64;
     } else if (dx > 63) {
@@ -479,7 +486,6 @@ static bool adb_try_mouse_reg0(void) {
     }
     adb_mouse_last_dx = (int8_t)dx;
     adb_mouse_last_dy = (int8_t)dy;
-    uint8_t buttons = adb_mouse_buttons;
     uint8_t byte0 = (uint8_t)adb_mouse_last_dy & 0x7Fu;
     uint8_t byte1 = (uint8_t)adb_mouse_last_dx & 0x7Fu;
     byte0 |= (uint8_t)(((~buttons) & 0x01u) << 7);
