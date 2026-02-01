@@ -80,15 +80,20 @@ occupancy.
 ADB status is emitted on CDC2 (independent of CDC1 control status) once per
 second as:
 
-- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> pend=<events> last=<us> ev=<events> drop=<drops>`
-- `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
+- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> miss=<addr_miss> srq=<count> pend=<events> tx=<ok>/<attempts> busy=<early> late=<after_delay> last=<us> ev=<events> drop=<drops>`
+  - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
   - `raw` counts all observed low pulses, even if they are too short/long.
   - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
   - `att` counts low pulses in the attention-width window (~700–900 µs).
   - `syn` counts low pulses in the sync-width window (~60–90 µs).
   - `cmd` is the most recent decoded command byte after attention+sync.
   - `cmds` counts decoded command bytes.
+  - `miss` counts command bytes that target a different address than the active ADB keyboard address.
+  - `srq` counts SRQ pulses emitted when keyboard/mouse data is pending.
   - `pend` counts queued ADB events waiting to be transmitted.
+  - `tx` reports successful ADB responses vs. total response attempts.
+  - `busy` counts response attempts that failed because the line was not idle before the talk delay.
+  - `late` counts response attempts that failed because the line was not idle after the talk delay.
   - `last` is the most recent observed low-pulse width in microseconds.
 - A second diagnostic line with pulse-width bins and min/max is also emitted once
   per second:

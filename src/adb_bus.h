@@ -16,6 +16,12 @@ typedef struct {
     uint32_t events_pending;
     uint32_t cmd_bytes;
     uint32_t last_cmd;
+    uint32_t cmd_addr_miss;
+    uint32_t srq_pulses;
+    uint32_t tx_attempts;
+    uint32_t tx_success;
+    uint32_t tx_busy;
+    uint32_t tx_late_busy;
     uint32_t last_pulse_us;
     uint32_t min_pulse_us;
     uint32_t max_pulse_us;

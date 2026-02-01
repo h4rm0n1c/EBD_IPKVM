@@ -130,3 +130,5 @@
 - 2026-02-04: Added a minimal ADB Talk response for keyboard register 0 (address 2) so queued CDC2 key events can transmit on-bus.
 - 2026-02-04: Adjusted ADB TX pulse cycle conversion to account for the single-cycle TX loop and the `set pindirs` assert overhead.
 - 2026-02-04: Documented PIO loop cycle accounting as a required step when converting ADB RX/TX ticks to microseconds.
+- 2026-02-04: Added ADB TX attempt/busy counters and address-miss tracking to CDC2 diagnostics for debugging missing Talk responses.
+- 2026-02-04: Added minimal ADB mouse Talk/Listen handling and SRQ pulses so mouse movement/button events can be serviced.
