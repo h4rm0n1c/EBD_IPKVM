@@ -44,7 +44,7 @@ def resolve_device(path: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send a CDC command and print ASCII response.")
-    parser.add_argument("--device", default="/dev/serial/by-id/*EBD_IPKVM*if02",
+    parser.add_argument("--device", default="/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02",
                         help="CDC control device path (CDC1 by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")

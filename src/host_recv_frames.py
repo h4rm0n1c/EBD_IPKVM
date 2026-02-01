@@ -17,8 +17,8 @@ STREAM_RAW = False
 STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
-STREAM_DEV = "/dev/serial/by-id/*EBD_IPKVM*if00"
-CTRL_DEV = "/dev/serial/by-id/*EBD_IPKVM*if02"
+STREAM_DEV = "/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00"
+CTRL_DEV = "/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":

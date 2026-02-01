@@ -16,10 +16,10 @@ lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
 
 #check if pico is connected
 sudo dmesg | tail -n 50
-ls -l /dev/serial/by-id/*EBD_IPKVM*
+ls -l /dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if*
 
 #check if pico is talking
-picocom -b 115200 /dev/serial/by-id/*EBD_IPKVM*if02
+picocom -b 115200 /dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if02
 
 #this is where I usually operate from
 cd ~/pico/EBD_IPKVM/src/
