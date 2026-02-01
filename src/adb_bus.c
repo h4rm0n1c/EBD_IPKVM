@@ -646,9 +646,9 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
 
     uint8_t bit = 0;
     if (pulse_us < ADB_BIT_ZERO_MAX_US && pulse_us >= ADB_PULSE_MIN_US) {
-        bit = 0;
-    } else if (pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US) {
         bit = 1;
+    } else if (pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US) {
+        bit = 0;
     } else {
         adb_rx_state = ADB_RX_IDLE;
         adb_rx_bit_count = 0;

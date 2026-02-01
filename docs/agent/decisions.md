@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-04: Decode ADB RX bits with short low pulses (~35 µs) as logical 1 and long low pulses (~65 µs) as logical 0 to match ADB bit-cell timing.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
