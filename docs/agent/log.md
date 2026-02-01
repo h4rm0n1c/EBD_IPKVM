@@ -105,3 +105,4 @@
 - 2026-02-03: Added ADB pulse-width bin counters and min/max reporting to the CDC2 ADB diagnostic output.
 - 2026-02-03: Treat zero-length RX pulse samples as a separate bin to avoid skewing min/max during ADB capture debugging.
 - 2026-02-03: Corrected ADB RX pulse-width conversion to account for two PIO cycles per loop iteration in the RX counter.
+- 2026-02-04: Tightened the ADB attention pulse window to 700–900 µs after reviewing diagnostic buckets.

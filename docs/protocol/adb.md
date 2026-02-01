@@ -23,4 +23,4 @@
 - The current PIO RX program runs with a clkdiv of 8 and reports pulse widths in microseconds after firmware conversion; pulse filters are expressed in µs.
 - PIO RX counts decrement once per loop iteration (2 PIO cycles), so pulse widths are scaled by 2 ticks when converting to microseconds.
 - RX pushes are non-blocking with a joined RX FIFO so bursts cannot stall the state machine.
-- The attention pulse detector is temporarily widened (600–1100 µs) during bring-up to accommodate capture/level-shift skew; sync remains 60–90 µs.
+- The attention pulse detector is tightened to 700–900 µs now that capture skew is under control; sync remains 60–90 µs.
