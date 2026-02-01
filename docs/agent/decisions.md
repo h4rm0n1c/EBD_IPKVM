@@ -52,4 +52,5 @@
 - 2026-02-04: Auto-trigger the ROM-boot key hold once after the first decoded ADB command byte during testing.
 - 2026-02-04: Hold the ROM-boot key combo for ~30 seconds during automated testing.
 - 2026-02-04: Implement a minimal keyboard Talk response (address 2, reg 0) to transmit queued ADB key events before full Listen/SRQ support.
+- 2026-02-04: Implement minimal Listen reg 3 handling to accept address/handler updates and add Talk reg 3 responses during ADB bring-up.
 - 2026-02-04: Subtract one cycle from TX low-pulse conversion to account for the PIO `set pindirs` assert in the ADB TX loop.

@@ -3,7 +3,7 @@
 ## Status
 
 - ADB keyboard/mouse emulation is **in progress**. The immediate focus is enabling a first on-bus test: observe host polling, respond to Talk, and inject basic keyboard/mouse events via CDC2 per the implementation plan.
-- Current firmware exposes CDC2 for ADB test input and latches basic RX activity on the shared bus; full Talk/Listen response handling is still being built.
+- Current firmware exposes CDC2 for ADB test input and latches basic RX activity on the shared bus; basic Talk/Listen handling is under active bring-up.
 - Initial PIO RX/TX programs are in place to capture ADB low-pulse widths and drive low pulses on the bus (PIO1, separate RX/TX state machines).
 
 ## GPIO assignment
@@ -24,7 +24,10 @@
 - PIO RX counts decrement once per loop iteration (2 PIO cycles), so pulse widths are scaled by 2 ticks when converting to microseconds.
 - RX pushes are non-blocking with a joined RX FIFO so bursts cannot stall the state machine.
 - The attention pulse detector is tightened to 700–900 µs now that capture skew is under control; sync remains 60–90 µs.
-- A minimal Talk response is now emitted for keyboard address 2, register 0, using queued CDC2 key events; Listen/SRQ handling is still pending.
+- Minimal Talk responses are emitted for the active keyboard address (default 2):
+  - Reg 0: queued CDC2 key events (0xFF fill when idle).
+  - Reg 3: handler ID + current address byte.
+- Listen reg 3 is accepted to update the keyboard address (handler ID 0x00/0xFE) or handler ID (0x02/0x03); SRQ/collision flags remain unimplemented.
 - TX low-pulse timing uses the PIO TX loop (1 cycle per decrement) with a one-cycle adjustment for the `set pindirs` assert.
 
 ### PIO timing takeaways (ADB RX/TX)

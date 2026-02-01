@@ -8,6 +8,7 @@
 - 2026-02-04: Updated host tooling defaults to use /dev/serial/by-id *ifXX* symlinks instead of ttyACM numbers.
 - 2026-02-04: Pinned host tooling defaults to the current Raspberry Pi EBD_IPKVM by-id symlinks.
 - 2026-02-04: Added a CDC2 debug line that decodes the last ADB command into addr/type/reg.
+- 2026-02-04: Added basic ADB Talk reg3 responses and Listen reg3 handling for address/handler updates.
 - 2026-02-02: Marked ADB work as in-progress in project state and added a first bring-up checklist to the ADB implementation plan.
 - 2026-02-02: Documented that ADB implementation is active and added status guidance in the ADB protocol notes.
 - 2026-02-02: Added initial ADB event queue plumbing, CDC2 test input parsing, and RX activity latching for early on-bus validation.
