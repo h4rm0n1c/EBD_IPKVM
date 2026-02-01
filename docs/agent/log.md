@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-04: Adjusted ADB RX to capture low+high pulse pairs and decode bits from short/long transitions (short-low/long-high = 1, long-low/short-high = 0).
 - 2026-02-04: Corrected ADB bit decoding so short low pulses map to logical 1 and long low pulses map to logical 0.
 - 2026-02-04: Removed the cached ADB pending-events counter and read adb_events_pending() when emitting stats.
 - 2026-02-04: Emit ADB diagnostic lines on CDC2 every second instead of gating on a manual request.

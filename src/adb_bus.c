@@ -105,6 +105,9 @@ static volatile uint32_t adb_pulse_gt_1100_us = 0;
 static adb_rx_state_t adb_rx_state = ADB_RX_IDLE;
 static uint8_t adb_rx_bit_count = 0;
 static uint8_t adb_rx_shift = 0;
+static bool adb_rx_expect_low = true;
+static bool adb_rx_has_low = false;
+static uint32_t adb_rx_low_us = 0;
 static uint32_t adb_cmd_bytes_handled = 0;
 static uint8_t adb_rx_data_expected = 0;
 static uint8_t adb_rx_data_count = 0;
@@ -194,6 +197,9 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_state = ADB_RX_IDLE;
     adb_rx_bit_count = 0;
     adb_rx_shift = 0;
+    adb_rx_expect_low = true;
+    adb_rx_has_low = false;
+    adb_rx_low_us = 0;
     adb_cmd_bytes_handled = 0;
     adb_rx_data_expected = 0;
     adb_rx_data_count = 0;
@@ -254,6 +260,9 @@ void adb_bus_reset(void) {
     adb_rx_state = ADB_RX_IDLE;
     adb_rx_bit_count = 0;
     adb_rx_shift = 0;
+    adb_rx_expect_low = true;
+    adb_rx_has_low = false;
+    adb_rx_low_us = 0;
     adb_cmd_bytes_handled = 0;
     adb_rx_data_expected = 0;
     adb_rx_data_count = 0;
@@ -621,41 +630,15 @@ static void adb_handle_command(uint8_t cmd) {
     }
 }
 
-static inline void adb_note_rx_state(uint32_t pulse_us) {
-    if (pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
-        adb_rx_state = ADB_RX_GOT_ATTENTION;
-        adb_rx_bit_count = 0;
-        adb_rx_shift = 0;
-        return;
-    }
+static inline void adb_rx_reset_bits(void) {
+    adb_rx_state = ADB_RX_IDLE;
+    adb_rx_bit_count = 0;
+    adb_rx_shift = 0;
+    adb_rx_has_low = false;
+    adb_rx_low_us = 0;
+}
 
-    if (adb_rx_state == ADB_RX_GOT_ATTENTION) {
-        if (pulse_us >= ADB_SYNC_MIN_US && pulse_us <= ADB_SYNC_MAX_US) {
-            adb_rx_state = ADB_RX_BITS;
-            adb_rx_bit_count = 0;
-            adb_rx_shift = 0;
-        } else {
-            adb_rx_state = ADB_RX_IDLE;
-        }
-        return;
-    }
-
-    if (adb_rx_state != ADB_RX_BITS) {
-        return;
-    }
-
-    uint8_t bit = 0;
-    if (pulse_us < ADB_BIT_ZERO_MAX_US && pulse_us >= ADB_PULSE_MIN_US) {
-        bit = 1;
-    } else if (pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US) {
-        bit = 0;
-    } else {
-        adb_rx_state = ADB_RX_IDLE;
-        adb_rx_bit_count = 0;
-        adb_rx_shift = 0;
-        return;
-    }
-
+static inline void adb_rx_accept_bit(uint8_t bit) {
     adb_rx_shift = (uint8_t)((adb_rx_shift << 1u) | bit);
     adb_rx_bit_count++;
     if (adb_rx_bit_count >= 8u) {
@@ -713,7 +696,74 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
     }
 }
 
-static inline void adb_note_rx_pulse(uint32_t pulse_us) {
+static inline void adb_note_rx_low(uint32_t pulse_us) {
+    if (pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
+        adb_rx_state = ADB_RX_GOT_ATTENTION;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+        adb_rx_has_low = false;
+        adb_rx_low_us = 0;
+        return;
+    }
+
+    if (adb_rx_state == ADB_RX_GOT_ATTENTION) {
+        if (pulse_us >= ADB_SYNC_MIN_US && pulse_us <= ADB_SYNC_MAX_US) {
+            adb_rx_state = ADB_RX_BITS;
+            adb_rx_bit_count = 0;
+            adb_rx_shift = 0;
+        } else {
+            adb_rx_state = ADB_RX_IDLE;
+        }
+        adb_rx_has_low = false;
+        adb_rx_low_us = 0;
+        return;
+    }
+
+    if (adb_rx_state != ADB_RX_BITS) {
+        adb_rx_has_low = false;
+        adb_rx_low_us = 0;
+        return;
+    }
+
+    if (pulse_us < ADB_PULSE_MIN_US || pulse_us > ADB_PULSE_MAX_US) {
+        adb_rx_reset_bits();
+        return;
+    }
+
+    adb_rx_low_us = pulse_us;
+    adb_rx_has_low = true;
+}
+
+static inline void adb_note_rx_high(uint32_t pulse_us) {
+    if (adb_rx_state != ADB_RX_BITS || !adb_rx_has_low) {
+        return;
+    }
+
+    bool low_short = adb_rx_low_us < ADB_BIT_ZERO_MAX_US && adb_rx_low_us >= ADB_PULSE_MIN_US;
+    bool low_long = adb_rx_low_us >= ADB_BIT_ONE_MIN_US && adb_rx_low_us <= ADB_BIT_ONE_MAX_US;
+    bool high_short = pulse_us < ADB_BIT_ZERO_MAX_US && pulse_us >= ADB_PULSE_MIN_US;
+    bool high_long = pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US;
+    adb_rx_has_low = false;
+
+    uint8_t bit = 0;
+    if (low_short && high_long) {
+        bit = 1;
+    } else if (low_long && high_short) {
+        bit = 0;
+    } else {
+        adb_rx_reset_bits();
+        return;
+    }
+
+    adb_rx_accept_bit(bit);
+}
+
+static inline void adb_note_rx_pulse(uint32_t pulse_us, bool is_low) {
+    if (!is_low) {
+        adb_note_rx_high(pulse_us);
+        return;
+    }
+
     __atomic_fetch_add(&adb_rx_raw_pulses, 1u, __ATOMIC_RELAXED);
     if (pulse_us == 0u) {
         __atomic_fetch_add(&adb_pulse_zero_us, 1u, __ATOMIC_RELAXED);
@@ -757,7 +807,7 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
     } else if (pulse_us >= ADB_SYNC_MIN_US && pulse_us <= ADB_SYNC_MAX_US) {
         __atomic_fetch_add(&adb_sync_pulses, 1u, __ATOMIC_RELAXED);
     }
-    adb_note_rx_state(pulse_us);
+    adb_note_rx_low(pulse_us);
     if (pulse_us < ADB_PULSE_MIN_US || pulse_us > ADB_PULSE_MAX_US) {
         return;
     }
@@ -810,13 +860,22 @@ bool adb_bus_poll(void) {
     while (pulses_handled < ADB_MAX_PULSES_PER_POLL
            && adb_pio_rx_pop(&adb_pio, &pulse_count)) {
         uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
-        adb_note_rx_pulse(pulse_us);
+        bool is_low = adb_rx_expect_low;
+        adb_rx_expect_low = !adb_rx_expect_low;
+        if (!is_low && pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
+            is_low = true;
+            adb_rx_expect_low = false;
+        }
+        adb_note_rx_pulse(pulse_us, is_low);
         did_work = true;
         pulses_handled++;
     }
     if (pulses_handled >= ADB_MAX_PULSES_PER_POLL && adb_pio_rx_has_data(&adb_pio)) {
         __atomic_fetch_add(&adb_rx_overruns, 1u, __ATOMIC_RELAXED);
         adb_pio_rx_flush(&adb_pio);
+        adb_rx_expect_low = true;
+        adb_rx_has_low = false;
+        adb_rx_low_us = 0;
         did_work = true;
     }
 
