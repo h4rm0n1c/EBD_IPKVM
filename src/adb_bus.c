@@ -591,7 +591,7 @@ static void adb_handle_command(uint8_t cmd) {
     bool is_mouse = address == mouse_addr;
     if (!is_kbd && !is_mouse) {
         __atomic_fetch_add(&adb_cmd_addr_miss, 1u, __ATOMIC_RELAXED);
-        if (adb_should_srq()) {
+        if (cmd_type == ADB_CMD_TALK && reg == 0u && adb_should_srq()) {
             adb_srq_armed = true;
             adb_srq_arm_time_us = time_us_64();
         }

@@ -35,3 +35,4 @@
 - Keyboard reg2 handling: we now track modifier-related keycodes (command/option/shift/control/caps/delete/power) in register 2 high byte (bit cleared when pressed) and accept Listen reg2 to update LED bits (low 3 bits), similar to the trablar/tashtrio behavior during bring-up.
 - Talk reg0 behavior: only emit keyboard/mouse reg0 responses when data is pending (key queue entries, mouse delta/button changes) to match ADB expectations and avoid hosts continuously polling on empty reg0 replies.
 - ADB reset hook: core1 resets ADB state on capture stop (and on PS_ON deassert via core bridge) so repeated boot/capture tests can be run without watchdog resets.
+- SRQ arming scope: only arm SRQ on non-addressed Talk reg0 polls (not reg3 address scans) to avoid spurious SRQ pulses during host address resolution.
