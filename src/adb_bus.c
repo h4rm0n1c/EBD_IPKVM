@@ -910,9 +910,15 @@ bool adb_bus_poll(void) {
         uint32_t pulse_us = adb_pio_ticks_to_us(&adb_pio, pulse_count);
         bool is_low = adb_rx_expect_low;
         adb_rx_expect_low = !adb_rx_expect_low;
-        if (!is_low && pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
+        if (pulse_us >= ADB_RESET_MIN_US && pulse_us <= ADB_RESET_MAX_US) {
             is_low = true;
             adb_rx_expect_low = false;
+        } else if (pulse_us >= ADB_ATTENTION_MIN_US && pulse_us <= ADB_ATTENTION_MAX_US) {
+            is_low = true;
+            adb_rx_expect_low = false;
+        } else if (pulse_us > ADB_PULSE_MAX_US) {
+            is_low = false;
+            adb_rx_expect_low = true;
         }
         adb_note_rx_pulse(pulse_us, is_low);
         did_work = true;
