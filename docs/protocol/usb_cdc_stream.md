@@ -80,7 +80,7 @@ ADB status is emitted on CDC2 (independent of CDC1 control status) as:
   - `syn` counts low pulses in the sync-width window (~60–90 µs).
   - `last` is the most recent observed low-pulse width in microseconds.
 - On-demand diagnostic output (`A`) also includes a second line with pulse-width bins and min/max:
-  - `[EBD_IPKVM] adb bins: min=<us> max=<us> zero=<n> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-1100=<n> >1100=<n>`
+  - `[EBD_IPKVM] adb bins: min=<us> max=<us> zero=<n> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-700=<n> 700-900=<n> 900-1100=<n> >1100=<n>`
 
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).

@@ -35,7 +35,9 @@ static volatile uint32_t adb_pulse_30_60_us = 0;
 static volatile uint32_t adb_pulse_60_90_us = 0;
 static volatile uint32_t adb_pulse_90_200_us = 0;
 static volatile uint32_t adb_pulse_200_600_us = 0;
-static volatile uint32_t adb_pulse_600_1100_us = 0;
+static volatile uint32_t adb_pulse_600_700_us = 0;
+static volatile uint32_t adb_pulse_700_900_us = 0;
+static volatile uint32_t adb_pulse_900_1100_us = 0;
 static volatile uint32_t adb_pulse_gt_1100_us = 0;
 
 void adb_bus_init(uint pin_recv, uint pin_xmit) {
@@ -69,7 +71,9 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pulse_60_90_us = 0;
     adb_pulse_90_200_us = 0;
     adb_pulse_200_600_us = 0;
-    adb_pulse_600_1100_us = 0;
+    adb_pulse_600_700_us = 0;
+    adb_pulse_700_900_us = 0;
+    adb_pulse_900_1100_us = 0;
     adb_pulse_gt_1100_us = 0;
 }
 
@@ -98,8 +102,12 @@ static inline void adb_note_rx_pulse(uint32_t pulse_us) {
         __atomic_fetch_add(&adb_pulse_90_200_us, 1u, __ATOMIC_RELAXED);
     } else if (pulse_us < 600u) {
         __atomic_fetch_add(&adb_pulse_200_600_us, 1u, __ATOMIC_RELAXED);
+    } else if (pulse_us < 700u) {
+        __atomic_fetch_add(&adb_pulse_600_700_us, 1u, __ATOMIC_RELAXED);
+    } else if (pulse_us <= 900u) {
+        __atomic_fetch_add(&adb_pulse_700_900_us, 1u, __ATOMIC_RELAXED);
     } else if (pulse_us <= 1100u) {
-        __atomic_fetch_add(&adb_pulse_600_1100_us, 1u, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&adb_pulse_900_1100_us, 1u, __ATOMIC_RELAXED);
     } else {
         __atomic_fetch_add(&adb_pulse_gt_1100_us, 1u, __ATOMIC_RELAXED);
     }
@@ -170,6 +178,8 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     out_stats->pulse_60_90_us = __atomic_load_n(&adb_pulse_60_90_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_90_200_us = __atomic_load_n(&adb_pulse_90_200_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_200_600_us = __atomic_load_n(&adb_pulse_200_600_us, __ATOMIC_ACQUIRE);
-    out_stats->pulse_600_1100_us = __atomic_load_n(&adb_pulse_600_1100_us, __ATOMIC_ACQUIRE);
+    out_stats->pulse_600_700_us = __atomic_load_n(&adb_pulse_600_700_us, __ATOMIC_ACQUIRE);
+    out_stats->pulse_700_900_us = __atomic_load_n(&adb_pulse_700_900_us, __ATOMIC_ACQUIRE);
+    out_stats->pulse_900_1100_us = __atomic_load_n(&adb_pulse_900_1100_us, __ATOMIC_ACQUIRE);
     out_stats->pulse_gt_1100_us = __atomic_load_n(&adb_pulse_gt_1100_us, __ATOMIC_ACQUIRE);
 }
