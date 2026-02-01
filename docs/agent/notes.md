@@ -22,6 +22,7 @@
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - ADB RX now captures both low and high pulse widths; diagnostics still track low pulses, while bit decoding uses low+high pairs to align with transition-based timing.
 - ADB framing uses an explicit start bit (1) and stop bit (0) per command/data frame; RX decoding should enforce these to avoid bit shifts.
+- ADB RX bit decode uses a small deadband when comparing low/high pulse widths so near-equal timings are treated as invalid instead of forcing a bit value.
 - Current bring-up shares the ADB bus with an existing keyboard; expect host polling and device responses to interleave with the real keyboard during diagnostics.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.

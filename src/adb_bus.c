@@ -16,6 +16,7 @@
 #define ADB_BIT_ZERO_MAX_US 60u
 #define ADB_BIT_ONE_MIN_US 60u
 #define ADB_BIT_ONE_MAX_US 90u
+#define ADB_BIT_DIFF_MIN_US 10u
 #define ADB_KBD_ADDR 2u
 #define ADB_KBD_HANDLER_ID 0x02u
 #define ADB_MOUSE_ADDR 3u
@@ -783,16 +784,19 @@ static inline void adb_note_rx_high(uint32_t pulse_us) {
         return;
     }
 
-    bool low_short = adb_rx_low_us < ADB_BIT_ZERO_MAX_US && adb_rx_low_us >= ADB_PULSE_MIN_US;
-    bool low_long = adb_rx_low_us >= ADB_BIT_ONE_MIN_US && adb_rx_low_us <= ADB_BIT_ONE_MAX_US;
-    bool high_short = pulse_us < ADB_BIT_ZERO_MAX_US && pulse_us >= ADB_PULSE_MIN_US;
-    bool high_long = pulse_us >= ADB_BIT_ONE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US;
+    bool low_in_range = adb_rx_low_us >= ADB_PULSE_MIN_US && adb_rx_low_us <= ADB_BIT_ONE_MAX_US;
+    bool high_in_range = pulse_us >= ADB_PULSE_MIN_US && pulse_us <= ADB_BIT_ONE_MAX_US;
     adb_rx_has_low = false;
 
     uint8_t bit = 0;
-    if (low_short && high_long) {
+    if (!low_in_range || !high_in_range) {
+        adb_rx_reset_bits();
+        return;
+    }
+
+    if (adb_rx_low_us + ADB_BIT_DIFF_MIN_US < pulse_us) {
         bit = 1;
-    } else if (low_long && high_short) {
+    } else if (pulse_us + ADB_BIT_DIFF_MIN_US < adb_rx_low_us) {
         bit = 0;
     } else {
         adb_rx_reset_bits();
