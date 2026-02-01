@@ -27,6 +27,9 @@
 #define ADB_KBD_QUEUE_DEPTH 16u
 #define ADB_SRQ_PULSE_US 300u
 #define ADB_SRQ_COOLDOWN_US 2000u
+#define ADB_CMD_FLUSH 0u
+#define ADB_CMD_LISTEN 2u
+#define ADB_CMD_TALK 3u
 
 static uint adb_pin_recv = 0;
 static uint adb_pin_xmit = 0;
@@ -202,6 +205,22 @@ static uint8_t adb_kbd_queue_count(void) {
     return (uint8_t)(ADB_KBD_QUEUE_DEPTH - adb_kbd_q_read + adb_kbd_q_write);
 }
 
+static void adb_flush_keyboard(void) {
+    adb_kbd_q_read = 0;
+    adb_kbd_q_write = 0;
+    for (uint8_t i = 0; i < ADB_KBD_QUEUE_DEPTH; i++) {
+        adb_kbd_queue[i] = 0;
+    }
+}
+
+static void adb_flush_mouse(void) {
+    adb_mouse_dx = 0;
+    adb_mouse_dy = 0;
+    adb_mouse_last_dx = 0;
+    adb_mouse_last_dy = 0;
+    adb_mouse_reported = adb_mouse_buttons;
+}
+
 static void adb_tx_bit(bool one) {
     uint32_t low_us = one ? ADB_TX_BIT_ONE_LOW_US : ADB_TX_BIT_ZERO_LOW_US;
     uint32_t high_us = ADB_TX_BIT_CELL_US - low_us;
@@ -363,6 +382,7 @@ static void adb_handle_command(uint8_t cmd) {
     uint8_t address = (uint8_t)(cmd >> 4);
     uint8_t cmd_type = (uint8_t)((cmd >> 2) & 0x03u);
     uint8_t reg = (uint8_t)(cmd & 0x03u);
+    uint8_t low_nibble = (uint8_t)(cmd & 0x0Fu);
     uint8_t active_addr = __atomic_load_n(&adb_kbd_addr, __ATOMIC_ACQUIRE);
     uint8_t mouse_addr = __atomic_load_n(&adb_mouse_addr, __ATOMIC_ACQUIRE);
     bool is_kbd = address == active_addr;
@@ -371,7 +391,15 @@ static void adb_handle_command(uint8_t cmd) {
         __atomic_fetch_add(&adb_cmd_addr_miss, 1u, __ATOMIC_RELAXED);
         return;
     }
-    if (cmd_type == 1u && reg == 0u) {
+    if (low_nibble == 0x01u) {
+        if (is_kbd) {
+            adb_flush_keyboard();
+        } else {
+            adb_flush_mouse();
+        }
+        return;
+    }
+    if (cmd_type == ADB_CMD_TALK && reg == 0u) {
         if (is_kbd) {
             adb_try_keyboard_reg0();
         } else {
@@ -379,7 +407,7 @@ static void adb_handle_command(uint8_t cmd) {
         }
         return;
     }
-    if (cmd_type == 1u && reg == 3u) {
+    if (cmd_type == ADB_CMD_TALK && reg == 3u) {
         if (is_kbd) {
             adb_try_keyboard_reg3();
         } else {
@@ -452,7 +480,7 @@ static inline void adb_note_rx_state(uint32_t pulse_us) {
             uint8_t reg = (uint8_t)(adb_rx_shift & 0x03u);
             uint8_t active_addr = __atomic_load_n(&adb_kbd_addr, __ATOMIC_ACQUIRE);
             uint8_t mouse_addr = __atomic_load_n(&adb_mouse_addr, __ATOMIC_ACQUIRE);
-            if (cmd_type == 0u && reg == 3u) {
+            if (cmd_type == ADB_CMD_LISTEN && reg == 3u) {
                 if (address == active_addr) {
                     adb_rx_data_expected = 2u;
                     adb_rx_data_count = 0;

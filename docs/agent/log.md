@@ -132,3 +132,5 @@
 - 2026-02-04: Documented PIO loop cycle accounting as a required step when converting ADB RX/TX ticks to microseconds.
 - 2026-02-04: Added ADB TX attempt/busy counters and address-miss tracking to CDC2 diagnostics for debugging missing Talk responses.
 - 2026-02-04: Added minimal ADB mouse Talk/Listen handling and SRQ pulses so mouse movement/button events can be serviced.
+- 2026-02-04: Documented ADB address $8–$E relocation behavior from the ADB Manager reference to guide polling/response expectations.
+- 2026-02-04: Fixed ADB command decode to treat command bits 0b11 as Talk and 0b10 as Listen, plus handle the 0x01 Flush command for keyboard/mouse buffers.
