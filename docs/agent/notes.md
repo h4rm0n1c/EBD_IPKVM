@@ -9,7 +9,7 @@
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
 - Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
-- Host scripts default to `/dev/ttyACM0` for the CDC0 stream and `/dev/ttyACM1` for CDC1 control unless overridden.
+- Host scripts default to `/dev/serial/by-id/*EBD_IPKVM*if00` for CDC0 and `/dev/serial/by-id/*EBD_IPKVM*if02` for CDC1 unless overridden.
 - Linux udev symlinks include `if00` (CDC0 stream) and `if02` (CDC1 control); use `/dev/serial/by-id` for stable naming.
 - When `/dev/ttyACM*` numbers jump, use `udevadm info -n /dev/ttyACM2 | rg "ID_USB_INTERFACE_NUM"` to map the node to CDC0/1/2.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.

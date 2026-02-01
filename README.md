@@ -39,7 +39,7 @@ The firmware exposes three CDC interfaces:
 On Linux, prefer `/dev/serial/by-id/*EBD_IPKVM*if00|if02|if04` instead of
 `/dev/ttyACM*` so enumeration changes do not break scripts. Use
 `udevadm info -n /dev/ttyACM2 | rg "ID_MODEL|ID_SERIAL|ID_USB_INTERFACE_NUM"`
-to map a new `/dev/ttyACM*` node to the correct interface number.
+to map a new `/dev/ttyACM*` node to the correct interface number if needed.
 
 See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
 
@@ -60,7 +60,8 @@ lines if RLE does not compress.
 ## Host capture helper
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --ctrl-device=/dev/ttyACM1
+python3 src/host_recv_frames.py /dev/serial/by-id/*EBD_IPKVM*if00 frames \
+  --ctrl-device=/dev/serial/by-id/*EBD_IPKVM*if02
 ```
 
 This test script:
@@ -79,7 +80,7 @@ This test script:
 Example: stream raw 512×342 8-bit frames to ffplay on stdout:
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --stream-raw \
+python3 src/host_recv_frames.py /dev/serial/by-id/*EBD_IPKVM*if00 frames --stream-raw \
   | ffplay -f rawvideo -pixel_format gray -video_size 512x342 -framerate 60 -
 ```
 

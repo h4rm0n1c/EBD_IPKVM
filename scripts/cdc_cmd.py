@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import glob
 import os
 import select
 import struct
@@ -32,9 +33,18 @@ def set_raw_and_dtr(fd: int) -> None:
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
 
 
+def resolve_device(path: str) -> str:
+    if "*" not in path and "?" not in path and "[" not in path:
+        return path
+    matches = sorted(glob.glob(path))
+    if not matches:
+        return path
+    return matches[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send a CDC command and print ASCII response.")
-    parser.add_argument("--device", default="/dev/ttyACM1",
+    parser.add_argument("--device", default="/dev/serial/by-id/*EBD_IPKVM*if02",
                         help="CDC control device path (CDC1 by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")
@@ -46,8 +56,9 @@ def main() -> int:
     if args.read_secs <= 0 and not args.no_read:
         raise SystemExit("--read-secs must be > 0 (or use --no-read)")
 
+    device = resolve_device(args.device)
     try:
-        fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        fd = os.open(device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     except OSError:
         return 1
     try:

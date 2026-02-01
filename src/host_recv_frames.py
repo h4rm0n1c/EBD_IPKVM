@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select, errno
+import glob, os, sys, time, struct, fcntl, termios, select, errno
 
 SEND_RESET = True
 SEND_STOP = True
@@ -17,8 +17,8 @@ STREAM_RAW = False
 STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
-STREAM_DEV = "/dev/ttyACM0"
-CTRL_DEV = "/dev/ttyACM1"
+STREAM_DEV = "/dev/serial/by-id/*EBD_IPKVM*if00"
+CTRL_DEV = "/dev/serial/by-id/*EBD_IPKVM*if02"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -96,6 +96,17 @@ if len(ARGS) > 0:
     STREAM_DEV = ARGS[0]
 OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
 MAX_FRAMES = None if STREAM_RAW else 100
+
+def resolve_device(path: str) -> str:
+    if "*" not in path and "?" not in path and "[" not in path:
+        return path
+    matches = sorted(glob.glob(path))
+    if not matches:
+        return path
+    return matches[0]
+
+STREAM_DEV = resolve_device(STREAM_DEV)
+CTRL_DEV = resolve_device(CTRL_DEV)
 
 W = 512
 H = 342
