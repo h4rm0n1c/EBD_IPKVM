@@ -13,6 +13,9 @@ typedef struct {
     uint32_t attention_pulses;
     uint32_t sync_pulses;
     uint32_t events_consumed;
+    uint32_t events_pending;
+    uint32_t cmd_bytes;
+    uint32_t last_cmd;
     uint32_t last_pulse_us;
     uint32_t min_pulse_us;
     uint32_t max_pulse_us;
@@ -22,7 +25,9 @@ typedef struct {
     uint32_t pulse_60_90_us;
     uint32_t pulse_90_200_us;
     uint32_t pulse_200_600_us;
-    uint32_t pulse_600_1100_us;
+    uint32_t pulse_600_700_us;
+    uint32_t pulse_700_900_us;
+    uint32_t pulse_900_1100_us;
     uint32_t pulse_gt_1100_us;
 } adb_bus_stats_t;
 

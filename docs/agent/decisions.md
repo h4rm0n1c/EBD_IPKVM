@@ -48,3 +48,8 @@
 - 2026-02-03: Accept ADB diag requests only on CDC2 to keep CDC1 reserved for control/status traffic.
 - 2026-02-03: Widen the ADB attention pulse detect window (600–1100 µs) during bring-up to account for capture-path skew.
 - 2026-02-03: Scale ADB RX pulse widths by 2 ticks to match the RX PIO loop's two-cycle decrement cadence.
+- 2026-02-04: Tighten the ADB attention pulse detect window to 700–900 µs now that diagnostics show stable buckets.
+- 2026-02-04: Auto-trigger the ROM-boot key hold once after the first decoded ADB command byte during testing.
+- 2026-02-04: Hold the ROM-boot key combo for ~30 seconds during automated testing.
+- 2026-02-04: Implement a minimal keyboard Talk response (address 2, reg 0) to transmit queued ADB key events before full Listen/SRQ support.
+- 2026-02-04: Subtract one cycle from TX low-pulse conversion to account for the PIO `set pindirs` assert in the ADB TX loop.

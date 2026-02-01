@@ -105,3 +105,12 @@
 - 2026-02-03: Added ADB pulse-width bin counters and min/max reporting to the CDC2 ADB diagnostic output.
 - 2026-02-03: Treat zero-length RX pulse samples as a separate bin to avoid skewing min/max during ADB capture debugging.
 - 2026-02-03: Corrected ADB RX pulse-width conversion to account for two PIO cycles per loop iteration in the RX counter.
+- 2026-02-04: Tightened the ADB attention pulse window to 700–900 µs after reviewing diagnostic buckets.
+- 2026-02-04: Split ADB pulse-width bins around the attention window to report 600–700, 700–900, and 900–1100 µs counts separately.
+- 2026-02-04: Added a basic ADB RX state machine to decode attention+sync command bytes and expose cmd/cmds in CDC2 status output.
+- 2026-02-04: Added a CDC2 Ctrl-B macro to hold Command+Option+X+O for ROM-boot testing and documented bus coexistence planning.
+- 2026-02-04: Auto-trigger the ROM-boot key hold once after the first decoded ADB command byte to confirm bus activity without manual input.
+- 2026-02-04: Increased the ROM-boot key hold duration to ~30 seconds for better startup coverage.
+- 2026-02-04: Expose pending ADB event counts in CDC2 status output to confirm ROM-boot key holds are queued.
+- 2026-02-04: Added a minimal ADB Talk response for keyboard register 0 (address 2) so queued CDC2 key events can transmit on-bus.
+- 2026-02-04: Adjusted ADB TX pulse cycle conversion to account for the single-cycle TX loop and the `set pindirs` assert overhead.

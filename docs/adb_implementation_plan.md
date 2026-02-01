@@ -11,6 +11,7 @@
 
 - ADB device emulation is **actively being implemented** (not deferred). The first goal is a minimal keyboard + mouse device that can pass a basic Mac desktop input test (move cursor, click, type characters) over the shared ADB bus.
 - Use the steps in **First bring-up attempt** to get to the initial hardware/firmware validation run.
+- Current firmware can decode command bytes and emit a minimal Talk response for keyboard register 0 (address 2) using queued CDC2 key events; Listen/SRQ handling is still pending.
 
 ## Reference grounding (from /opt/adb)
 
@@ -46,6 +47,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
   - Ignore our own transmissions on the shared ADB line during normal operation (RX/TX pins are tied together on-bus); optionally gate a loopback/echo path when validating TX timing in isolation.
   - Latch RX activity so the CDC test channel can emit a rate-limited “ADB RX seen” line (e.g., every few seconds) when we decode valid bus traffic from the host.
   - Assert SRQ when keyboard/mouse buffers have new data.
+  - Track queued ADB events waiting to be transmitted so we can verify key holds are pending before the TX path is implemented.
   - Serialize Talk responses from per-device register state.
   - Apply Listen writes to device registers.
 
@@ -89,6 +91,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 
 - Use the ADB Manager’s address resolution flow: if multiple devices share an address, respond per the bus collision rules and allow host reassign via Listen.
 - Track collision flags per device like trabular does, clearing once a new address is assigned.
+- Assume an existing keyboard/mouse may share the bus; support address reassignment so the KVM device can coexist without blocking local input.
 
 ## CDC test interface (third CDC channel)
 
@@ -96,6 +99,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - In `app_core`, add a small terminal parser:
   - Arrow keys (escape sequences): update mouse X/Y deltas.
   - `!` toggles the mouse button state (temporary until true key up/down tracking is added).
+  - Auto-trigger a ~30s ROM-boot key hold once after the first decoded ADB command byte to verify bus activity without manual input.
   - Other characters: map to ADB keyboard keycodes and enqueue a press/release.
 - Keep this in a separate `adb_test_cdc.c/.h` module for cleanliness.
 

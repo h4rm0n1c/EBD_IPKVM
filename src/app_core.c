@@ -48,6 +48,7 @@ static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
 static volatile bool adb_diag_pending = false;
+static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
 
@@ -262,7 +263,7 @@ static void emit_adb_diag(void) {
     bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
     bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
 
-    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus drop=%lu\n",
+    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu pend=%lu last=%luus drop=%lu\n",
                     adb_recv ? 1 : 0,
                     adb_xmit ? 1 : 0,
                     (unsigned long)adb_stats.rx_pulses,
@@ -270,18 +271,23 @@ static void emit_adb_diag(void) {
                     (unsigned long)adb_stats.rx_overruns,
                     (unsigned long)adb_stats.attention_pulses,
                     (unsigned long)adb_stats.sync_pulses,
+                    (unsigned long)adb_stats.last_cmd,
+                    (unsigned long)adb_stats.cmd_bytes,
+                    (unsigned long)adb_stats.events_pending,
                     (unsigned long)adb_stats.last_pulse_us,
                     (unsigned long)adb_events_get_drop_count());
-    cdc_adb_printf("[EBD_IPKVM] adb bins: min=%luus max=%luus zero=%lu <30=%lu 30-60=%lu 60-90=%lu 90-200=%lu 200-600=%lu 600-1100=%lu >1100=%lu\n",
-                    (unsigned long)adb_stats.min_pulse_us,
-                    (unsigned long)adb_stats.max_pulse_us,
-                    (unsigned long)adb_stats.pulse_zero_us,
-                    (unsigned long)adb_stats.pulse_lt_30_us,
-                    (unsigned long)adb_stats.pulse_30_60_us,
-                    (unsigned long)adb_stats.pulse_60_90_us,
-                    (unsigned long)adb_stats.pulse_90_200_us,
-                    (unsigned long)adb_stats.pulse_200_600_us,
-                    (unsigned long)adb_stats.pulse_600_1100_us,
+    cdc_adb_printf("[EBD_IPKVM] adb bins: min=%luus max=%luus zero=%lu <30=%lu 30-60=%lu 60-90=%lu 90-200=%lu 200-600=%lu 600-700=%lu 700-900=%lu 900-1100=%lu >1100=%lu\n",
+                   (unsigned long)adb_stats.min_pulse_us,
+                   (unsigned long)adb_stats.max_pulse_us,
+                   (unsigned long)adb_stats.pulse_zero_us,
+                   (unsigned long)adb_stats.pulse_lt_30_us,
+                   (unsigned long)adb_stats.pulse_30_60_us,
+                   (unsigned long)adb_stats.pulse_60_90_us,
+                   (unsigned long)adb_stats.pulse_90_200_us,
+                   (unsigned long)adb_stats.pulse_200_600_us,
+                    (unsigned long)adb_stats.pulse_600_700_us,
+                    (unsigned long)adb_stats.pulse_700_900_us,
+                    (unsigned long)adb_stats.pulse_900_1100_us,
                     (unsigned long)adb_stats.pulse_gt_1100_us);
 }
 
@@ -516,6 +522,7 @@ static inline bool service_txq(void) {
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
     adb_test_cdc_init();
+    adb_auto_rom_boot_done = false;
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status, CDC2=ADB test\n");
@@ -524,7 +531,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -551,6 +558,12 @@ void app_core_poll(void) {
     active_start = time_us_32();
     if (adb_test_cdc_poll()) {
         active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    adb_bus_stats_t adb_stats = {0};
+    adb_bus_get_stats(&adb_stats);
+    if (!adb_auto_rom_boot_done && adb_stats.cmd_bytes > 0) {
+        adb_test_cdc_trigger_rom_boot();
+        adb_auto_rom_boot_done = true;
     }
     if (adb_test_cdc_take_diag_request()) {
         request_adb_diag();
@@ -618,12 +631,15 @@ void app_core_poll(void) {
         if (can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
-            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu last=%luus ev=%lu drop=%lu\n",
+            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu pend=%lu last=%luus ev=%lu drop=%lu\n",
                            (unsigned long)adb_stats.rx_pulses,
                            (unsigned long)adb_stats.rx_raw_pulses,
                            (unsigned long)adb_stats.rx_overruns,
                            (unsigned long)adb_stats.attention_pulses,
                            (unsigned long)adb_stats.sync_pulses,
+                           (unsigned long)adb_stats.last_cmd,
+                           (unsigned long)adb_stats.cmd_bytes,
+                           (unsigned long)adb_stats.events_pending,
                            (unsigned long)adb_stats.last_pulse_us,
                            (unsigned long)adb_stats.events_consumed,
                            (unsigned long)adb_events_get_drop_count());
