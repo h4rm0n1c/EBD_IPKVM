@@ -1,6 +1,6 @@
 # Log (running)
 
-- 2026-02-04: Renamed the local ADB bus pending-events counter to avoid colliding with the adb_events_pending() API.
+- 2026-02-04: Removed the cached ADB pending-events counter and read adb_events_pending() when emitting stats.
 - 2026-02-02: Marked ADB work as in-progress in project state and added a first bring-up checklist to the ADB implementation plan.
 - 2026-02-02: Documented that ADB implementation is active and added status guidance in the ADB protocol notes.
 - 2026-02-02: Added initial ADB event queue plumbing, CDC2 test input parsing, and RX activity latching for early on-bus validation.
