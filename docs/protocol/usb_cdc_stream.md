@@ -72,7 +72,7 @@ occupancy.
 
 ADB status is emitted on CDC2 (independent of CDC1 control status) as:
 
-- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> last=<us> ev=<events> drop=<drops>`
+- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> pend=<events> last=<us> ev=<events> drop=<drops>`
 - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
   - `raw` counts all observed low pulses, even if they are too short/long.
   - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
@@ -80,6 +80,7 @@ ADB status is emitted on CDC2 (independent of CDC1 control status) as:
   - `syn` counts low pulses in the sync-width window (~60–90 µs).
   - `cmd` is the most recent decoded command byte after attention+sync.
   - `cmds` counts decoded command bytes.
+  - `pend` counts queued ADB events waiting to be transmitted.
   - `last` is the most recent observed low-pulse width in microseconds.
 - On-demand diagnostic output (`A`) also includes a second line with pulse-width bins and min/max:
   - `[EBD_IPKVM] adb bins: min=<us> max=<us> zero=<n> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-700=<n> 700-900=<n> 900-1100=<n> >1100=<n>`

@@ -46,6 +46,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
   - Ignore our own transmissions on the shared ADB line during normal operation (RX/TX pins are tied together on-bus); optionally gate a loopback/echo path when validating TX timing in isolation.
   - Latch RX activity so the CDC test channel can emit a rate-limited “ADB RX seen” line (e.g., every few seconds) when we decode valid bus traffic from the host.
   - Assert SRQ when keyboard/mouse buffers have new data.
+  - Track queued ADB events waiting to be transmitted so we can verify key holds are pending before the TX path is implemented.
   - Serialize Talk responses from per-device register state.
   - Apply Listen writes to device registers.
 

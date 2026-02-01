@@ -33,6 +33,7 @@ static volatile uint32_t adb_rx_overruns = 0;
 static volatile uint32_t adb_attention_pulses = 0;
 static volatile uint32_t adb_sync_pulses = 0;
 static volatile uint32_t adb_events_consumed = 0;
+static volatile uint32_t adb_events_pending = 0;
 static volatile uint32_t adb_cmd_bytes = 0;
 static volatile uint32_t adb_last_cmd = 0;
 static volatile bool adb_rx_latched = false;
@@ -74,6 +75,7 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_attention_pulses = 0;
     adb_sync_pulses = 0;
     adb_events_consumed = 0;
+    adb_events_pending = 0;
     adb_cmd_bytes = 0;
     adb_last_cmd = 0;
     adb_rx_latched = false;
@@ -207,11 +209,8 @@ bool adb_bus_poll(void) {
         did_work = true;
     }
 
-    adb_event_t event;
-    if (adb_events_pop(&event)) {
-        __atomic_fetch_add(&adb_events_consumed, 1u, __ATOMIC_RELAXED);
-        did_work = true;
-    }
+    uint16_t pending = adb_events_pending();
+    __atomic_store_n(&adb_events_pending, pending, __ATOMIC_RELEASE);
 
     return did_work;
 }
@@ -231,6 +230,7 @@ void adb_bus_get_stats(adb_bus_stats_t *out_stats) {
     out_stats->attention_pulses = __atomic_load_n(&adb_attention_pulses, __ATOMIC_ACQUIRE);
     out_stats->sync_pulses = __atomic_load_n(&adb_sync_pulses, __ATOMIC_ACQUIRE);
     out_stats->events_consumed = __atomic_load_n(&adb_events_consumed, __ATOMIC_ACQUIRE);
+    out_stats->events_pending = __atomic_load_n(&adb_events_pending, __ATOMIC_ACQUIRE);
     out_stats->cmd_bytes = __atomic_load_n(&adb_cmd_bytes, __ATOMIC_ACQUIRE);
     out_stats->last_cmd = __atomic_load_n(&adb_last_cmd, __ATOMIC_ACQUIRE);
     out_stats->last_pulse_us = __atomic_load_n(&adb_last_pulse_us, __ATOMIC_ACQUIRE);
