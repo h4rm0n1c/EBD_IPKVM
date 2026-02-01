@@ -4,7 +4,7 @@
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
 - 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
-- 2026-02-02: Assign ADB RECV to GPIO6 (via 74LVC245) and ADB XMIT to GPIO14 (via ULN2803) on the shared ADB data line.
+- 2026-02-02: Assign ADB RECV to GPIO6 (via 74LVC245) and ADB XMIT to GPIO12 (via ULN2803, 10k pulldown) on the shared ADB data line.
 - 2026-02-02: Run ADB PIO RX/TX at clkdiv=8 and convert tick counts to microseconds before applying pulse-width filters.
 - 2026-02-02: Extend CDC1 ADB status output to include raw pulse counts and last pulse width for bring-up debugging.
 - 2026-02-02: Configure ADB PIO RX to use a joined RX FIFO and non-blocking push so RX capture does not stall on FIFO saturation.
