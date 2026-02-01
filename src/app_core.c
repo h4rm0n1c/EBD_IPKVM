@@ -629,34 +629,37 @@ void app_core_poll(void) {
         if (can_emit_adb_text()) {
             adb_bus_stats_t adb_stats = {0};
             adb_bus_get_stats(&adb_stats);
-            uint8_t adb_addr = (uint8_t)(adb_stats.last_cmd >> 4);
-            uint8_t adb_cmd = (uint8_t)(adb_stats.last_cmd & 0x0Fu);
-            uint8_t adb_reg = (uint8_t)(adb_stats.last_cmd & 0x03u);
-            uint8_t adb_type = (uint8_t)((adb_stats.last_cmd >> 2) & 0x03u);
-            cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus ev=%lu drop=%lu\n",
-                           (unsigned long)adb_stats.rx_pulses,
-                           (unsigned long)adb_stats.rx_raw_pulses,
-                           (unsigned long)adb_stats.rx_overruns,
-                           (unsigned long)adb_stats.attention_pulses,
-                           (unsigned long)adb_stats.sync_pulses,
-                           (unsigned long)adb_stats.last_cmd,
-                           (unsigned long)adb_stats.cmd_bytes,
-                           (unsigned long)adb_stats.cmd_addr_miss,
-                           (unsigned long)adb_stats.srq_pulses,
-                           (unsigned long)adb_stats.events_pending,
-                           (unsigned long)adb_stats.tx_success,
-                           (unsigned long)adb_stats.tx_attempts,
-                           (unsigned long)adb_stats.tx_busy,
-                           (unsigned long)adb_stats.tx_late_busy,
-                           (unsigned long)adb_stats.last_pulse_us,
-                           (unsigned long)adb_stats.events_consumed,
-                           (unsigned long)adb_events_get_drop_count());
-            cdc_adb_printf("[EBD_IPKVM] adb cmd decode: addr=%u cmd=%u type=%u reg=%u\n",
-                           adb_addr,
-                           adb_cmd,
-                           adb_type,
-                           adb_reg);
-            emit_adb_diag();
+            if (adb_stats.rx_raw_pulses > 0u || adb_stats.attention_pulses > 0u
+                || adb_stats.sync_pulses > 0u || adb_stats.cmd_bytes > 0u) {
+                uint8_t adb_addr = (uint8_t)(adb_stats.last_cmd >> 4);
+                uint8_t adb_cmd = (uint8_t)(adb_stats.last_cmd & 0x0Fu);
+                uint8_t adb_reg = (uint8_t)(adb_stats.last_cmd & 0x03u);
+                uint8_t adb_type = (uint8_t)((adb_stats.last_cmd >> 2) & 0x03u);
+                cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus ev=%lu drop=%lu\n",
+                               (unsigned long)adb_stats.rx_pulses,
+                               (unsigned long)adb_stats.rx_raw_pulses,
+                               (unsigned long)adb_stats.rx_overruns,
+                               (unsigned long)adb_stats.attention_pulses,
+                               (unsigned long)adb_stats.sync_pulses,
+                               (unsigned long)adb_stats.last_cmd,
+                               (unsigned long)adb_stats.cmd_bytes,
+                               (unsigned long)adb_stats.cmd_addr_miss,
+                               (unsigned long)adb_stats.srq_pulses,
+                               (unsigned long)adb_stats.events_pending,
+                               (unsigned long)adb_stats.tx_success,
+                               (unsigned long)adb_stats.tx_attempts,
+                               (unsigned long)adb_stats.tx_busy,
+                               (unsigned long)adb_stats.tx_late_busy,
+                               (unsigned long)adb_stats.last_pulse_us,
+                               (unsigned long)adb_stats.events_consumed,
+                               (unsigned long)adb_events_get_drop_count());
+                cdc_adb_printf("[EBD_IPKVM] adb cmd decode: addr=%u cmd=%u type=%u reg=%u\n",
+                               adb_addr,
+                               adb_cmd,
+                               adb_type,
+                               adb_reg);
+                emit_adb_diag();
+            }
 
             if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
                 if (adb_bus_take_rx_seen()) {
