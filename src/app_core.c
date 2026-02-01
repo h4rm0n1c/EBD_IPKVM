@@ -50,7 +50,7 @@ static absolute_time_t adb_rx_next;
 static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
-static const uint32_t adb_tx_test_pulse_us = 200u;
+static const uint32_t adb_tx_test_pulse_us = 2000u;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;

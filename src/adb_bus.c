@@ -151,7 +151,7 @@ static bool adb_tx_bytes(const uint8_t *data, size_t len) {
 }
 
 bool adb_bus_tx_test_pulse_us(uint32_t low_us) {
-    if (!adb_line_idle() || low_us == 0u) {
+    if (low_us == 0u) {
         return false;
     }
     uint16_t cycles = adb_pio_us_to_cycles(&adb_pio, low_us);

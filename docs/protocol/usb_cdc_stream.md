@@ -97,7 +97,7 @@ second as:
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
-- `t` emits a single ADB TX pulse for verifying GPIO14/ULN2803 wiring.
+- `t` emits a single ADB TX pulse (2 ms) for verifying GPIO12/ULN2803 wiring.
 - `Ctrl+B` holds Command+Option+X+O for ~30 seconds (ROM boot combo).
 - Firmware auto-triggers the same hold once after the first decoded ADB command byte to confirm the bus is alive.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
