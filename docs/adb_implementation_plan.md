@@ -97,7 +97,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - In `app_core`, add a small terminal parser:
   - Arrow keys (escape sequences): update mouse X/Y deltas.
   - `!` toggles the mouse button state (temporary until true key up/down tracking is added).
-  - Auto-trigger a ROM-boot key hold once after the first decoded ADB command byte to verify bus activity without manual input.
+  - Auto-trigger a ~30s ROM-boot key hold once after the first decoded ADB command byte to verify bus activity without manual input.
   - Other characters: map to ADB keyboard keycodes and enqueue a press/release.
 - Keep this in a separate `adb_test_cdc.c/.h` module for cleanliness.
 

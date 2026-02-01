@@ -50,3 +50,4 @@
 - 2026-02-03: Scale ADB RX pulse widths by 2 ticks to match the RX PIO loop's two-cycle decrement cadence.
 - 2026-02-04: Tighten the ADB attention pulse detect window to 700–900 µs now that diagnostics show stable buckets.
 - 2026-02-04: Auto-trigger the ROM-boot key hold once after the first decoded ADB command byte during testing.
+- 2026-02-04: Hold the ROM-boot key combo for ~30 seconds during automated testing.

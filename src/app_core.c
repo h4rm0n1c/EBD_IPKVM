@@ -530,7 +530,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
     cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' on CDC2 for pulse stats.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O (auto after first ADB cmd).\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;

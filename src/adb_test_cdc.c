@@ -19,7 +19,7 @@
 #define ADB_MOUSE_STEP 5
 #define ADB_MOUSE_BUTTON_LEFT 0x01
 #define ADB_ROM_BOOT_TRIGGER 0x02
-#define ADB_ROM_BOOT_HOLD_US (15u * 1000000u)
+#define ADB_ROM_BOOT_HOLD_US (30u * 1000000u)
 
 typedef struct {
     bool esc_active;

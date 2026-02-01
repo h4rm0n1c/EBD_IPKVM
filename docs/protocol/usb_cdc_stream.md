@@ -87,7 +87,7 @@ ADB status is emitted on CDC2 (independent of CDC1 control status) as:
 ## ADB test channel (CDC2)
 - ANSI arrow keys inject mouse deltas (default 5 counts per press).
 - `!` toggles the mouse button state.
-- `Ctrl+B` holds Command+Option+X+O for ~15 seconds (ROM boot combo).
+- `Ctrl+B` holds Command+Option+X+O for ~30 seconds (ROM boot combo).
 - Firmware auto-triggers the same hold once after the first decoded ADB command byte to confirm the bus is alive.
 - Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
 - The `A` command (sent on CDC2) emits ADB pulse diagnostics on CDC2.
