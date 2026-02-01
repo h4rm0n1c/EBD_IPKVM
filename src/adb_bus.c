@@ -70,8 +70,6 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_pin_recv = pin_recv;
     adb_pin_xmit = pin_xmit;
 
-    adb_pio_init(&adb_pio, pio1, 0, 1, pin_recv, pin_xmit);
-
     gpio_init(adb_pin_recv);
     gpio_set_dir(adb_pin_recv, GPIO_IN);
     gpio_disable_pulls(adb_pin_recv);
@@ -79,6 +77,8 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     gpio_init(adb_pin_xmit);
     gpio_set_dir(adb_pin_xmit, GPIO_IN);
     gpio_disable_pulls(adb_pin_xmit);
+
+    adb_pio_init(&adb_pio, pio1, 0, 1, pin_recv, pin_xmit);
 
     adb_rx_pulses = 0;
     adb_rx_seen = 0;

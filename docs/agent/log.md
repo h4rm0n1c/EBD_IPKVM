@@ -14,6 +14,7 @@
 - 2026-02-04: Moved ADB XMIT from GPIO14 to GPIO12 to use the 10k pulldown in front of the ULN2803.
 - 2026-02-04: Assert ADB TX pindirs before set pins so GPIO12 drives immediately during test pulses.
 - 2026-02-04: Allow the CDC2 TX test pulse to fire regardless of bus idle and extend it to 2 ms for easier probing.
+- 2026-02-04: Fix ADB PIO init order so pin mux isn't reset after PIO setup (restores TX drive).
 - 2026-02-02: Marked ADB work as in-progress in project state and added a first bring-up checklist to the ADB implementation plan.
 - 2026-02-02: Documented that ADB implementation is active and added status guidance in the ADB protocol notes.
 - 2026-02-02: Added initial ADB event queue plumbing, CDC2 test input parsing, and RX activity latching for early on-bus validation.
