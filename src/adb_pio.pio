@@ -19,8 +19,8 @@ done:
 ; ULN2803 inverts: drive pin high to pull bus low, float to release.
     pull block
     mov x, osr
-    set pins, 1      ; drive high into ULN2803 -> bus low
     set pindirs, 1   ; enable output
+    set pins, 1      ; drive high into ULN2803 -> bus low
 drive_low:
     jmp x-- drive_low
     set pindirs, 0   ; release line
