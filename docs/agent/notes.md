@@ -21,6 +21,7 @@
 - ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - ADB RX now captures both low and high pulse widths; diagnostics still track low pulses, while bit decoding uses low+high pairs to align with transition-based timing.
+- ADB framing uses an explicit start bit (1) and stop bit (0) per command/data frame; RX decoding should enforce these to avoid bit shifts.
 - Current bring-up shares the ADB bus with an existing keyboard; expect host polling and device responses to interleave with the real keyboard during diagnostics.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.

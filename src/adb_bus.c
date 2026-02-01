@@ -108,6 +108,8 @@ static uint8_t adb_rx_shift = 0;
 static bool adb_rx_expect_low = true;
 static bool adb_rx_has_low = false;
 static uint32_t adb_rx_low_us = 0;
+static bool adb_rx_expect_start = false;
+static bool adb_rx_expect_stop = false;
 static uint32_t adb_cmd_bytes_handled = 0;
 static uint8_t adb_rx_data_expected = 0;
 static uint8_t adb_rx_data_count = 0;
@@ -200,6 +202,8 @@ void adb_bus_init(uint pin_recv, uint pin_xmit) {
     adb_rx_expect_low = true;
     adb_rx_has_low = false;
     adb_rx_low_us = 0;
+    adb_rx_expect_start = false;
+    adb_rx_expect_stop = false;
     adb_cmd_bytes_handled = 0;
     adb_rx_data_expected = 0;
     adb_rx_data_count = 0;
@@ -263,6 +267,8 @@ void adb_bus_reset(void) {
     adb_rx_expect_low = true;
     adb_rx_has_low = false;
     adb_rx_low_us = 0;
+    adb_rx_expect_start = false;
+    adb_rx_expect_stop = false;
     adb_cmd_bytes_handled = 0;
     adb_rx_data_expected = 0;
     adb_rx_data_count = 0;
@@ -636,9 +642,43 @@ static inline void adb_rx_reset_bits(void) {
     adb_rx_shift = 0;
     adb_rx_has_low = false;
     adb_rx_low_us = 0;
+    adb_rx_expect_start = false;
+    adb_rx_expect_stop = false;
 }
 
 static inline void adb_rx_accept_bit(uint8_t bit) {
+    if (adb_rx_expect_start) {
+        if (bit != 1u) {
+            adb_rx_reset_bits();
+            return;
+        }
+        adb_rx_expect_start = false;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+        return;
+    }
+
+    if (adb_rx_expect_stop) {
+        if (bit != 0u) {
+            adb_rx_reset_bits();
+            return;
+        }
+        adb_rx_expect_stop = false;
+        adb_rx_bit_count = 0;
+        adb_rx_shift = 0;
+        if (adb_rx_data_expected > 0u && adb_rx_data_count < adb_rx_data_expected) {
+            adb_rx_expect_start = true;
+            return;
+        }
+        if (adb_rx_data_expected > 0u && adb_rx_data_count >= adb_rx_data_expected) {
+            adb_rx_data_expected = 0;
+            adb_rx_data_count = 0;
+            adb_listen_target = ADB_LISTEN_NONE;
+        }
+        adb_rx_state = ADB_RX_IDLE;
+        return;
+    }
+
     adb_rx_shift = (uint8_t)((adb_rx_shift << 1u) | bit);
     adb_rx_bit_count++;
     if (adb_rx_bit_count >= 8u) {
@@ -657,10 +697,7 @@ static inline void adb_rx_accept_bit(uint8_t bit) {
                         adb_apply_mouse_listen_reg3(adb_rx_data[0], adb_rx_data[1]);
                     }
                 }
-                adb_rx_data_expected = 0;
-                adb_rx_data_count = 0;
-                adb_listen_target = ADB_LISTEN_NONE;
-                adb_rx_state = ADB_RX_IDLE;
+                adb_rx_expect_stop = true;
             }
         } else {
             __atomic_store_n(&adb_last_cmd, adb_rx_shift, __ATOMIC_RELEASE);
@@ -690,6 +727,7 @@ static inline void adb_rx_accept_bit(uint8_t bit) {
             } else {
                 adb_rx_state = ADB_RX_IDLE;
             }
+            adb_rx_expect_stop = true;
         }
         adb_rx_bit_count = 0;
         adb_rx_shift = 0;
@@ -703,6 +741,8 @@ static inline void adb_note_rx_low(uint32_t pulse_us) {
         adb_rx_shift = 0;
         adb_rx_has_low = false;
         adb_rx_low_us = 0;
+        adb_rx_expect_start = false;
+        adb_rx_expect_stop = false;
         return;
     }
 
@@ -711,6 +751,8 @@ static inline void adb_note_rx_low(uint32_t pulse_us) {
             adb_rx_state = ADB_RX_BITS;
             adb_rx_bit_count = 0;
             adb_rx_shift = 0;
+            adb_rx_expect_start = true;
+            adb_rx_expect_stop = false;
         } else {
             adb_rx_state = ADB_RX_IDLE;
         }
@@ -722,6 +764,8 @@ static inline void adb_note_rx_low(uint32_t pulse_us) {
     if (adb_rx_state != ADB_RX_BITS) {
         adb_rx_has_low = false;
         adb_rx_low_us = 0;
+        adb_rx_expect_start = false;
+        adb_rx_expect_stop = false;
         return;
     }
 
@@ -876,6 +920,8 @@ bool adb_bus_poll(void) {
         adb_rx_expect_low = true;
         adb_rx_has_low = false;
         adb_rx_low_us = 0;
+        adb_rx_expect_start = false;
+        adb_rx_expect_stop = false;
         did_work = true;
     }
 
