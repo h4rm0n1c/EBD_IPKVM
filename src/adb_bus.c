@@ -440,6 +440,7 @@ static void adb_handle_command(uint8_t cmd) {
         }
         return;
     }
+    adb_srq_armed = false;
     if (low_nibble == 0x01u) {
         if (is_kbd) {
             adb_flush_keyboard();

@@ -138,3 +138,4 @@
 - 2026-02-04: Arm SRQ only after a non-addressed command byte and limit pulses to a short post-command window to avoid arbitrary mid-transaction SRQ asserts.
 - 2026-02-04: Track the command-byte timestamp and only emit Talk replies after the nominal Tlt delay has elapsed, instead of sleeping inside the transmit path.
 - 2026-02-04: Documented ADB bring-up timing so ADB polling starts as soon as core1 launches, ahead of capture.
+- 2026-02-04: Clear SRQ arming when a command is addressed to us to avoid stale SRQ pulses after Talk responses.
