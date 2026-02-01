@@ -36,6 +36,11 @@ The firmware exposes three CDC interfaces:
 - **CDC1 (control)**: ASCII commands + status text.
 - **CDC2 (ADB test)**: keyboard/mouse test input (arrow keys for mouse, `!` toggles button).
 
+On Linux, prefer `/dev/serial/by-id/*EBD_IPKVM*if00|if02|if04` instead of
+`/dev/ttyACM*` so enumeration changes do not break scripts. Use
+`udevadm info -n /dev/ttyACM2 | rg "ID_MODEL|ID_SERIAL|ID_USB_INTERFACE_NUM"`
+to map a new `/dev/ttyACM*` node to the correct interface number.
+
 See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
 
 ### Stream packet format (CDC0)
