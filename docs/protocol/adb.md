@@ -14,7 +14,7 @@
 | ADB XMIT | GPIO14 | Output | ULN2803 | Drives the shared ADB data line (open-collector). |
 
 ## Electrical constraints
-- The ADB data line is shared between RECV and XMIT; ensure open-collector behavior on the transmit path.
+- The ADB data line is shared between RECV and XMIT; transmit is open-collector via ULN2803, so GPIO high pulls the bus low and floating releases it.
 - Do not connect 5V ADB signals directly to RP2040 GPIO; use level shifting (74LVC245) and an open-collector driver (ULN2803).
 - Ground is common between the Mac ADB port and the RP2040.
 

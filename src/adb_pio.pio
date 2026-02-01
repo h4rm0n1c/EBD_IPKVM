@@ -16,11 +16,13 @@ done:
 
 .program adb_tx
 ; Drive line low for N cycles (N pulled from TX FIFO).
-; Uses SET PINDIRS to emulate open-collector: output low when driving, input when released.
+; ULN2803 inverts: drive pin high to pull bus low, float to release.
     pull block
     mov x, osr
-    set pindirs, 1   ; drive low
+    set pins, 1      ; drive high into ULN2803 -> bus low
+    set pindirs, 1   ; enable output
 drive_low:
     jmp x-- drive_low
     set pindirs, 0   ; release line
+    set pins, 0      ; drop output level before next pulse
     jmp 0            ; wait for next pulse
