@@ -153,9 +153,6 @@ static bool adb_try_keyboard_reg0(void) {
         bytes[consumed] = code;
         consumed++;
     }
-    if (consumed == 0u) {
-        return false;
-    }
     if (!adb_tx_bytes(bytes, 2u)) {
         return false;
     }
