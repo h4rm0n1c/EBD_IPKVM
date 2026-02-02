@@ -402,6 +402,7 @@ static void adb_bus_apply_listen(uint8_t bytes) {
                 dev->srq_enabled = (up & 0x20u) != 0u;
                 if (!dev->srq_enabled) {
                     dev->srq_pending = false;
+                    adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
                 }
             }
             dev->collision = false;

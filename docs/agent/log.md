@@ -28,6 +28,7 @@
 - 2026-02-06: Wired ADB driver callbacks (handler ID + reg0 pop) through a new adb_driver layer, and shifted keyboard/mouse queue handling into that driver so callbacks remain driver-owned across bus resets.
 - 2026-02-06: Added hootswitch-style ADB debug counters (attention, short attention, reset, abort, error, abort timestamp) and surfaced them in the CDC debug output.
 - 2026-02-06: Added hootswitch-style handler ID validation in adb_driver (keyboard allows 0x01-0x03; mouse allows 0x01/0x02/0x04) to mirror per-device handler policies.
+- 2026-02-06: Clear SRQ flags when reg3 Listen disables SRQ on address change, matching hootswitch’s SRQ bitfield handling.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
