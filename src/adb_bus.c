@@ -428,6 +428,10 @@ static void adb_bus_apply_listen(uint8_t bytes) {
     if (!sem_acquire_timeout_us(&dev->talk_sem, 1000)) {
         return;
     }
+    if (reg == 3 && bytes < 2) {
+        sem_release(&dev->talk_sem);
+        return;
+    }
     if (reg == 3 && bytes >= 2) {
         uint8_t up = adb_state.listen_buf[0];
         uint8_t low = adb_state.listen_buf[1];
