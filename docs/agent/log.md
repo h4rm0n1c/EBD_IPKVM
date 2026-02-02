@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
 - 2026-02-02: Added flash/build and serial console helper scripts under scripts/ for Pico workflows.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.
 - 2026-02-02: Updated the ADB plan to refer to core1 as KVMCore and to include a rate-limited ADB RX indicator on the CDC test channel.
