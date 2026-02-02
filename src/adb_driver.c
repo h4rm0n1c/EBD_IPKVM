@@ -189,6 +189,18 @@ bool adb_driver_mouse_reg0_pop(struct adb_device *dev, uint8_t *first, uint8_t *
 }
 
 uint8_t adb_driver_handler_id(uint8_t address, uint8_t stored_id) {
-    (void)address;
-    return stored_id;
+    switch (address) {
+    case 2u:
+        if (stored_id >= 0x01u && stored_id <= 0x03u) {
+            return stored_id;
+        }
+        return 0x01u;
+    case 3u:
+        if (stored_id == 0x01u || stored_id == 0x02u || stored_id == 0x04u) {
+            return stored_id;
+        }
+        return 0x01u;
+    default:
+        return stored_id;
+    }
 }

@@ -21,6 +21,7 @@
 - 2026-02-05: Attach a queue-context pointer to reg0 pop callbacks so hootswitch-style driver queues can supply reg0 payloads.
 - 2026-02-06: Bind ADB reg0 pop + handler ID callbacks in a driver-owned layer (adb_driver) and keep those callbacks intact across ADB bus resets to mirror hootswitch’s driver ownership.
 - 2026-02-06: Track hootswitch-style ADB debug counters (attention, short attention, reset, abort, error, abort timestamp) in the bus state and expose them over CDC for parity diagnostics.
+- 2026-02-06: Validate handler IDs per device in adb_driver (keyboard allows 0x01-0x03; mouse allows 0x01/0x02/0x04) to match hootswitch’s per-device handler policies.
 - 2026-02-03: Add a third USB CDC interface (CDC2) for ADB test input and a shared ADB event queue serviced on core1.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
