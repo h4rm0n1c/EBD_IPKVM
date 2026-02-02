@@ -6,6 +6,7 @@
 - 2026-02-04: Added an ADB PIO RX/TX skeleton on PIO1 with a core1 service stub plus a rate-limited RX activity indicator for CDC debug output.
 - 2026-02-04: Added an internal pull-up and RX FIFO drain cap/restart to keep ADB PIO sampling stable on noisy or floating lines.
 - 2026-02-04: Gate ADB RX sampling until GPIO6 is high to avoid false RX activity and lockups when the bus is held low on power-up.
+- 2026-02-04: Noted the ~4 ms ADB reset pulse seen just before initial Talk traffic on power-on as a potential sync reference.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
 - 2026-02-02: Added flash/build and serial console helper scripts under scripts/ for Pico workflows.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.

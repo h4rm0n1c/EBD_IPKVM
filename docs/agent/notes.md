@@ -19,6 +19,7 @@
 
 - ADB timing reference: trabular notes that the serial handler must run roughly every 50–70 µs and defines timing windows for attention/sync/bit pulses in its ADB bus implementation.
 - ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
+- Observed on hardware: host asserts an ADB reset pulse (~4 ms low, measured 3979 us) about 1 ms before the initial Talk $0 r3 0F..FF traffic during power-on; potential timing reference for future sync.
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - Current board wiring: GPIO6 is ADB RECV (non-inverting) and GPIO12 is ADB XMIT (inverted open-collector), so PIO output polarity must account for the inversion.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
