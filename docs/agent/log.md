@@ -3,6 +3,7 @@
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
+- 2026-02-04: Added an ADB PIO RX/TX skeleton on PIO1 with a core1 service stub plus a rate-limited RX activity indicator for CDC debug output.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
 - 2026-02-02: Added flash/build and serial console helper scripts under scripts/ for Pico workflows.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.

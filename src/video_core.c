@@ -10,6 +10,7 @@
 
 #include "classic_line.pio.h"
 #include "core_bridge.h"
+#include "adb_bus.h"
 #include "adb_core.h"
 
 #define TXQ_DEPTH 512
@@ -398,6 +399,7 @@ static void core1_handle_command(uint32_t cmd) {
 
 static void core1_entry(void) {
     adb_core_init();
+    adb_bus_init();
     configure_vsync_irq();
 
     while (true) {
@@ -431,6 +433,11 @@ static void core1_entry(void) {
 
         active_start = time_us_32();
         if (adb_core_service()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
+        active_start = time_us_32();
+        if (adb_bus_service()) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
