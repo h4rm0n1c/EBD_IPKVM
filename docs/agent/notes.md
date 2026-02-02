@@ -51,3 +51,4 @@
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.
+- ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
