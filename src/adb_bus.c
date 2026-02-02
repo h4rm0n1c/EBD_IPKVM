@@ -23,6 +23,8 @@
 #define PIO_CMD_OFFSET 2u
 #define TIME_RESET_THRESH_US 400u
 
+typedef uint8_t (*adb_handler_id_fn)(uint8_t address, uint8_t stored_id);
+
 typedef enum {
     ADB_PHASE_IDLE = 0,
     ADB_PHASE_ATTENTION,
@@ -45,9 +47,11 @@ typedef struct {
     bool keep;
 } adb_register_t;
 
-typedef struct {
+typedef struct adb_device {
     uint8_t address;
     uint8_t handler_id;
+    adb_handler_id_fn handler_id_fn;
+    bool (*reg0_pop)(struct adb_device *dev, uint8_t *first, uint8_t *second);
     bool srq_enabled;
     bool collision;
     bool srq_pending;
@@ -78,6 +82,8 @@ typedef struct {
     uint8_t mouse_buttons;
     uint16_t srq_flags;
     bool talk_lock_held;
+    uint32_t dbg_lock_fail;
+    uint32_t dbg_collision;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -104,6 +110,56 @@ static uint8_t adb_rand_idx = 0;
 
 static adb_device_t adb_devices[2];
 static adb_bus_state_t adb_state;
+
+static bool adb_key_queue_pop(adb_key_queue_t *queue, uint8_t *code);
+
+static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id) {
+    (void)address;
+    return stored_id;
+}
+
+static uint8_t adb_bus_get_handler_id(const adb_device_t *dev) {
+    if (dev->handler_id_fn) {
+        return dev->handler_id_fn(dev->address, dev->handler_id);
+    }
+    return dev->handler_id;
+}
+
+static bool adb_kbd_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
+    (void)dev;
+    if (!adb_key_queue_pop(&adb_state.key_queue, first)) {
+        return false;
+    }
+    if (!adb_key_queue_pop(&adb_state.key_queue, second)) {
+        *second = 0xFFu;
+    }
+    return true;
+}
+
+static bool adb_mouse_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
+    (void)dev;
+    int16_t dx = adb_state.mouse_dx;
+    int16_t dy = adb_state.mouse_dy;
+    if (dx == 0 && dy == 0) {
+        return false;
+    }
+    if (dx > 127) {
+        dx = 127;
+    } else if (dx < -127) {
+        dx = -127;
+    }
+    if (dy > 127) {
+        dy = 127;
+    } else if (dy < -127) {
+        dy = -127;
+    }
+    uint8_t buttons = (adb_state.mouse_buttons & 0x01u) ? 0x80u : 0x00u;
+    *first = (uint8_t)buttons | ((uint8_t)dx & 0x7Fu);
+    *second = (uint8_t)dy;
+    adb_state.mouse_dx = 0;
+    adb_state.mouse_dy = 0;
+    return true;
+}
 
 static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
     if (gpio != ADB_PIN_RECV) {
@@ -160,6 +216,7 @@ static bool adb_key_queue_pop(adb_key_queue_t *queue, uint8_t *code) {
 static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler_id) {
     dev->address = address;
     dev->handler_id = handler_id;
+    dev->handler_id_fn = adb_default_handler_id;
     dev->srq_enabled = true;
     dev->collision = false;
     dev->srq_pending = false;
@@ -173,6 +230,8 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
 static void adb_bus_reset_devices(void) {
     adb_device_reset(&adb_devices[0], 2, 2);
     adb_device_reset(&adb_devices[1], 3, 1);
+    adb_devices[0].reg0_pop = adb_kbd_reg0_pop;
+    adb_devices[1].reg0_pop = adb_mouse_reg0_pop;
     adb_state.key_queue.head = 0;
     adb_state.key_queue.tail = 0;
     adb_state.key_queue.count = 0;
@@ -181,6 +240,8 @@ static void adb_bus_reset_devices(void) {
     adb_state.mouse_buttons = 0;
     adb_state.srq_flags = 0;
     adb_state.talk_lock_held = false;
+    adb_state.dbg_lock_fail = 0;
+    adb_state.dbg_collision = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -192,70 +253,33 @@ static adb_device_t *adb_bus_find_device(uint8_t address) {
     return NULL;
 }
 
-static void adb_bus_queue_keyboard_data(void) {
-    adb_device_t *kbd = &adb_devices[0];
-    if (!sem_try_acquire(&kbd->talk_sem)) {
+static void adb_bus_try_drain_reg0(adb_device_t *dev) {
+    if (!dev->reg0_pop) {
         return;
     }
-    if (kbd->regs[0].len != 0) {
-        sem_release(&kbd->talk_sem);
+    if (!sem_try_acquire(&dev->talk_sem)) {
+        adb_state.dbg_lock_fail++;
         return;
     }
-    uint8_t first = 0xFF;
-    uint8_t second = 0xFF;
-    if (!adb_key_queue_pop(&adb_state.key_queue, &first)) {
-        sem_release(&kbd->talk_sem);
+    if (dev->regs[0].len != 0) {
+        sem_release(&dev->talk_sem);
         return;
     }
-    (void)adb_key_queue_pop(&adb_state.key_queue, &second);
-    kbd->regs[0].data[0] = first;
-    kbd->regs[0].data[1] = second;
-    kbd->regs[0].len = 2;
-    kbd->regs[0].keep = false;
-    if (kbd->srq_enabled) {
-        kbd->srq_pending = true;
-        adb_state.srq_flags |= (uint16_t)(1u << kbd->address);
-    }
-    sem_release(&kbd->talk_sem);
-}
-
-static void adb_bus_queue_mouse_data(void) {
-    adb_device_t *mouse = &adb_devices[1];
-    if (!sem_try_acquire(&mouse->talk_sem)) {
+    uint8_t first = 0xFFu;
+    uint8_t second = 0xFFu;
+    if (!dev->reg0_pop(dev, &first, &second)) {
+        sem_release(&dev->talk_sem);
         return;
     }
-    if (mouse->regs[0].len != 0) {
-        sem_release(&mouse->talk_sem);
-        return;
+    dev->regs[0].data[0] = first;
+    dev->regs[0].data[1] = second;
+    dev->regs[0].len = 2;
+    dev->regs[0].keep = false;
+    if (dev->srq_enabled) {
+        dev->srq_pending = true;
+        adb_state.srq_flags |= (uint16_t)(1u << dev->address);
     }
-    int16_t dx = adb_state.mouse_dx;
-    int16_t dy = adb_state.mouse_dy;
-    if (dx == 0 && dy == 0) {
-        sem_release(&mouse->talk_sem);
-        return;
-    }
-    if (dx > 127) {
-        dx = 127;
-    } else if (dx < -127) {
-        dx = -127;
-    }
-    if (dy > 127) {
-        dy = 127;
-    } else if (dy < -127) {
-        dy = -127;
-    }
-    uint8_t buttons = (adb_state.mouse_buttons & 0x01u) ? 0x80u : 0x00u;
-    mouse->regs[0].data[0] = (uint8_t)buttons | ((uint8_t)dx & 0x7Fu);
-    mouse->regs[0].data[1] = (uint8_t)dy;
-    mouse->regs[0].len = 2;
-    mouse->regs[0].keep = false;
-    if (mouse->srq_enabled) {
-        mouse->srq_pending = true;
-        adb_state.srq_flags |= (uint16_t)(1u << mouse->address);
-    }
-    adb_state.mouse_dx = 0;
-    adb_state.mouse_dy = 0;
-    sem_release(&mouse->talk_sem);
+    sem_release(&dev->talk_sem);
 }
 
 static void adb_bus_drain_events(void) {
@@ -282,17 +306,17 @@ static void adb_bus_drain_events(void) {
         }
     }
 
-    adb_bus_queue_keyboard_data();
-    adb_bus_queue_mouse_data();
+    adb_bus_try_drain_reg0(&adb_devices[0]);
+    adb_bus_try_drain_reg0(&adb_devices[1]);
 }
 
-static void adb_bus_prepare_reg3(adb_device_t *dev) {
+static void adb_bus_prepare_reg3(adb_device_t *dev, uint8_t handler_id) {
     uint8_t rand_addr = adb_rand_table[adb_rand_idx++] & 0x0Fu;
     if (adb_rand_idx >= sizeof(adb_rand_table)) {
         adb_rand_idx = 0;
     }
     dev->regs[3].data[0] = (uint8_t)((dev->srq_enabled ? 0x20u : 0x00u) | 0x40u | rand_addr);
-    dev->regs[3].data[1] = dev->handler_id;
+    dev->regs[3].data[1] = handler_id;
     dev->regs[3].len = 2;
     dev->regs[3].keep = false;
 }
@@ -370,12 +394,13 @@ static void adb_bus_execute_command(void) {
     switch (type) {
     case ADB_CMD_TALK:
         if (reg == 3) {
-            if (dev->handler_id == 0xFFu) {
+            uint8_t handler_id = adb_bus_get_handler_id(dev);
+            if (handler_id == 0xFFu) {
                 adb_pio_atn_start();
                 adb_state.phase = ADB_PHASE_IDLE;
                 return;
             }
-            adb_bus_prepare_reg3(dev);
+            adb_bus_prepare_reg3(dev, handler_id);
         }
         if (reg == 3) {
             adb_pio_tx_start();
@@ -397,6 +422,7 @@ static void adb_bus_execute_command(void) {
             bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
             adb_state.phase = ADB_PHASE_TALK;
         } else {
+            adb_state.dbg_lock_fail++;
             adb_pio_atn_start();
             adb_state.phase = ADB_PHASE_IDLE;
         }
@@ -595,6 +621,7 @@ bool adb_bus_service(void) {
                 if (dev) {
                     dev->collision = true;
                 }
+                adb_state.dbg_collision++;
                 pio_interrupt_clear(adb_pio, adb_sm + 4);
             } else if (dev) {
                 dev->collision = false;
@@ -639,4 +666,12 @@ bool adb_bus_service(void) {
 
 bool adb_bus_take_activity(void) {
     return __atomic_exchange_n(&adb_rx_activity, 0u, __ATOMIC_ACQ_REL) != 0u;
+}
+
+void adb_bus_get_stats(adb_bus_stats_t *out) {
+    if (!out) {
+        return;
+    }
+    out->lock_fails = __atomic_load_n(&adb_state.dbg_lock_fail, __ATOMIC_ACQUIRE);
+    out->collisions = __atomic_load_n(&adb_state.dbg_collision, __ATOMIC_ACQUIRE);
 }

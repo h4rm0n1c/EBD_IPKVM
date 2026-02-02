@@ -12,6 +12,9 @@
 - 2026-02-05: Only raise SRQ flags when SRQ is enabled on the device, aligning reg0 queue behavior with hootswitch.
 - 2026-02-05: Treat Listen writes shorter than 2 bytes as empty Talk data and clear reg0 SRQ flags, mirroring hootswitch Talk length handling.
 - 2026-02-05: Ignore reg3 Listen writes unless they are exactly 2 bytes, aligning with hootswitch reg3 handling.
+- 2026-02-05: Provide hootswitch-style debug counters for lock failures/collisions in the ADB bus and surface them in CDC debug output.
+- 2026-02-05: Resolve reg3 handler IDs via a callback to match hootswitch’s dynamic handler selection.
+- 2026-02-05: Implement hootswitch-style reg0 queue drain via per-device pop callbacks that only fill reg0 when empty and unlocked.
 - 2026-02-03: Add a third USB CDC interface (CDC2) for ADB test input and a shared ADB event queue serviced on core1.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
