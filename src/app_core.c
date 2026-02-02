@@ -12,6 +12,7 @@
 
 #include "core_bridge.h"
 #include "stream_protocol.h"
+#include "adb_bus.h"
 #include "adb_core.h"
 #include "adb_queue.h"
 #include "video_capture.h"
@@ -45,6 +46,8 @@ static volatile uint32_t diag_video_edges = 0;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
+static absolute_time_t adb_rx_next;
+static bool adb_rx_seen = false;
 static uint8_t adb_esc_state = 0;
 static uint8_t adb_mouse_buttons = 0;
 
@@ -513,6 +516,8 @@ void app_core_init(const app_core_config_t *cfg) {
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
+    adb_rx_next = get_absolute_time();
+    adb_rx_seen = false;
 }
 
 void app_core_poll(void) {
@@ -528,6 +533,10 @@ void app_core_poll(void) {
     bool did_adb = poll_cdc_adb();
     if (did_adb) {
         active_us += (uint32_t)(time_us_32() - active_start);
+    }
+
+    if (adb_bus_take_activity()) {
+        adb_rx_seen = true;
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */
@@ -550,6 +559,12 @@ void app_core_poll(void) {
     }
 
     if (can_emit_text()) {
+        if (adb_rx_seen && absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
+            adb_rx_seen = false;
+            adb_rx_next = delayed_by_ms(get_absolute_time(), 2000);
+            cdc_ctrl_printf("[EBD_IPKVM] adb rx seen\n");
+        }
+
         if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
             status_next = delayed_by_ms(status_next, 1000);
 

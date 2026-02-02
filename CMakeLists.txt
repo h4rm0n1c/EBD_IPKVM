@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(EBD_IPKVM
+    src/adb_bus.c
     src/adb_core.c
     src/adb_queue.c
     src/app_core.c
@@ -21,6 +22,7 @@ add_executable(EBD_IPKVM
 )
 
 pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/classic_line.pio)
+pico_generate_pio_header(EBD_IPKVM ${CMAKE_CURRENT_LIST_DIR}/src/adb_bus.pio)
 
 pico_enable_stdio_usb(EBD_IPKVM 0)
 pico_enable_stdio_uart(EBD_IPKVM 0)
