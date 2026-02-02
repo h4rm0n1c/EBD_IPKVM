@@ -17,8 +17,8 @@ Above output is current project output as of PR #19.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
-- `GPIO7` — ADB RECV (input via 74LVC245 from Mac ADB data)
-- `GPIO8` — ADB XMIT (output via ULN2803 to Mac ADB data, open-collector)
+- `GPIO6` — ADB RECV (input via 74LVC245 from Mac ADB data; non-inverting)
+- `GPIO12` — ADB XMIT (output via ULN2803 to Mac ADB data; inverted, open-collector)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
@@ -105,6 +105,8 @@ This project relies on documentation and reference implementations from the foll
 - [**/opt/PicoHTTPServer**](https://github.com/sysprogs/PicoHTTPServer) — Pico W HTTP server, captive portal flow, and incremental response patterns for future on-device UI work.
 - [**/opt/SigrokPico**](https://github.com/pico-coder/sigrok-pico) — USB CDC transport patterns and RLE compression ideas for low-entropy line data.
 - [**/opt/picovga**](https://github.com/codaris/picovga-cmake) — multi-core video pipeline patterns for RP2040 video workloads.
+- [**/opt/adb/hootswitch**](https://github.com/saybur/hootswitch) — RP2040 ADB bus implementation (PIO + DMA + state machine) used as the reference for our ADB device emulation plan.
+Use `scripts/setup_opt_references.sh` to install the above corpora under `/opt` if you need local copies.
 
 ## Build (typical Pico SDK)
 Set your Pico SDK path, then build out-of-tree in `build/`.

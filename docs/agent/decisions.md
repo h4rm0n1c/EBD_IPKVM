@@ -1,10 +1,13 @@
 # Decisions (running)
 
+- 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
+- 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
+- 2026-02-03: Base ADB device emulation on hootswitch’s PIO+DMA bus engine and device-side state machine, trimmed to a single keyboard+mouse.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
 - 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
-- 2026-02-02: Assign ADB RECV to GPIO7 (via 74LVC245) and ADB XMIT to GPIO8 (via ULN2803) on the shared ADB data line.
+- 2026-02-02: Assign ADB RECV to GPIO7 and ADB XMIT to GPIO8 on the shared ADB data line (superseded by 2026-02-03 wiring update).
 - 2026-02-02: Plan ADB PIO work as two programs/state machines (RX + TX) and ignore self-transmit on the shared ADB line except for optional loopback validation.
 - 2026-02-02: Refer to the core1 real-time service loop as KVMCore and add a rate-limited ADB RX indicator on the CDC test channel for visibility.
 - 2026-01-30: Add a runtime capture mode toggle that swaps between 30 fps test capture and continuous 60 fps streaming.
