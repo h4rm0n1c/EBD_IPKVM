@@ -4,6 +4,7 @@
 - 2026-02-05: Map CDC2 ASCII input to the US ADB keycode table without modifier synthesis for the initial test workflow.
 - 2026-02-05: Switch ADB PIO programs to hootswitch’s device-side bus implementation (GPLv3) and keep its license text under licenses/.
 - 2026-02-05: Move SRQ pulse timing into the hootswitch device-side PIO path instead of software-timed pulses.
+- 2026-02-05: Execute Talk/Listen only after the hootswitch stop-bit/SRQ phase completes and the GPIO rise is observed.
 - 2026-02-03: Add a third USB CDC interface (CDC2) for ADB test input and a shared ADB event queue serviced on core1.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.

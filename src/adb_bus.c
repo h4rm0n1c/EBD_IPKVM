@@ -97,6 +97,15 @@ static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
     }
 }
 
+static void adb_gpio_rise_arm(void) {
+    adb_gpio_rise = false;
+    gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
+}
+
+static void adb_gpio_rise_disarm(void) {
+    gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+}
+
 static bool adb_key_queue_push(adb_key_queue_t *queue, uint8_t code) {
     if (queue->count >= ADB_KBD_QUEUE_DEPTH) {
         return false;
@@ -434,10 +443,13 @@ static void adb_bus_handle_command_irq(void) {
     if (srq_needed) {
         pio_interrupt_clear(adb_pio, adb_sm);
         adb_state.phase = ADB_PHASE_SRQ;
+        adb_gpio_rise_arm();
         return;
     }
 
-    adb_bus_execute_command();
+    adb_pio_stop();
+    adb_state.phase = ADB_PHASE_SRQ;
+    adb_gpio_rise_arm();
 }
 
 bool adb_bus_service(void) {
@@ -447,7 +459,7 @@ bool adb_bus_service(void) {
     if (adb_state.phase == ADB_PHASE_ATTENTION) {
         if (adb_gpio_rise) {
             adb_gpio_rise = false;
-            gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+            adb_gpio_rise_disarm();
             int64_t delta = absolute_time_diff_us(get_absolute_time(), adb_state.attention_start);
             if (delta >= (int64_t)TIME_RESET_THRESH_US) {
                 adb_bus_reset_devices();
@@ -460,22 +472,23 @@ bool adb_bus_service(void) {
         return did_work;
     }
 
+    if (adb_state.phase == ADB_PHASE_SRQ && adb_gpio_rise) {
+        adb_gpio_rise = false;
+        adb_gpio_rise_disarm();
+        adb_bus_execute_command();
+        return true;
+    }
+
     if (pio_interrupt_get(adb_pio, adb_sm)) {
         switch (adb_state.phase) {
         case ADB_PHASE_IDLE:
             adb_state.phase = ADB_PHASE_ATTENTION;
             adb_state.attention_start = get_absolute_time();
-            adb_gpio_rise = false;
-            gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
+            adb_gpio_rise_arm();
             did_work = true;
             break;
         case ADB_PHASE_COMMAND:
             adb_bus_handle_command_irq();
-            did_work = true;
-            break;
-        case ADB_PHASE_SRQ:
-            pio_interrupt_clear(adb_pio, adb_sm);
-            adb_bus_execute_command();
             did_work = true;
             break;
         case ADB_PHASE_TALK: {

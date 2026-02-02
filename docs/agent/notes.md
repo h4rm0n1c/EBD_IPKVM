@@ -32,3 +32,4 @@
 - ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.
 - ADB PIO programs now use hootswitch’s device-side bus implementation (GPLv3); license text is stored in `licenses/hootswitch-GPLv3.txt`.
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
+- Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
