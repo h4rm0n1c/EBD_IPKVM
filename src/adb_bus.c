@@ -73,6 +73,7 @@ typedef struct {
     int16_t mouse_dx;
     int16_t mouse_dy;
     uint8_t mouse_buttons;
+    uint16_t srq_flags;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -147,6 +148,7 @@ static void adb_bus_reset_devices(void) {
     adb_state.mouse_dx = 0;
     adb_state.mouse_dy = 0;
     adb_state.mouse_buttons = 0;
+    adb_state.srq_flags = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -174,6 +176,7 @@ static void adb_bus_queue_keyboard_data(void) {
     kbd->regs[0].len = 2;
     kbd->regs[0].keep = false;
     kbd->srq_pending = true;
+    adb_state.srq_flags |= (uint16_t)(1u << kbd->address);
 }
 
 static void adb_bus_queue_mouse_data(void) {
@@ -202,6 +205,7 @@ static void adb_bus_queue_mouse_data(void) {
     mouse->regs[0].len = 2;
     mouse->regs[0].keep = false;
     mouse->srq_pending = true;
+    adb_state.srq_flags |= (uint16_t)(1u << mouse->address);
     adb_state.mouse_dx = 0;
     adb_state.mouse_dy = 0;
 }
@@ -319,6 +323,7 @@ static void adb_bus_execute_command(void) {
         if (dev->regs[reg].len == 0) {
             if (reg == 0) {
                 dev->srq_pending = false;
+                adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
             }
             adb_pio_atn_start();
             adb_state.phase = ADB_PHASE_IDLE;
@@ -329,6 +334,7 @@ static void adb_bus_execute_command(void) {
         adb_state.phase = ADB_PHASE_TALK;
         if (reg == 0) {
             dev->srq_pending = false;
+            adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
         }
         break;
     case ADB_CMD_LISTEN:
@@ -338,6 +344,7 @@ static void adb_bus_execute_command(void) {
     case ADB_CMD_FLUSH:
         dev->regs[0].len = 0;
         dev->srq_pending = false;
+        adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
         adb_pio_atn_start();
         adb_state.phase = ADB_PHASE_IDLE;
         break;
@@ -422,22 +429,11 @@ static void adb_bus_handle_command_irq(void) {
 
     bool srq_needed = false;
     if (adb_state.current_dev) {
+        uint16_t flags = adb_state.srq_flags;
         if (adb_state.current_type == ADB_CMD_TALK) {
-            for (size_t i = 0; i < 2; i++) {
-                if (adb_devices[i].srq_enabled && adb_devices[i].srq_pending &&
-                    adb_devices[i].address != adb_state.current_dev->address) {
-                    srq_needed = true;
-                    break;
-                }
-            }
-        } else {
-            for (size_t i = 0; i < 2; i++) {
-                if (adb_devices[i].srq_enabled && adb_devices[i].srq_pending) {
-                    srq_needed = true;
-                    break;
-                }
-            }
+            flags &= (uint16_t)~(1u << adb_state.current_dev->address);
         }
+        srq_needed = flags != 0;
     }
 
     if (srq_needed) {
@@ -502,6 +498,7 @@ bool adb_bus_service(void) {
                 dev->collision = false;
                 if (adb_state.current_reg == 0) {
                     dev->srq_pending = false;
+                    adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
                 }
                 if (adb_state.current_reg < 4 && !dev->regs[adb_state.current_reg].keep) {
                     dev->regs[adb_state.current_reg].len = 0;
