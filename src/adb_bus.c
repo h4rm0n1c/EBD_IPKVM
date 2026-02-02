@@ -5,6 +5,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "pico/rand.h"
 #include "pico/stdlib.h"
 
 #include "adb_bus.pio.h"
@@ -86,6 +87,18 @@ static int adb_dma_chan = -1;
 static volatile uint32_t adb_rx_activity = 0;
 static volatile bool adb_gpio_rise = false;
 
+static const uint8_t adb_rand_table[] = {
+    0x67, 0xC6, 0x69, 0x73, 0x51, 0xFF, 0x4A, 0xEC,
+    0x29, 0xCD, 0xBA, 0xAB, 0xF2, 0xFB, 0xE3, 0x46,
+    0x7C, 0xC2, 0x54, 0xF8, 0x1B, 0xE8, 0xE7, 0x8D,
+    0x76, 0x5A, 0x2E, 0x63, 0x33, 0x9F, 0xC9, 0x9A,
+    0x66, 0x32, 0x0D, 0xB7, 0x31, 0x58, 0xA3, 0x5A,
+    0x25, 0x5D, 0x05, 0x17, 0x58, 0xE9, 0x5E, 0xD4,
+    0xAB, 0xB2, 0xCD, 0xC6, 0x9B, 0xB4, 0x54, 0x11,
+    0x0E, 0x82, 0x74, 0x41, 0x21, 0x3D, 0xDC, 0x87
+};
+static uint8_t adb_rand_idx = 0;
+
 static adb_device_t adb_devices[2];
 static adb_bus_state_t adb_state;
 
@@ -101,6 +114,20 @@ static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
 static void adb_gpio_rise_arm(void) {
     adb_gpio_rise = false;
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
+}
+
+static bool adb_gpio_rise_setup(void) {
+    adb_gpio_rise = false;
+    if (gpio_get(ADB_PIN_RECV)) {
+        return false;
+    }
+    gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
+    if (gpio_get(ADB_PIN_RECV)) {
+        gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+        gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
+        return false;
+    }
+    return true;
 }
 
 static void adb_gpio_rise_disarm(void) {
@@ -239,7 +266,11 @@ static void adb_bus_drain_events(void) {
 }
 
 static void adb_bus_prepare_reg3(adb_device_t *dev) {
-    dev->regs[3].data[0] = (uint8_t)((dev->srq_enabled ? 0x20u : 0x00u) | 0x40u | (dev->address & 0x0Fu));
+    uint8_t rand_addr = adb_rand_table[adb_rand_idx++] & 0x0Fu;
+    if (adb_rand_idx >= sizeof(adb_rand_table)) {
+        adb_rand_idx = 0;
+    }
+    dev->regs[3].data[0] = (uint8_t)((dev->srq_enabled ? 0x20u : 0x00u) | 0x40u | rand_addr);
     dev->regs[3].data[1] = dev->handler_id;
     dev->regs[3].len = 2;
     dev->regs[3].keep = false;
@@ -415,37 +446,47 @@ void adb_bus_init(void) {
     adb_sm = pio_claim_unused_sm(adb_pio, true);
     adb_dma_chan = dma_claim_unused_channel(true);
 
+    adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();
     adb_state.phase = ADB_PHASE_IDLE;
     adb_pio_atn_start();
 }
 
 static void adb_bus_handle_command_irq(void) {
+    if (pio_sm_is_rx_fifo_empty(adb_pio, adb_sm)) {
+        adb_pio_stop();
+        adb_state.phase = ADB_PHASE_IDLE;
+        adb_pio_atn_start();
+        return;
+    }
     uint8_t cmd = bus_rx_dev_get(adb_pio, adb_sm);
     adb_state.current_cmd = cmd;
     adb_state.current_type = (adb_cmd_t)((cmd >> 2) & 0x03u);
     adb_state.current_reg = cmd & 0x03u;
     adb_state.current_dev = adb_bus_find_device((cmd >> 4) & 0x0Fu);
 
-    bool srq_needed = false;
-    if (adb_state.current_dev) {
-        uint16_t flags = adb_state.srq_flags;
-        if (adb_state.current_type == ADB_CMD_TALK) {
+    uint16_t flags = adb_state.srq_flags;
+    if (adb_state.current_type == ADB_CMD_TALK && adb_state.current_reg == 0) {
+        if (adb_state.current_dev) {
             flags &= (uint16_t)~(1u << adb_state.current_dev->address);
         }
-        srq_needed = flags != 0;
     }
+    bool srq_needed = flags != 0;
 
     if (srq_needed) {
         pio_interrupt_clear(adb_pio, adb_sm);
         adb_state.phase = ADB_PHASE_SRQ;
-        adb_gpio_rise_arm();
+        if (!adb_gpio_rise_setup()) {
+            adb_bus_execute_command();
+        }
         return;
     }
 
     adb_pio_stop();
     adb_state.phase = ADB_PHASE_SRQ;
-    adb_gpio_rise_arm();
+    if (!adb_gpio_rise_setup()) {
+        adb_bus_execute_command();
+    }
 }
 
 bool adb_bus_service(void) {
@@ -478,10 +519,16 @@ bool adb_bus_service(void) {
     if (pio_interrupt_get(adb_pio, adb_sm)) {
         switch (adb_state.phase) {
         case ADB_PHASE_IDLE:
-            adb_state.phase = ADB_PHASE_ATTENTION;
-            adb_state.attention_start = get_absolute_time();
-            adb_gpio_rise_arm();
-            did_work = true;
+            adb_pio_stop();
+            if (adb_gpio_rise_setup()) {
+                adb_state.phase = ADB_PHASE_ATTENTION;
+                adb_state.attention_start = get_absolute_time();
+                did_work = true;
+            } else {
+                adb_state.phase = ADB_PHASE_COMMAND;
+                adb_pio_command_start();
+                did_work = true;
+            }
             break;
         case ADB_PHASE_COMMAND:
             adb_bus_handle_command_irq();

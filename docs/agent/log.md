@@ -10,6 +10,9 @@
 - 2026-02-05: Align attention handling to hootswitch’s GPIO rising-edge flow (IRQ-driven) to decide reset vs command.
 - 2026-02-05: Align command/SRQ handling to hootswitch’s stop-bit + GPIO rise flow before executing Talk/Listen.
 - 2026-02-05: Track SRQ pending state with a hootswitch-style SRQ bitfield to simplify SRQ gating decisions.
+- 2026-02-05: Align ADB GPIO rising-edge handling to hootswitch’s setup flow so short attention/stop-bit rises execute immediately instead of waiting on an IRQ.
+- 2026-02-05: Match hootswitch SRQ gating so non-target Talk $0 commands still emit SRQ when any device has pending data.
+- 2026-02-05: Adopt hootswitch’s randomized reg3 address nibble for Talk responses to match address-resolution behavior.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
