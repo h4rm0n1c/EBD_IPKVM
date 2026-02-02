@@ -68,6 +68,13 @@ typedef struct {
 } adb_key_queue_t;
 
 typedef struct {
+    uint8_t data[ADB_KBD_QUEUE_DEPTH][2];
+    uint8_t head;
+    uint8_t tail;
+    uint8_t count;
+} adb_kbd_queue_t;
+
+typedef struct {
     uint8_t data[ADB_MOUSE_QUEUE_DEPTH][2];
     uint8_t head;
     uint8_t tail;
@@ -85,6 +92,7 @@ typedef struct {
     uint8_t listen_buf[ADB_MAX_REG_BYTES];
 
     adb_key_queue_t key_queue;
+    adb_kbd_queue_t kbd_queue;
     adb_mouse_queue_t mouse_queue;
     int16_t mouse_dx;
     int16_t mouse_dy;
@@ -136,13 +144,7 @@ static uint8_t adb_bus_get_handler_id(const adb_device_t *dev) {
 
 static bool adb_kbd_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
     (void)dev;
-    if (!adb_key_queue_pop(&adb_state.key_queue, first)) {
-        return false;
-    }
-    if (!adb_key_queue_pop(&adb_state.key_queue, second)) {
-        *second = 0xFFu;
-    }
-    return true;
+    return adb_kbd_queue_pop(&adb_state.kbd_queue, first, second);
 }
 
 static bool adb_mouse_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
@@ -202,6 +204,28 @@ static bool adb_key_queue_pop(adb_key_queue_t *queue, uint8_t *code) {
     return true;
 }
 
+static bool adb_kbd_queue_push(adb_kbd_queue_t *queue, uint8_t first, uint8_t second) {
+    if (queue->count >= ADB_KBD_QUEUE_DEPTH) {
+        return false;
+    }
+    queue->data[queue->head][0] = first;
+    queue->data[queue->head][1] = second;
+    queue->head = (uint8_t)((queue->head + 1u) % ADB_KBD_QUEUE_DEPTH);
+    queue->count++;
+    return true;
+}
+
+static bool adb_kbd_queue_pop(adb_kbd_queue_t *queue, uint8_t *first, uint8_t *second) {
+    if (!queue->count) {
+        return false;
+    }
+    *first = queue->data[queue->tail][0];
+    *second = queue->data[queue->tail][1];
+    queue->tail = (uint8_t)((queue->tail + 1u) % ADB_KBD_QUEUE_DEPTH);
+    queue->count--;
+    return true;
+}
+
 static bool adb_mouse_queue_push(adb_mouse_queue_t *queue, uint8_t first, uint8_t second) {
     if (queue->count >= ADB_MOUSE_QUEUE_DEPTH) {
         return false;
@@ -246,6 +270,9 @@ static void adb_bus_reset_devices(void) {
     adb_state.key_queue.head = 0;
     adb_state.key_queue.tail = 0;
     adb_state.key_queue.count = 0;
+    adb_state.kbd_queue.head = 0;
+    adb_state.kbd_queue.tail = 0;
+    adb_state.kbd_queue.count = 0;
     adb_state.mouse_queue.head = 0;
     adb_state.mouse_queue.tail = 0;
     adb_state.mouse_queue.count = 0;
@@ -317,6 +344,17 @@ static void adb_bus_drain_events(void) {
             break;
         default:
             break;
+        }
+    }
+
+    if (adb_state.key_queue.count != 0) {
+        uint8_t first = 0xFFu;
+        uint8_t second = 0xFFu;
+        if (adb_key_queue_pop(&adb_state.key_queue, &first)) {
+            (void)adb_key_queue_pop(&adb_state.key_queue, &second);
+            if (!adb_kbd_queue_push(&adb_state.kbd_queue, first, second)) {
+                adb_state.dbg_lock_fail++;
+            }
         }
     }
 
