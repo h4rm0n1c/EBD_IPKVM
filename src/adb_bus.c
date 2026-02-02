@@ -366,6 +366,11 @@ static void adb_bus_execute_command(void) {
     switch (type) {
     case ADB_CMD_TALK:
         if (reg == 3) {
+            if (dev->handler_id == 0xFFu) {
+                adb_pio_atn_start();
+                adb_state.phase = ADB_PHASE_IDLE;
+                return;
+            }
             adb_bus_prepare_reg3(dev);
         }
         if (reg == 3) {

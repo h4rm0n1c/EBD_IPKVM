@@ -29,7 +29,7 @@
 - **Register 0**: two keycodes per report. If only one key is queued, the second byte is `0xFF`.
   - Key releases are encoded with bit 7 set (`code | 0x80`).
 - **Register 2**: reserved for modifiers/LED state (host Listen updates stored verbatim).
-- **Register 3 (Talk)**: `0b01SRRRRR` (bit 5 = SRQ enable, bit 6 = exceptional event, bits 0-3 = randomized nibble), followed by handler ID. The randomized nibble mirrors hootswitch’s reg3 behavior for address-resolution flows.
+- **Register 3 (Talk)**: `0b01SRRRRR` (bit 5 = SRQ enable, bit 6 = exceptional event, bits 0-3 = randomized nibble), followed by handler ID. The randomized nibble mirrors hootswitch’s reg3 behavior for address-resolution flows. If the handler ID is `0xFF`, no reg3 response is produced (hootswitch parity).
 
 #### CDC2 ASCII → ADB keycodes (current mapping)
 - The CDC2 test channel maps printable ASCII to the US ADB keycode set.
