@@ -29,3 +29,4 @@
 - CDC2 ASCII input now maps through the US ADB keycode table (no modifier synthesis yet), so shifted characters will be sent as their unshifted keycodes for early testing.
 - ADB RX is now held off until a low→high transition on the bus; the RX state machine stays disabled and FIFOs are cleared while the line is held low to avoid phantom RX activity when the Mac is off.
 - Observed on hardware: with the Mac off, the ADB bus idles low; on power-up it rises high, then drops low for ~3.979 ms, and about 1 ms later the first host Talk traffic appears.
+- ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.

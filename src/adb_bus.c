@@ -423,7 +423,6 @@ static void adb_bus_decode_rx_fifo(void) {
 
         uint8_t bit = (low_us < ADB_BIT_THRESH_US && high_us > low_us) ? 1u : 0u;
         adb_bus_rx_push_bit(bit);
-        __atomic_store_n(&adb_rx_activity, 1u, __ATOMIC_RELEASE);
     }
 
     if (!pio_sm_is_rx_fifo_empty(adb_pio, adb_sm_rx)) {
@@ -562,10 +561,14 @@ bool adb_bus_service(void) {
         pio_interrupt_clear(adb_pio, ADB_RX_TIMEOUT_IRQ);
 
         if (adb_state.phase == ADB_PHASE_COMMAND && adb_state.rx_count > 0) {
+            __atomic_store_n(&adb_rx_activity, 1u, __ATOMIC_RELEASE);
             adb_bus_process_command(adb_state.rx_bytes[0]);
             adb_bus_rx_reset();
             did_work = true;
         } else if (adb_state.phase == ADB_PHASE_LISTEN) {
+            if (adb_state.rx_count > 0) {
+                __atomic_store_n(&adb_rx_activity, 1u, __ATOMIC_RELEASE);
+            }
             adb_bus_apply_listen();
             adb_state.phase = ADB_PHASE_IDLE;
             adb_bus_rx_reset();

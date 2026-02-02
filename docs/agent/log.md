@@ -4,6 +4,7 @@
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.
 - 2026-02-05: Note the observed Mac power-up ADB line behavior (~3.979 ms low pulse after rising high, first Talk traffic ~1 ms later).
+- 2026-02-05: Only latch ADB RX activity when a command/listen payload completes to avoid RX-seen spam from idle noise.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
