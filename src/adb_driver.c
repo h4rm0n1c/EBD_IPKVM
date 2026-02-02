@@ -170,6 +170,10 @@ void adb_driver_bind_callbacks(adb_driver_state_t *state) {
     (void)adb_bus_set_handler_id_fn(3u, adb_driver_handler_id);
     (void)adb_bus_set_reg0_pop(2u, adb_driver_kbd_reg0_pop, &state->kbd_queue);
     (void)adb_bus_set_reg0_pop(3u, adb_driver_mouse_reg0_pop, &state->mouse_queue);
+    (void)adb_bus_set_listen_fn(2u, adb_driver_listen, state);
+    (void)adb_bus_set_listen_fn(3u, adb_driver_listen, state);
+    (void)adb_bus_set_flush_fn(2u, adb_driver_flush_reg, state);
+    (void)adb_bus_set_flush_fn(3u, adb_driver_flush_reg, state);
 }
 
 bool adb_driver_kbd_reg0_pop(struct adb_device *dev, uint8_t *first, uint8_t *second) {
@@ -202,5 +206,40 @@ uint8_t adb_driver_handler_id(uint8_t address, uint8_t stored_id) {
         return 0x01u;
     default:
         return stored_id;
+    }
+}
+
+void adb_driver_listen(uint8_t address, uint8_t reg, const uint8_t *data, uint8_t len, void *ctx) {
+    (void)address;
+    (void)reg;
+    (void)data;
+    (void)len;
+    (void)ctx;
+}
+
+void adb_driver_flush_reg(uint8_t address, uint8_t reg, void *ctx) {
+    adb_driver_state_t *state = (adb_driver_state_t *)ctx;
+    (void)reg;
+    if (!state) {
+        return;
+    }
+    switch (address) {
+    case 2u:
+        state->key_queue.head = 0;
+        state->key_queue.tail = 0;
+        state->key_queue.count = 0;
+        state->kbd_queue.head = 0;
+        state->kbd_queue.tail = 0;
+        state->kbd_queue.count = 0;
+        break;
+    case 3u:
+        state->mouse_queue.head = 0;
+        state->mouse_queue.tail = 0;
+        state->mouse_queue.count = 0;
+        state->mouse_dx = 0;
+        state->mouse_dy = 0;
+        break;
+    default:
+        break;
     }
 }

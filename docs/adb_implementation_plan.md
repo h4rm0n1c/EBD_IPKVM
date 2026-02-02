@@ -6,7 +6,7 @@
 - Follow the existing core split pattern: PIO does bit-level timing, AppleCore (core1) handles real-time bus work, core0 exposes a higher-level API for the app and CDC testing.
 - Base our low-level ADB engine on the hootswitch RP2040 implementation (PIO + DMA + state machine) and trim it down to a single-device keyboard+mouse emulation.
 - Keep the ADB implementation modular and consistent with existing firmware structure (peripheral-specific files + shared core bridge).
-- Add a CDC test channel so we can drive mouse movement via arrow keys, click via right shift, and pass through typed characters to the ADB keyboard.
+- Add a CDC test channel so we can drive mouse movement via arrow keys, click via Ctrl+R, and pass through typed characters to the ADB keyboard.
 
 ## Reference grounding (from /opt/adb)
 
@@ -72,7 +72,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
   - Translate higher-level input events into register payloads (keyboard register 0/2, mouse register 0).
   - Manage testing input on the third CDC interface:
     - Arrow keys -> mouse move (configurable step size).
-    - Right Shift -> mouse button click.
+    - Ctrl+R -> mouse button click.
     - Other printable characters -> ADB keyboard events.
     - Periodic RX indicator: if valid ADB traffic was observed, emit a short “ADB RX seen” line no more than once every few seconds (latched/ratelimited).
   - Forward events to core1 via `core_bridge` queues.
@@ -110,7 +110,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - Add **CDC2** in `usb_descriptors.c` and update TUSB configuration.
 - In `app_core`, add a small terminal parser:
   - Arrow keys (escape sequences): update mouse X/Y deltas.
-  - Right Shift: click press/release toggle (press on keydown, release on keyup).
+  - Ctrl+R: click press/release toggle (press on keydown, release on keyup).
   - Other characters: map to ADB keyboard keycodes and enqueue a press/release.
 - Keep this in a separate `adb_test_cdc.c/.h` module for cleanliness.
 
@@ -152,7 +152,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 2. **Core1 ADB engine**: implement bus state machine (`adb_bus`) with command parsing and SRQ emission.
 3. **Keyboard/mouse models**: implement register logic and event queues, including default addresses/handler IDs and Listen/Flush behaviors.
 4. **Core bridge**: add ADB event queues and event injection APIs on core0.
-5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and Right Shift, map to ADB events.
+5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and Ctrl+R, map to ADB events.
 6. **Integrate with main**: init ADB modules alongside AppleCore; ensure idle states do not affect capture.
 7. **Instrumentation + docs**: add optional diagnostics for SRQ/traffic and update docs (protocol + ADB plan/log/notes).
 
@@ -161,7 +161,7 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - **Basic bus health**: scope the ADB line for attention/sync, Talk responses, and SRQ pulses.
 - **Terminal-driven test**: open CDC2 from Linux and verify:
   - Arrow keys move the Mac cursor.
-  - Right Shift clicks.
+  - Ctrl+R clicks.
   - Typed characters appear on the Mac.
 - **Collision/address resolution**: connect a real ADB keyboard or mouse and ensure our device reassigns or coexists properly.
 - **Performance**: check core0/core1 utilization counters while exercising ADB input + full-rate video capture.
@@ -171,3 +171,42 @@ These sources anchor our bus timing expectations, device register behaviors, and
 - Confirm exact mouse report format (classic vs extended mouse) before final register definitions.
 - Confirm keyboard handler ID and LED behavior match expected Mac OS defaults.
 - Validate SRQ timing windows against the ADB spec once the Apple spec PDF is available.
+
+## Hootswitch port status (code landed)
+
+### Implemented from hootswitch
+
+- Device-side PIO programs (`bus_rx_dev`, `bus_tx_dev`, `bus_atn_dev`) wired on PIO1 with the hootswitch timing assumptions and collision IRQ flagging.
+- Device-side bus state machine: attention detect → command parse → SRQ phase → Talk/Listen handling (GPIO rise gating) matching hootswitch flow.
+- SRQ timing handled in the PIO RX program (stop-bit SRQ pulse), with SRQ gating driven by a shared bitfield.
+- Talk register locking and reg0 queue-drain semantics (only fill reg0 when empty + lock available).
+- Reg3 randomized nibble + handler-ID gating (0xFF suppresses reg3 Talk).
+- Listen semantics mirroring hootswitch (short writes clear reg0/SRQ; reg3 short writes ignored).
+- Collision and lock-failure counters surfaced via CDC debug output.
+
+### Not yet validated / still needed
+
+- Hardware validation of ADB timing windows vs the ADB Manager spec (scope/SRQ pulse width, bit timing).
+- Confirm handler IDs and keyboard LED behavior against Mac OS expectations.
+- Confirm mouse report format (classic vs extended) and adjust if needed.
+- Add documented host-driven validation steps once hardware captures are available.
+
+## Hootswitch parity checklist
+
+Use this as a concise checklist for what we must match from hootswitch during extraction.
+Device-side parity is the goal; host/port-switching logic stays out of scope.
+
+### Required parity items (device-side)
+
+- Device-side PIO programs: `bus_rx_dev`, `bus_tx_dev`, `bus_atn_dev` (timing aligned to hootswitch defaults unless we explicitly retune).
+- Stop-bit/SRQ phase gating before executing Talk/Listen (GPIO rise flow).
+- SRQ timing handled by PIO (device-side SRQ pulse flow).
+- SRQ pending tracking via the shared hootswitch-style bitfield.
+- Reg3 randomized nibble + handler-ID gating (`0xFF` suppresses reg3 Talk).
+- Talk register locking + reg0 queue-drain semantics (only fill when empty/unlocked).
+- Listen-length semantics: short writes clear reg0/SRQ; short reg3 writes ignored.
+- Collision/lock debug counters exposed for parity diagnostics.
+
+### Explicitly out of scope
+
+- Host-side PIO programs, device scanning, and port-switching logic from hootswitch.
