@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(EBD_IPKVM
+    src/adb_core.c
+    src/adb_queue.c
     src/app_core.c
     src/core_bridge.c
     src/main.c

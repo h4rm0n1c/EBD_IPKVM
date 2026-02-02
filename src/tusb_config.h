@@ -15,7 +15,7 @@
 #define CFG_TUD_ENDPOINT0_SIZE  (64)
 #endif
 
-#define CFG_TUD_CDC             (2)
+#define CFG_TUD_CDC             (3)
 
 #ifndef CFG_TUD_CDC_RX_BUFSIZE
 #define CFG_TUD_CDC_RX_BUFSIZE  (TUD_OPT_HIGH_SPEED ? 512 : 64)

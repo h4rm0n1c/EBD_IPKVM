@@ -22,4 +22,5 @@
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - Current board wiring: GPIO6 is ADB RECV (non-inverting) and GPIO12 is ADB XMIT (inverted open-collector), so PIO output polarity must account for the inversion.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
+- ADB CDC2 test input currently treats ASCII bytes as key events (press+release) and uses arrow-key escape sequences plus `Ctrl+R` (`0x12`) to toggle the primary mouse button.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.

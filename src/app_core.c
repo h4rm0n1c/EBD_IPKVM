@@ -12,6 +12,8 @@
 
 #include "core_bridge.h"
 #include "stream_protocol.h"
+#include "adb_core.h"
+#include "adb_queue.h"
 #include "video_capture.h"
 #include "video_core.h"
 
@@ -21,6 +23,7 @@
 
 #define CDC_STREAM 0
 #define CDC_CTRL 1
+#define CDC_ADB 2
 
 static app_core_config_t app_cfg;
 
@@ -42,6 +45,8 @@ static volatile uint32_t diag_video_edges = 0;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
+static uint8_t adb_esc_state = 0;
+static uint8_t adb_mouse_buttons = 0;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -212,7 +217,9 @@ static void emit_debug_state(void) {
 
     uint16_t txq_r = 0;
     uint16_t txq_w = 0;
+    adb_core_stats_t adb_stats = {0};
     video_core_get_txq_indices(&txq_r, &txq_w);
+    adb_core_get_stats(&adb_stats);
 
     cdc_ctrl_printf("[EBD_IPKVM] dbg a=%d cap=%d test=%d probe=%d vs=%s\n",
                     video_core_is_armed() ? 1 : 0,
@@ -229,6 +236,11 @@ static void emit_debug_state(void) {
                     (unsigned long)video_core_get_lines_drop(),
                     (unsigned long)video_core_get_frame_overrun(),
                     (unsigned long)video_core_get_frame_short());
+    cdc_ctrl_printf("[EBD_IPKVM] dbg adb pending=%lu key=%lu mouse=%lu drop=%lu\n",
+                    (unsigned long)adb_stats.pending,
+                    (unsigned long)adb_stats.key_events,
+                    (unsigned long)adb_stats.mouse_events,
+                    (unsigned long)adb_stats.drops);
 }
 
 static bool poll_cdc_commands(void) {
@@ -353,6 +365,93 @@ static bool poll_cdc_commands(void) {
     return did_work;
 }
 
+static void adb_enqueue_key(uint8_t code, bool down) {
+    adb_event_t event = {
+        .type = ADB_EVENT_KEY,
+        .data.key = {
+            .code = code,
+            .down = down,
+        },
+    };
+    adb_queue_push(&event);
+}
+
+static void adb_enqueue_mouse(int8_t dx, int8_t dy) {
+    adb_event_t event = {
+        .type = ADB_EVENT_MOUSE,
+        .data.mouse = {
+            .dx = dx,
+            .dy = dy,
+            .buttons = adb_mouse_buttons,
+        },
+    };
+    adb_queue_push(&event);
+}
+
+static bool poll_cdc_adb(void) {
+    bool did_work = false;
+    const int8_t step = 4;
+
+    while (tud_cdc_n_available(CDC_ADB)) {
+        uint8_t ch;
+        if (tud_cdc_n_read(CDC_ADB, &ch, 1) != 1) {
+            break;
+        }
+        did_work = true;
+
+        if (adb_esc_state == 1) {
+            if (ch == '[') {
+                adb_esc_state = 2;
+                continue;
+            }
+            adb_esc_state = 0;
+        } else if (adb_esc_state == 2) {
+            switch (ch) {
+            case 'A':
+                adb_enqueue_mouse(0, -step);
+                break;
+            case 'B':
+                adb_enqueue_mouse(0, step);
+                break;
+            case 'C':
+                adb_enqueue_mouse(step, 0);
+                break;
+            case 'D':
+                adb_enqueue_mouse(-step, 0);
+                break;
+            default:
+                break;
+            }
+            adb_esc_state = 0;
+            continue;
+        }
+
+        if (ch == 0x1B) {
+            adb_esc_state = 1;
+            continue;
+        }
+
+        if (ch == 0x12) {
+            adb_mouse_buttons ^= ADB_MOUSE_BUTTON_PRIMARY;
+            adb_enqueue_mouse(0, 0);
+            continue;
+        }
+
+        if (ch == '\r' || ch == '\n') {
+            adb_enqueue_key('\r', true);
+            adb_enqueue_key('\r', false);
+            continue;
+        }
+
+        if (ch == '\t' || ch == 0x08 || ch == 0x7F || (ch >= 0x20 && ch <= 0x7E)) {
+            adb_enqueue_key(ch, true);
+            adb_enqueue_key(ch, false);
+        }
+    }
+
+    return did_work;
+}
+
 static inline bool service_txq(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
 
@@ -406,6 +505,7 @@ void app_core_init(const app_core_config_t *cfg) {
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] CDC2=ADB test input (arrow keys, Ctrl+R click, ASCII text)\n");
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
@@ -422,6 +522,11 @@ void app_core_poll(void) {
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    active_start = time_us_32();
+    bool did_adb = poll_cdc_adb();
+    if (did_adb) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 

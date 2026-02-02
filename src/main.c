@@ -7,6 +7,7 @@
 
 #include "app_core.h"
 #include "classic_line.pio.h"
+#include "adb_queue.h"
 #include "video_core.h"
 
 #define PIN_PIXCLK 0
@@ -19,6 +20,8 @@ int main(void) {
     stdio_init_all();
     tud_init(0);
     sleep_ms(1200);
+
+    adb_queue_init();
 
     // SIO GPIO inputs + pulls (sane when Mac is off)
     gpio_init(PIN_PIXCLK); gpio_set_dir(PIN_PIXCLK, GPIO_IN); gpio_disable_pulls(PIN_PIXCLK);

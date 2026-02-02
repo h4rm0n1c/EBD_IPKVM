@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-03: Add a third USB CDC interface (CDC2) for ADB test input and a shared ADB event queue serviced on core1.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
 - 2026-02-03: Base ADB device emulation on hootswitch’s PIO+DMA bus engine and device-side state machine, trimmed to a single keyboard+mouse.
