@@ -31,3 +31,4 @@
 - Observed on hardware: with the Mac off, the ADB bus idles low; on power-up it rises high, then drops low for ~3.979 ms, and about 1 ms later the first host Talk traffic appears.
 - ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.
 - ADB PIO programs now use hootswitch’s device-side bus implementation (GPLv3); license text is stored in `licenses/hootswitch-GPLv3.txt`.
+- Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.

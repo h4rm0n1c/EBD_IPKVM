@@ -83,9 +83,19 @@ static uint adb_offset_tx = 0;
 static int adb_dma_chan = -1;
 
 static volatile uint32_t adb_rx_activity = 0;
+static volatile bool adb_gpio_rise = false;
 
 static adb_device_t adb_devices[2];
 static adb_bus_state_t adb_state;
+
+static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
+    if (gpio != ADB_PIN_RECV) {
+        return;
+    }
+    if (events & GPIO_IRQ_EDGE_RISE) {
+        adb_gpio_rise = true;
+    }
+}
 
 static bool adb_key_queue_push(adb_key_queue_t *queue, uint8_t code) {
     if (queue->count >= ADB_KBD_QUEUE_DEPTH) {
@@ -373,6 +383,7 @@ void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
     gpio_pull_up(ADB_PIN_RECV);
+    gpio_set_irq_enabled_with_callback(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false, adb_gpio_irq_handler);
 
     gpio_init(ADB_PIN_XMIT);
     gpio_set_dir(ADB_PIN_XMIT, GPIO_OUT);
@@ -434,7 +445,9 @@ bool adb_bus_service(void) {
     adb_bus_drain_events();
 
     if (adb_state.phase == ADB_PHASE_ATTENTION) {
-        if (gpio_get(ADB_PIN_RECV)) {
+        if (adb_gpio_rise) {
+            adb_gpio_rise = false;
+            gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
             int64_t delta = absolute_time_diff_us(get_absolute_time(), adb_state.attention_start);
             if (delta >= (int64_t)TIME_RESET_THRESH_US) {
                 adb_bus_reset_devices();
@@ -452,6 +465,8 @@ bool adb_bus_service(void) {
         case ADB_PHASE_IDLE:
             adb_state.phase = ADB_PHASE_ATTENTION;
             adb_state.attention_start = get_absolute_time();
+            adb_gpio_rise = false;
+            gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
             did_work = true;
             break;
         case ADB_PHASE_COMMAND:

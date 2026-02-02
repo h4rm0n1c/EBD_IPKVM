@@ -7,6 +7,7 @@
 - 2026-02-05: Only latch ADB RX activity when a command/listen payload completes to avoid RX-seen spam from idle noise.
 - 2026-02-05: Replace the ADB PIO programs with hootswitch’s device-side bus PIO implementation and add its GPLv3 license under licenses/.
 - 2026-02-05: Shift SRQ pulse timing to the hootswitch device-side PIO flow instead of software-timed pulses.
+- 2026-02-05: Align attention handling to hootswitch’s GPIO rising-edge flow (IRQ-driven) to decide reset vs command.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
