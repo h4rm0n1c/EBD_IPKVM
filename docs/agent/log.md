@@ -33,7 +33,7 @@
 - 2026-02-06: Update the ADB implementation plan with a hootswitch port-status summary and align CDC2 click input docs with Ctrl+R behavior.
 - 2026-02-06: Add driver callbacks for ADB Listen/Flush so device-side behavior matches hootswitch’s driver notification flow.
 - 2026-02-06: Documented an ADB validation checklist (scope + CDC2 input steps) to guide hardware parity verification.
-- 2026-02-07: Restore pico/rand.h usage for seeding the ADB reg3 address table (SDK 2.2.0 includes pico_rand).
+- 2026-02-07: Restore pico/rand.h usage for seeding the ADB reg3 address table and link pico_rand in CMake so the header is on the include path.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

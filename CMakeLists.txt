@@ -32,6 +32,7 @@ target_compile_options(EBD_IPKVM PRIVATE -O3)
 
 target_link_libraries(EBD_IPKVM
     pico_stdlib
+    pico_rand
     pico_multicore
     pico_unique_id
     hardware_pio
