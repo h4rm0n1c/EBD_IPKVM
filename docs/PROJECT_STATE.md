@@ -13,8 +13,8 @@ Macintosh Classic KVM:
   - `GPIO2` HSYNC (PIO input, active-low)
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
-  - `GPIO7` ADB RECV (input via 74LVC245 from Mac ADB data)
-  - `GPIO8` ADB XMIT (output via ULN2803 to Mac ADB data, open-collector)
+  - `GPIO6` ADB RECV (input via 74LVC245 from Mac ADB data; non-inverting)
+  - `GPIO12` ADB XMIT (output via ULN2803 to Mac ADB data; inverted, open-collector)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
@@ -29,6 +29,7 @@ Macintosh Classic KVM:
   - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
   - Mode toggle: `M` switches between test and continuous capture cadence.
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
+- AppleCore (core1) is the time-sensitive Apple I/O service loop: it owns video capture today and will host ADB bus timing/state in the future, while core0 handles USB/CDC and app logic.
 
 ## Host tooling
 - `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PBM frames (use `--pgm` for 8-bit output).
