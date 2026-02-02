@@ -1,95 +1,154 @@
-; ADB bus timing skeleton derived from /opt/adb/hootswitch/firmware/bus.pio.
-; RX uses edge timing sampling (host-style) while TX uses device-style drive.
-; This is intentionally minimal: no protocol/state machine yet.
+;
+; ADB device-side PIO programs adapted from hootswitch (GPLv3).
+; Source: /opt/adb/hootswitch/firmware/bus.pio
+;
+; Copyright (C) 2024 saybur
+;
+; This program is free software: you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation, either version 3 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ; ----------------------------------------------------------------------------
-; RX edge sampling (adapted from hootswitch bus_rx_host)
+; Device TX (Talk responses)
 ; ----------------------------------------------------------------------------
 
-.program adb_bus_rx
+.program bus_tx_dev
+.side_set 1
 
-    out y, 8                    ; load max countdown from TX FIFO via autopull
-    mov x, y                    ; setup for Tlt timeout
-adb_rx_tlt:
-    jmp x-- adb_rx_tlt_nto       ; countdown to max Tlt
-    irq wait 0 rel              ; stop, inform CPU of timeout
-adb_rx_tlt_nto:
-    jmp pin adb_rx_tlt       [4] ; if high, continue waiting for Tlt to end
+	set x, 26       side 0      ; delay 140us (Tlt)
+tx_wt:
+	jmp x-- tx_wt   side 0
 
-.wrap_target
-    mov x, y                    ; setup countdown
-adb_rx_l:
-    jmp pin adb_rx_hs            ; execute jump once pin goes high
-    jmp x-- adb_rx_l             ; otherwise decrement
-    irq wait 0 rel               ; if we get here, timed out low
-adb_rx_hs:
-    in x, 8                      ; store what's left of low count
-    mov x, y                     ; reload countdown for high side of bit
-adb_rx_hi:
-    jmp x-- adb_rx_hnt           ; skip next until we time out
-    irq wait 0 rel               ; timed out, notify CPU of data phase end
-adb_rx_hnt:
-    jmp pin adb_rx_hi            ; loop until pin goes low again
-    in x, 8                      ; pin low, on to next bit: store and loop back
-.wrap
+	nop             side 1 [6]  ; '1' bit low, 35us
+	nop             side 0 [12] ; '1' bit high, 65us
+
+tx_bs:
+	out x, 1        side 1 [5]  ; low 30us, fetch bit value
+	jmp !x tx_0     side 1      ; low +5us, decide if should be released
+	nop             side 0 [1]  ; release now, 10us high (line settle)
+	jmp pin tx_be   side 0 [3]  ; check for collision now, +20us high
+	irq 4 rel       side 0      ; if pin still low, set flag for collision
+tx_end:
+	irq wait 0 rel  side 0      ; idle pin, stop, let CPU know xmit is done
+tx_0:
+	nop             side 1 [5]  ; low +30us
+
+tx_be:
+	jmp !osre tx_bs side 0 [6]  ; +35us high, loop if more data
+
+	jmp tx_end      side 1 [12] ; assert stop bit for 65us then goto end
 
 % c-sdk {
-static inline void adb_bus_rx_pio_config(pio_sm_config *c,
-        uint32_t offset, uint32_t pin_read)
+static inline void bus_tx_dev_pio_config(pio_sm_config *c,
+		uint32_t offset, uint32_t pin_write, uint32_t pin_read)
 {
-    *c = adb_bus_rx_program_get_default_config(offset);
-    sm_config_set_jmp_pin(c, pin_read);
-    sm_config_set_in_shift(c, false, true, 8); // shift left
-    sm_config_set_out_shift(c, true, true, 8); // shift right
-    sm_config_set_clkdiv_int_frac(c, 50, 0); // 0.4us/clk (125 MHz base)
+	*c = bus_tx_dev_program_get_default_config(offset);
+	sm_config_set_sideset_pins(c, pin_write);
+	sm_config_set_jmp_pin(c, pin_read);
+	sm_config_set_out_shift(c, false, true, 8); // shift left (see below)
+	sm_config_set_fifo_join(c, PIO_FIFO_JOIN_TX);
+	sm_config_set_clkdiv_int_frac(c, 625, 0); // 5us/clk
+}
+
+static inline void bus_tx_dev_put(PIO pio, uint8_t sm, uint8_t v)
+{
+	// left justify data (MSB first) via narrow bus writes
+	// a bit cryptic, but see datasheet 3.6.1 for details
+	io_rw_8 *txf = (io_rw_8 *) &(pio->txf[sm]);
+	*txf = v;
+}
+
+static inline void bus_tx_dev_putm(PIO pio, uint8_t sm,
+		volatile uint8_t *v, uint8_t len)
+{
+	io_rw_8 *txf = (io_rw_8 *) &(pio->txf[sm]);
+	for (uint8_t i = 0; i < len; i++) {
+		*txf = *v++;
+	}
 }
 %}
 
 ; ----------------------------------------------------------------------------
-; TX drive (adapted from hootswitch bus_tx_dev)
+; Device RX (Command / Listen)
 ; ----------------------------------------------------------------------------
 
-.program adb_bus_tx
+.program bus_rx_dev
 .side_set 1
 
-    set x, 26       side 0      ; delay 140us (Tlt)
-adb_tx_wt:
-    jmp x-- adb_tx_wt   side 0
+	wait 0 pin 0    side 0      ; discard '1' start bit if needed
+	wait 1 pin 0    side 0
 
-    nop             side 1 [6]  ; '1' bit low, 35us
-    nop             side 0 [12] ; '1' bit high, 65us
+	out x, 8        side 0      ; load the counter for max bits to read
+rx_wh:                          ; "rx, while high"
+	jmp pin rx_whc  side 0      ; while line high countdown at jump target
+	set y, 24       side 0 [14] ; low: ~48-54us to center (reload during wait)
+	in pins, 1      side 0      ;      and then fetch line state
+	wait 1 pin 0    side 0      ; wait for line to go high (might be already)
+	jmp x-- rx_wh   side 0 [1]  ; loop if expecting more data
+	wait 0 pin 0    side 0      ; wait for stop bit low to start
+.wrap_target
+	irq wait 0 rel  side 0      ; notify CPU we are at stop bit
+rx_srq:
+	jmp y-- rx_srq  side 1  [3] ; assert SRQ using leftover Y countdown
+.wrap
 
-adb_tx_bs:
-    out x, 1        side 1 [5]  ; low 30us, fetch bit value
-    jmp !x adb_tx_0  side 1     ; low +5us, decide if should be released
-    nop             side 0 [1]  ; release now, 10us high (line settle)
-    jmp pin adb_tx_be side 0 [3]; check for collision now, +20us high
-    irq 4 rel       side 0      ; if pin still low, set flag for collision
-adb_tx_end:
-    irq wait 0 rel  side 0      ; idle pin, stop, let CPU know xmit is done
-adb_tx_0:
-    nop             side 1 [5]  ; low +30us
-
-adb_tx_be:
-    jmp !osre adb_tx_bs side 0 [6] ; +35us high, loop if more data
-
-    jmp adb_tx_end   side 1 [12] ; assert stop bit for 65us then goto end
+rx_whc:                         ; "rx while high count"
+	jmp y-- rx_wh   side 0      ; if not timed out, check line again
+	irq wait 0 rel  side 0      ; timed out
 
 % c-sdk {
-static inline void adb_bus_tx_pio_config(pio_sm_config *c,
-        uint32_t offset, uint32_t pin_write, uint32_t pin_read)
+static inline void bus_rx_dev_pio_config(pio_sm_config *c,
+		uint32_t offset, uint32_t pin_write, uint32_t pin_read)
 {
-    *c = adb_bus_tx_program_get_default_config(offset);
-    sm_config_set_sideset_pins(c, pin_write);
-    sm_config_set_jmp_pin(c, pin_read);
-    sm_config_set_out_shift(c, false, true, 8); // shift left (MSB first)
-    sm_config_set_fifo_join(c, PIO_FIFO_JOIN_TX);
-    sm_config_set_clkdiv_int_frac(c, 625, 0); // 5us/clk (125 MHz base)
+	*c = bus_rx_dev_program_get_default_config(offset);
+	sm_config_set_jmp_pin(c, pin_read);
+	sm_config_set_in_pins(c, pin_read);
+	sm_config_set_sideset_pins(c, pin_write);
+	sm_config_set_in_shift(c, false, true, 8); // shift left
+	sm_config_set_out_shift(c, true, true, 8); // shift right
+	sm_config_set_clkdiv_int_frac(c, 375, 0); // 3us/clk
 }
 
-static inline void adb_bus_tx_put(PIO pio, uint8_t sm, uint8_t v)
+static inline uint8_t bus_rx_dev_get(PIO pio, uint8_t sm)
 {
-    io_rw_8 *txf = (io_rw_8 *) &(pio->txf[sm]);
-    *txf = v;
+	io_rw_8 *rxf = (io_rw_8 *) &(pio->rxf[sm]);
+	uint8_t v = *rxf;
+	return v;
+}
+%}
+
+; ----------------------------------------------------------------------------
+; Device attention detection
+; ----------------------------------------------------------------------------
+
+.program bus_atn_dev
+
+	out y, 32                   ; pull in the countdown value
+atn_no:
+	wait 0 pin 0                ; wait for the line to drive low
+	mov x, y                    ; reset countdown
+atn_cnt:
+	jmp pin atn_no              ; if pin goes high before expire, try again
+	jmp x-- atn_cnt             ; tick down
+	irq wait 0 rel              ; threshold met, let CPU know attention present
+
+% c-sdk {
+static inline void bus_atn_dev_pio_config(pio_sm_config *c,
+		uint32_t offset, uint32_t pin_read)
+{
+	*c = bus_atn_dev_program_get_default_config(offset);
+	sm_config_set_jmp_pin(c, pin_read);
+	sm_config_set_in_pins(c, pin_read);
+	sm_config_set_out_shift(c, true, true, 32); // shift right
+	sm_config_set_clkdiv_int_frac(c, 125, 0); // 1us/clk
 }
 %}

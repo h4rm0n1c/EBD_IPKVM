@@ -16,6 +16,7 @@
 ## Implementation notes
 - ADB should follow the same core split as the video pipeline (AppleCore): PIO for timing and core1 for RX/TX state handling, with core0 only enqueueing host commands.
 - Core1 maintains a simple ADB device model (keyboard + mouse) with four registers, Talk/Listen parsing, and SRQ gating.
+- ADB timing on PIO uses the hootswitch device-side bus implementation (GPLv3), with the license captured under `licenses/hootswitch-GPLv3.txt`.
 
 ## Register model (current firmware)
 

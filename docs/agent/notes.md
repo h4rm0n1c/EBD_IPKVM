@@ -25,8 +25,9 @@
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - ADB CDC2 test input currently treats ASCII bytes as key events (press+release) and uses arrow-key escape sequences plus `Ctrl+R` (`0x12`) to toggle the primary mouse button.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
-- ADB SRQ pulses are now generated in software (timed low pulse on the bus) and gated to idle windows; if this timing proves unstable, move SRQ handling into PIO once RX/TX timing is finalized.
+- ADB SRQ pulses are now handled by the hootswitch device-side PIO (bus_rx_dev), removing the prior software-timed SRQ pulse logic.
 - CDC2 ASCII input now maps through the US ADB keycode table (no modifier synthesis yet), so shifted characters will be sent as their unshifted keycodes for early testing.
 - ADB RX is now held off until a low→high transition on the bus; the RX state machine stays disabled and FIFOs are cleared while the line is held low to avoid phantom RX activity when the Mac is off.
 - Observed on hardware: with the Mac off, the ADB bus idles low; on power-up it rises high, then drops low for ~3.979 ms, and about 1 ms later the first host Talk traffic appears.
 - ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.
+- ADB PIO programs now use hootswitch’s device-side bus implementation (GPLv3); license text is stored in `licenses/hootswitch-GPLv3.txt`.
