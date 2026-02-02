@@ -16,6 +16,7 @@
 - 2026-02-05: Add hootswitch-style talk-register locking so Talk payloads are protected during updates.
 - 2026-02-05: Honor hootswitch reg3 handler ID gating by suppressing reg3 Talk when the handler is 0xFF.
 - 2026-02-05: Gate SRQ pending flags on reg0 queueing only when SRQ is enabled, matching hootswitch device behavior.
+- 2026-02-05: Match hootswitch Talk register length rules by treating Listen writes under 2 bytes as empty and clearing SRQ for reg0.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

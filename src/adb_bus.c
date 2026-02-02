@@ -458,6 +458,16 @@ static void adb_bus_apply_listen(uint8_t bytes) {
     if (bytes > ADB_MAX_REG_BYTES) {
         bytes = ADB_MAX_REG_BYTES;
     }
+    if (bytes < 2) {
+        dev->regs[reg].len = 0;
+        dev->regs[reg].keep = false;
+        if (reg == 0) {
+            dev->srq_pending = false;
+            adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+        }
+        sem_release(&dev->talk_sem);
+        return;
+    }
     dev->regs[reg].len = bytes;
     dev->regs[reg].keep = true;
     for (uint8_t i = 0; i < bytes; i++) {
