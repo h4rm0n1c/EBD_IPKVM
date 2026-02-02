@@ -34,6 +34,7 @@
 - ADB reg3 Talk responses now use hootswitch’s randomized low nibble (not the device’s current address) to match hootswitch address-resolution behavior.
 - Talk register payloads are now guarded by a hootswitch-style semaphore; Talk commands will treat locked registers as empty to avoid partial reads.
 - Reg3 Talk responses are suppressed if the device handler ID is 0xFF (hootswitch-style “no reg3” gating).
+- SRQ pending flags are only asserted when SRQ is enabled on the device, matching hootswitch reg0 queue behavior.
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.

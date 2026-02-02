@@ -212,8 +212,10 @@ static void adb_bus_queue_keyboard_data(void) {
     kbd->regs[0].data[1] = second;
     kbd->regs[0].len = 2;
     kbd->regs[0].keep = false;
-    kbd->srq_pending = true;
-    adb_state.srq_flags |= (uint16_t)(1u << kbd->address);
+    if (kbd->srq_enabled) {
+        kbd->srq_pending = true;
+        adb_state.srq_flags |= (uint16_t)(1u << kbd->address);
+    }
     sem_release(&kbd->talk_sem);
 }
 
@@ -247,8 +249,10 @@ static void adb_bus_queue_mouse_data(void) {
     mouse->regs[0].data[1] = (uint8_t)dy;
     mouse->regs[0].len = 2;
     mouse->regs[0].keep = false;
-    mouse->srq_pending = true;
-    adb_state.srq_flags |= (uint16_t)(1u << mouse->address);
+    if (mouse->srq_enabled) {
+        mouse->srq_pending = true;
+        adb_state.srq_flags |= (uint16_t)(1u << mouse->address);
+    }
     adb_state.mouse_dx = 0;
     adb_state.mouse_dy = 0;
     sem_release(&mouse->talk_sem);
