@@ -87,6 +87,8 @@ typedef struct {
     uint32_t dbg_abrt;
     uint32_t dbg_abrt_time;
     uint32_t dbg_err;
+    uint32_t dbg_talk_empty;
+    uint32_t dbg_talk_bytes;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -192,6 +194,8 @@ static void adb_bus_reset_devices(void) {
     adb_state.dbg_abrt = 0;
     adb_state.dbg_abrt_time = 0;
     adb_state.dbg_err = 0;
+    adb_state.dbg_talk_empty = 0;
+    adb_state.dbg_talk_bytes = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -339,11 +343,19 @@ static void adb_bus_execute_command(void) {
             adb_bus_prepare_reg3(dev, handler_id);
         }
         if (reg == 3) {
+            if (dev->regs[reg].len == 0) {
+                adb_state.dbg_talk_empty++;
+                adb_pio_atn_start();
+                adb_state.phase = ADB_PHASE_IDLE;
+                return;
+            }
+            adb_state.dbg_talk_bytes += dev->regs[reg].len;
             adb_pio_tx_start();
             bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
             adb_state.phase = ADB_PHASE_TALK;
         } else if (sem_try_acquire(&dev->talk_sem)) {
             if (dev->regs[reg].len == 0) {
+                adb_state.dbg_talk_empty++;
                 if (reg == 0) {
                     dev->srq_pending = false;
                     adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
@@ -353,6 +365,7 @@ static void adb_bus_execute_command(void) {
                 adb_state.phase = ADB_PHASE_IDLE;
                 return;
             }
+            adb_state.dbg_talk_bytes += dev->regs[reg].len;
             adb_state.talk_lock_held = true;
             adb_pio_tx_start();
             bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
@@ -638,6 +651,8 @@ void adb_bus_get_stats(adb_bus_stats_t *out) {
     out->aborts = __atomic_load_n(&adb_state.dbg_abrt, __ATOMIC_ACQUIRE);
     out->abort_time = __atomic_load_n(&adb_state.dbg_abrt_time, __ATOMIC_ACQUIRE);
     out->errors = __atomic_load_n(&adb_state.dbg_err, __ATOMIC_ACQUIRE);
+    out->talk_empty = __atomic_load_n(&adb_state.dbg_talk_empty, __ATOMIC_ACQUIRE);
+    out->talk_bytes = __atomic_load_n(&adb_state.dbg_talk_bytes, __ATOMIC_ACQUIRE);
 }
 
 bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, uint8_t stored_id)) {

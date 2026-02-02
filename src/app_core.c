@@ -255,6 +255,9 @@ static void emit_debug_state(void) {
                     (unsigned long)adb_bus_stats.aborts,
                     (unsigned long)adb_bus_stats.errors,
                     (unsigned long)adb_bus_stats.abort_time);
+    cdc_ctrl_printf("[EBD_IPKVM] dbg adb talk_empty=%lu talk_bytes=%lu\n",
+                    (unsigned long)adb_bus_stats.talk_empty,
+                    (unsigned long)adb_bus_stats.talk_bytes);
 }
 
 static bool poll_cdc_commands(void) {
