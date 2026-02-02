@@ -248,6 +248,13 @@ static void emit_debug_state(void) {
                     (unsigned long)adb_stats.drops,
                     (unsigned long)adb_bus_stats.lock_fails,
                     (unsigned long)adb_bus_stats.collisions);
+    cdc_ctrl_printf("[EBD_IPKVM] dbg adb atn=%lu atnS=%lu rst=%lu abrt=%lu err=%lu abrt_t=%lu\n",
+                    (unsigned long)adb_bus_stats.attentions,
+                    (unsigned long)adb_bus_stats.attention_short,
+                    (unsigned long)adb_bus_stats.resets,
+                    (unsigned long)adb_bus_stats.aborts,
+                    (unsigned long)adb_bus_stats.errors,
+                    (unsigned long)adb_bus_stats.abort_time);
 }
 
 static bool poll_cdc_commands(void) {

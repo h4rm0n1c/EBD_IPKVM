@@ -12,6 +12,7 @@ pico_sdk_init()
 add_executable(EBD_IPKVM
     src/adb_bus.c
     src/adb_core.c
+    src/adb_driver.c
     src/adb_queue.c
     src/app_core.c
     src/core_bridge.c
