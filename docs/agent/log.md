@@ -25,6 +25,7 @@
 - 2026-02-05: Buffer mouse reports into a per-device reg0 queue so Talk 0 drain matches hootswitch queue semantics.
 - 2026-02-05: Buffer keyboard reg0 reports into a per-device queue so Talk 0 drain mirrors hootswitch queue semantics.
 - 2026-02-05: Allow reg0 pop callbacks to carry a queue context pointer for hootswitch-style driver-owned queues.
+- 2026-02-06: Wired ADB driver callbacks (handler ID + reg0 pop) through a new adb_driver layer, and shifted keyboard/mouse queue handling into that driver so callbacks remain driver-owned across bus resets.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

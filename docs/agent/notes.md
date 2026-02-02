@@ -44,6 +44,7 @@
 - Mouse reg0 payloads are now buffered in a per-device queue so Talk 0 drain follows hootswitch queue semantics.
 - Keyboard reg0 payloads are now buffered in a per-device queue so Talk 0 drain follows hootswitch queue semantics.
 - Reg0 pop callbacks now accept a queue-context pointer so driver-owned queues can supply Talk 0 payloads.
+- ADB reg0 pop + handler ID callbacks are now bound via the adb_driver layer, and bus resets no longer overwrite those callbacks, preserving driver-owned queue wiring.
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.

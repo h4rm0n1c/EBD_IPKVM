@@ -11,15 +11,13 @@
 
 #include "adb_bus.pio.h"
 #include "adb_core.h"
+#include "adb_driver.h"
 #include "adb_queue.h"
 
 #define ADB_PIN_RECV 6
 #define ADB_PIN_XMIT 12
 
 #define ADB_MAX_REG_BYTES 8u
-#define ADB_KBD_QUEUE_DEPTH 16u
-#define ADB_MOUSE_QUEUE_DEPTH 16u
-
 #define PIO_ATN_MIN 386u
 #define PIO_CMD_OFFSET 2u
 #define TIME_RESET_THRESH_US 400u
@@ -62,27 +60,6 @@ typedef struct adb_device {
 } adb_device_t;
 
 typedef struct {
-    uint8_t data[ADB_KBD_QUEUE_DEPTH];
-    uint8_t head;
-    uint8_t tail;
-    uint8_t count;
-} adb_key_queue_t;
-
-typedef struct {
-    uint8_t data[ADB_KBD_QUEUE_DEPTH][2];
-    uint8_t head;
-    uint8_t tail;
-    uint8_t count;
-} adb_kbd_queue_t;
-
-typedef struct {
-    uint8_t data[ADB_MOUSE_QUEUE_DEPTH][2];
-    uint8_t head;
-    uint8_t tail;
-    uint8_t count;
-} adb_mouse_queue_t;
-
-typedef struct {
     adb_phase_t phase;
     uint8_t current_cmd;
     adb_cmd_t current_type;
@@ -92,12 +69,7 @@ typedef struct {
 
     uint8_t listen_buf[ADB_MAX_REG_BYTES];
 
-    adb_key_queue_t key_queue;
-    adb_kbd_queue_t kbd_queue;
-    adb_mouse_queue_t mouse_queue;
-    int16_t mouse_dx;
-    int16_t mouse_dy;
-    uint8_t mouse_buttons;
+    adb_driver_state_t driver;
     uint16_t srq_flags;
     bool talk_lock_held;
     uint32_t dbg_lock_fail;
@@ -129,35 +101,10 @@ static uint8_t adb_rand_idx = 0;
 static adb_device_t adb_devices[2];
 static adb_bus_state_t adb_state;
 
-static bool adb_key_queue_pop(adb_key_queue_t *queue, uint8_t *code);
+static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler_id);
 
-static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id) {
-    (void)address;
-    return stored_id;
-}
-
-static uint8_t adb_bus_get_handler_id(const adb_device_t *dev) {
-    if (dev->handler_id_fn) {
-        return dev->handler_id_fn(dev->address, dev->handler_id);
-    }
-    return dev->handler_id;
-}
-
-static bool adb_kbd_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
-    adb_kbd_queue_t *queue = (adb_kbd_queue_t *)dev->reg0_queue_ctx;
-    if (!queue) {
-        return false;
-    }
-    return adb_kbd_queue_pop(queue, first, second);
-}
-
-static bool adb_mouse_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
-    adb_mouse_queue_t *queue = (adb_mouse_queue_t *)dev->reg0_queue_ctx;
-    if (!queue) {
-        return false;
-    }
-    return adb_mouse_queue_pop(queue, first, second);
-}
+static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id);
+static uint8_t adb_bus_get_handler_id(const adb_device_t *dev);
 
 static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
     if (gpio != ADB_PIN_RECV) {
@@ -191,75 +138,21 @@ static void adb_gpio_rise_disarm(void) {
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
 }
 
-static bool adb_key_queue_push(adb_key_queue_t *queue, uint8_t code) {
-    if (queue->count >= ADB_KBD_QUEUE_DEPTH) {
-        return false;
-    }
-    queue->data[queue->head] = code;
-    queue->head = (uint8_t)((queue->head + 1u) % ADB_KBD_QUEUE_DEPTH);
-    queue->count++;
-    return true;
+static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id) {
+    (void)address;
+    return stored_id;
 }
 
-static bool adb_key_queue_pop(adb_key_queue_t *queue, uint8_t *code) {
-    if (!queue->count) {
-        return false;
+static uint8_t adb_bus_get_handler_id(const adb_device_t *dev) {
+    if (dev->handler_id_fn) {
+        return dev->handler_id_fn(dev->address, dev->handler_id);
     }
-    *code = queue->data[queue->tail];
-    queue->tail = (uint8_t)((queue->tail + 1u) % ADB_KBD_QUEUE_DEPTH);
-    queue->count--;
-    return true;
-}
-
-static bool adb_kbd_queue_push(adb_kbd_queue_t *queue, uint8_t first, uint8_t second) {
-    if (queue->count >= ADB_KBD_QUEUE_DEPTH) {
-        return false;
-    }
-    queue->data[queue->head][0] = first;
-    queue->data[queue->head][1] = second;
-    queue->head = (uint8_t)((queue->head + 1u) % ADB_KBD_QUEUE_DEPTH);
-    queue->count++;
-    return true;
-}
-
-static bool adb_kbd_queue_pop(adb_kbd_queue_t *queue, uint8_t *first, uint8_t *second) {
-    if (!queue->count) {
-        return false;
-    }
-    *first = queue->data[queue->tail][0];
-    *second = queue->data[queue->tail][1];
-    queue->tail = (uint8_t)((queue->tail + 1u) % ADB_KBD_QUEUE_DEPTH);
-    queue->count--;
-    return true;
-}
-
-static bool adb_mouse_queue_push(adb_mouse_queue_t *queue, uint8_t first, uint8_t second) {
-    if (queue->count >= ADB_MOUSE_QUEUE_DEPTH) {
-        return false;
-    }
-    queue->data[queue->head][0] = first;
-    queue->data[queue->head][1] = second;
-    queue->head = (uint8_t)((queue->head + 1u) % ADB_MOUSE_QUEUE_DEPTH);
-    queue->count++;
-    return true;
-}
-
-static bool adb_mouse_queue_pop(adb_mouse_queue_t *queue, uint8_t *first, uint8_t *second) {
-    if (!queue->count) {
-        return false;
-    }
-    *first = queue->data[queue->tail][0];
-    *second = queue->data[queue->tail][1];
-    queue->tail = (uint8_t)((queue->tail + 1u) % ADB_MOUSE_QUEUE_DEPTH);
-    queue->count--;
-    return true;
+    return dev->handler_id;
 }
 
 static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler_id) {
     dev->address = address;
     dev->handler_id = handler_id;
-    dev->handler_id_fn = adb_default_handler_id;
-    dev->reg0_queue_ctx = NULL;
     dev->srq_enabled = true;
     dev->collision = false;
     dev->srq_pending = false;
@@ -273,22 +166,7 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
 static void adb_bus_reset_devices(void) {
     adb_device_reset(&adb_devices[0], 2, 2);
     adb_device_reset(&adb_devices[1], 3, 1);
-    adb_devices[0].reg0_pop = adb_kbd_reg0_pop;
-    adb_devices[1].reg0_pop = adb_mouse_reg0_pop;
-    adb_devices[0].reg0_queue_ctx = &adb_state.kbd_queue;
-    adb_devices[1].reg0_queue_ctx = &adb_state.mouse_queue;
-    adb_state.key_queue.head = 0;
-    adb_state.key_queue.tail = 0;
-    adb_state.key_queue.count = 0;
-    adb_state.kbd_queue.head = 0;
-    adb_state.kbd_queue.tail = 0;
-    adb_state.kbd_queue.count = 0;
-    adb_state.mouse_queue.head = 0;
-    adb_state.mouse_queue.tail = 0;
-    adb_state.mouse_queue.count = 0;
-    adb_state.mouse_dx = 0;
-    adb_state.mouse_dy = 0;
-    adb_state.mouse_buttons = 0;
+    adb_driver_reset(&adb_state.driver);
     adb_state.srq_flags = 0;
     adb_state.talk_lock_held = false;
     adb_state.dbg_lock_fail = 0;
@@ -338,59 +216,10 @@ static void adb_bus_drain_events(void) {
 
     while (adb_queue_pop(&event)) {
         adb_core_record_event(event.type);
-        switch (event.type) {
-        case ADB_EVENT_KEY: {
-            uint8_t code = event.data.key.code;
-            if (!event.data.key.down) {
-                code |= 0x80u;
-            }
-            (void)adb_key_queue_push(&adb_state.key_queue, code);
-            break;
-        }
-        case ADB_EVENT_MOUSE:
-            adb_state.mouse_dx += event.data.mouse.dx;
-            adb_state.mouse_dy += event.data.mouse.dy;
-            adb_state.mouse_buttons = event.data.mouse.buttons;
-            break;
-        default:
-            break;
-        }
+        adb_driver_handle_event(&adb_state.driver, &event, &adb_state.dbg_lock_fail);
     }
 
-    if (adb_state.key_queue.count != 0) {
-        uint8_t first = 0xFFu;
-        uint8_t second = 0xFFu;
-        if (adb_key_queue_pop(&adb_state.key_queue, &first)) {
-            (void)adb_key_queue_pop(&adb_state.key_queue, &second);
-            if (!adb_kbd_queue_push(&adb_state.kbd_queue, first, second)) {
-                adb_state.dbg_lock_fail++;
-            }
-        }
-    }
-
-    if (adb_state.mouse_dx != 0 || adb_state.mouse_dy != 0) {
-        int16_t dx = adb_state.mouse_dx;
-        int16_t dy = adb_state.mouse_dy;
-        if (dx > 127) {
-            dx = 127;
-        } else if (dx < -127) {
-            dx = -127;
-        }
-        if (dy > 127) {
-            dy = 127;
-        } else if (dy < -127) {
-            dy = -127;
-        }
-        uint8_t buttons = (adb_state.mouse_buttons & 0x01u) ? 0x80u : 0x00u;
-        uint8_t first = (uint8_t)buttons | ((uint8_t)dx & 0x7Fu);
-        uint8_t second = (uint8_t)dy;
-        if (adb_mouse_queue_push(&adb_state.mouse_queue, first, second)) {
-            adb_state.mouse_dx = 0;
-            adb_state.mouse_dy = 0;
-        } else {
-            adb_state.dbg_lock_fail++;
-        }
-    }
+    adb_driver_flush(&adb_state.driver, &adb_state.dbg_lock_fail);
 
     adb_bus_try_drain_reg0(&adb_devices[0]);
     adb_bus_try_drain_reg0(&adb_devices[1]);
@@ -614,6 +443,7 @@ void adb_bus_init(void) {
 
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();
+    adb_driver_init(&adb_state.driver);
     adb_state.phase = ADB_PHASE_IDLE;
     adb_state.talk_lock_held = false;
     adb_pio_atn_start();
@@ -779,4 +609,11 @@ bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, ui
     dev->reg0_pop = fn;
     dev->reg0_queue_ctx = queue_ctx;
     return true;
+}
+
+void *adb_bus_get_reg0_ctx(struct adb_device *dev) {
+    if (!dev) {
+        return NULL;
+    }
+    return dev->reg0_queue_ctx;
 }
