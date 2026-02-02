@@ -21,6 +21,7 @@
 - 2026-02-05: Add hootswitch-style lock/collision counters and expose them via the CDC debug status line.
 - 2026-02-05: Source reg3 handler IDs via a callback to allow hootswitch-style dynamic handler selection.
 - 2026-02-05: Drain reg0 from per-device pop callbacks only when empty and the lock is available (hootswitch queue-drain semantics).
+- 2026-02-05: Add setters to bind per-device reg0 pop and handler-id callbacks, enabling hootswitch-style driver-owned queue draining.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

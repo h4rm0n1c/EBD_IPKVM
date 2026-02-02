@@ -15,6 +15,7 @@
 - 2026-02-05: Provide hootswitch-style debug counters for lock failures/collisions in the ADB bus and surface them in CDC debug output.
 - 2026-02-05: Resolve reg3 handler IDs via a callback to match hootswitch’s dynamic handler selection.
 - 2026-02-05: Implement hootswitch-style reg0 queue drain via per-device pop callbacks that only fill reg0 when empty and unlocked.
+- 2026-02-05: Expose setter APIs for reg0 pop and handler ID callbacks to allow hootswitch-style driver integration.
 - 2026-02-03: Add a third USB CDC interface (CDC2) for ADB test input and a shared ADB event queue serviced on core1.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.

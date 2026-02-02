@@ -40,6 +40,7 @@
 - ADB bus now tracks hootswitch-style lock-failure and collision counters; they are exposed in the CDC debug output.
 - Reg3 handler IDs are now sourced via a callback, matching hootswitch’s dynamic handler selection.
 - Reg0 queue drain now uses per-device pop callbacks and only fills when reg0 is empty and the lock is available (hootswitch queue-drain semantics).
+- Setter APIs are available to bind per-device reg0 pop and handler-ID callbacks for hootswitch-style driver queue integration.
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.

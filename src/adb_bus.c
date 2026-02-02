@@ -675,3 +675,21 @@ void adb_bus_get_stats(adb_bus_stats_t *out) {
     out->lock_fails = __atomic_load_n(&adb_state.dbg_lock_fail, __ATOMIC_ACQUIRE);
     out->collisions = __atomic_load_n(&adb_state.dbg_collision, __ATOMIC_ACQUIRE);
 }
+
+bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, uint8_t stored_id)) {
+    adb_device_t *dev = adb_bus_find_device(address);
+    if (!dev) {
+        return false;
+    }
+    dev->handler_id_fn = fn ? fn : adb_default_handler_id;
+    return true;
+}
+
+bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, uint8_t *first, uint8_t *second)) {
+    adb_device_t *dev = adb_bus_find_device(address);
+    if (!dev) {
+        return false;
+    }
+    dev->reg0_pop = fn;
+    return true;
+}
