@@ -27,3 +27,4 @@
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
 - ADB SRQ pulses are now generated in software (timed low pulse on the bus) and gated to idle windows; if this timing proves unstable, move SRQ handling into PIO once RX/TX timing is finalized.
 - CDC2 ASCII input now maps through the US ADB keycode table (no modifier synthesis yet), so shifted characters will be sent as their unshifted keycodes for early testing.
+- ADB RX is now held off until a low→high transition on the bus; the RX state machine stays disabled and FIFOs are cleared while the line is held low to avoid phantom RX activity when the Mac is off.

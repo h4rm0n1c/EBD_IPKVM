@@ -99,6 +99,7 @@ static uint adb_sm_tx = 0;
 static uint adb_offset_rx = 0;
 static uint adb_offset_tx = 0;
 static bool adb_rx_enabled = false;
+static bool adb_last_line_high = true;
 
 static volatile uint32_t adb_rx_activity = 0;
 
@@ -454,8 +455,8 @@ void adb_bus_init(void) {
     adb_bus_rx_pio_config(&rx_cfg, adb_offset_rx, ADB_PIN_RECV);
     pio_sm_init(adb_pio, adb_sm_rx, adb_offset_rx, &rx_cfg);
     pio_sm_put(adb_pio, adb_sm_rx, ADB_RX_COUNTDOWN);
-    pio_sm_set_enabled(adb_pio, adb_sm_rx, true);
-    adb_rx_enabled = true;
+    pio_sm_set_enabled(adb_pio, adb_sm_rx, false);
+    adb_rx_enabled = false;
 
     pio_sm_config tx_cfg;
     adb_bus_tx_pio_config(&tx_cfg, adb_offset_tx, ADB_PIN_XMIT, ADB_PIN_RECV);
@@ -468,6 +469,7 @@ void adb_bus_init(void) {
     adb_state.attention_active = false;
     adb_state.tx_active = false;
     adb_state.srq_active = false;
+    adb_last_line_high = gpio_get(ADB_PIN_RECV);
     adb_state.srq_next_allowed = get_absolute_time();
     adb_bus_reset_devices();
     adb_bus_rx_reset();
@@ -477,6 +479,16 @@ bool adb_bus_service(void) {
     bool did_work = false;
     bool line_high = gpio_get(ADB_PIN_RECV);
 
+    if (!line_high) {
+        if (adb_rx_enabled) {
+            pio_sm_set_enabled(adb_pio, adb_sm_rx, false);
+            adb_rx_enabled = false;
+        }
+        pio_sm_clear_fifos(adb_pio, adb_sm_rx);
+        pio_interrupt_clear(adb_pio, ADB_RX_TIMEOUT_IRQ);
+        adb_state.attention_active = false;
+    }
+
     if (!adb_rx_enabled && line_high && !adb_state.tx_active && !adb_state.srq_active) {
         pio_sm_restart(adb_pio, adb_sm_rx);
         pio_sm_put(adb_pio, adb_sm_rx, ADB_RX_COUNTDOWN);
@@ -484,7 +496,7 @@ bool adb_bus_service(void) {
         adb_rx_enabled = true;
     }
 
-    if (!line_high && !adb_state.attention_active && adb_state.phase == ADB_PHASE_IDLE) {
+    if (!line_high && adb_last_line_high && adb_state.phase == ADB_PHASE_IDLE) {
         adb_state.attention_active = true;
         adb_state.attention_start = get_absolute_time();
         adb_state.phase = ADB_PHASE_ATTENTION;
@@ -564,6 +576,7 @@ bool adb_bus_service(void) {
         }
     }
 
+    adb_last_line_high = line_high;
     return did_work;
 }
 
