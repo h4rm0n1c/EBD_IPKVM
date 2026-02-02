@@ -474,6 +474,9 @@ void adb_bus_init(void) {
     adb_sm = pio_claim_unused_sm(adb_pio, true);
     adb_dma_chan = dma_claim_unused_channel(true);
 
+    pio_sm_set_pindirs_with_mask(adb_pio, adb_sm, 1u << ADB_PIN_XMIT, 1u << ADB_PIN_XMIT);
+    pio_sm_set_pins_with_mask(adb_pio, adb_sm, 0u, 1u << ADB_PIN_XMIT);
+
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();
     adb_driver_init(&adb_state.driver);
