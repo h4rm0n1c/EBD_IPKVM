@@ -38,34 +38,40 @@ def main() -> int:
                         help="CDC control device path (CDC1 by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")
+    parser.add_argument("--no-read", action="store_true",
+                        help="Skip reading responses after sending.")
+    parser.add_argument("--no-setup", action="store_true",
+                        help="Skip raw mode and DTR/RTS setup.")
     args = parser.parse_args()
 
-    if args.read_secs <= 0:
+    if not args.no_read and args.read_secs <= 0:
         raise SystemExit("--read-secs must be > 0")
 
     fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY)
     try:
-        set_raw_and_dtr(fd)
+        if not args.no_setup:
+            set_raw_and_dtr(fd)
         os.write(fd, args.cmd.encode("ascii"))
-        end = time.time() + args.read_secs
-        buf = bytearray()
-        while time.time() < end:
-            r, _, _ = select.select([fd], [], [], 0.25)
-            if not r:
-                continue
-            chunk = os.read(fd, 4096)
-            if not chunk:
-                continue
-            buf.extend(chunk)
-            while b"\n" in buf:
-                line, _, remainder = buf.partition(b"\n")
-                buf = bytearray(remainder)
-                text = line.decode("utf-8", errors="replace")
-                print(text)
-        if buf:
-            text = buf.decode("utf-8", errors="replace")
-            if text.strip():
-                print(text)
+        if not args.no_read:
+            end = time.time() + args.read_secs
+            buf = bytearray()
+            while time.time() < end:
+                r, _, _ = select.select([fd], [], [], 0.25)
+                if not r:
+                    continue
+                chunk = os.read(fd, 4096)
+                if not chunk:
+                    continue
+                buf.extend(chunk)
+                while b"\n" in buf:
+                    line, _, remainder = buf.partition(b"\n")
+                    buf = bytearray(remainder)
+                    text = line.decode("utf-8", errors="replace")
+                    print(text)
+            if buf:
+                text = buf.decode("utf-8", errors="replace")
+                if text.strip():
+                    print(text)
     finally:
         os.close(fd)
 
