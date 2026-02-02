@@ -4,6 +4,7 @@
 - 2026-02-08: Acknowledge all ADB GPIO IRQ event bits in the raw handler to prevent stuck IRQs (possible CDC freeze) while still latching rise events.
 - 2026-02-08: Set the ADB TX PIO pin direction/output mask on init (hootswitch-style) so the state machine can actively drive GPIO12 through the ULN2803.
 - 2026-02-08: Add ADB Talk debug counters (empty responses + total bytes) to confirm when Talk responses are actually emitted on the wire.
+- 2026-02-08: Disable the ADB GPIO rise interrupt inside the raw IRQ handler (hootswitch-style) to avoid repeated IRQ storms that can freeze the core.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

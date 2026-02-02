@@ -129,6 +129,7 @@ static void adb_gpio_irq_handler(void) {
     gpio_acknowledge_irq(ADB_PIN_RECV, events);
     if (events & GPIO_IRQ_EDGE_RISE) {
         adb_gpio_rise = true;
+        gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
     }
 }
 

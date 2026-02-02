@@ -56,3 +56,4 @@
 - The ADB raw IRQ handler must acknowledge all pending GPIO IRQ bits for the pin; leaving an unacked edge can retrigger the IRQ and starve the main loop (seen as a CDC freeze).
 - PIO must explicitly set the ADB TX pin direction/output mask (GPIO12) after claiming the state machine; without that, the PIO sideset will not drive the ULN2803.
 - ADB Talk debug counters (empty responses + total bytes) now report if Talk replies are actually being emitted.
+- ADB GPIO rise IRQs should disable themselves in the raw handler (hootswitch-style) to avoid IRQ storms that can stall the core.
