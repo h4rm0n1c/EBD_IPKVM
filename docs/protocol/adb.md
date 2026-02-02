@@ -30,6 +30,11 @@
 - **Register 2**: reserved for modifiers/LED state (host Listen updates stored verbatim).
 - **Register 3 (Talk)**: `0b01SRAAAA` (bit 5 = SRQ enable, bit 6 = exceptional event, bits 0-3 = address), followed by handler ID.
 
+#### CDC2 ASCII → ADB keycodes (current mapping)
+- The CDC2 test channel maps printable ASCII to the US ADB keycode set.
+- Uppercase letters map to their lowercase keycode without modifiers.
+- Enter/Return maps to ADB `0x24`, Tab to `0x30`, Space to `0x31`, Escape to `0x35`, and Backspace/Delete (`0x08`/`0x7F`) to `0x33`.
+
 ### Mouse (default address 3)
 - **Register 0**: two bytes.
   - Byte 0: bit 7 = button 0 state (1 = pressed), bits 0-6 = X delta (signed 7-bit).

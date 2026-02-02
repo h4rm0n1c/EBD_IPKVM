@@ -225,17 +225,17 @@ static void adb_bus_drain_events(void) {
         adb_core_record_event(event.type);
         switch (event.type) {
         case ADB_EVENT_KEY: {
-            uint8_t code = event.key.code;
-            if (!event.key.down) {
+            uint8_t code = event.data.key.code;
+            if (!event.data.key.down) {
                 code |= 0x80u;
             }
             (void)adb_key_queue_push(&adb_state.key_queue, code);
             break;
         }
         case ADB_EVENT_MOUSE:
-            adb_state.mouse_dx += event.mouse.dx;
-            adb_state.mouse_dy += event.mouse.dy;
-            adb_state.mouse_buttons = event.mouse.buttons;
+            adb_state.mouse_dx += event.data.mouse.dx;
+            adb_state.mouse_dy += event.data.mouse.dy;
+            adb_state.mouse_buttons = event.data.mouse.buttons;
             break;
         default:
             break;

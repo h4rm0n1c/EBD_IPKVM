@@ -379,6 +379,75 @@ static void adb_enqueue_key(uint8_t code, bool down) {
     adb_queue_push(&event);
 }
 
+static bool adb_ascii_to_keycode(uint8_t ch, uint8_t *out_code) {
+    uint8_t lower = ch;
+    if (ch >= 'A' && ch <= 'Z') {
+        lower = (uint8_t)(ch - 'A' + 'a');
+    }
+
+    switch (lower) {
+    case 'a': *out_code = 0x00; return true;
+    case 's': *out_code = 0x01; return true;
+    case 'd': *out_code = 0x02; return true;
+    case 'f': *out_code = 0x03; return true;
+    case 'h': *out_code = 0x04; return true;
+    case 'g': *out_code = 0x05; return true;
+    case 'z': *out_code = 0x06; return true;
+    case 'x': *out_code = 0x07; return true;
+    case 'c': *out_code = 0x08; return true;
+    case 'v': *out_code = 0x09; return true;
+    case 'b': *out_code = 0x0B; return true;
+    case 'q': *out_code = 0x0C; return true;
+    case 'w': *out_code = 0x0D; return true;
+    case 'e': *out_code = 0x0E; return true;
+    case 'r': *out_code = 0x0F; return true;
+    case 'y': *out_code = 0x10; return true;
+    case 't': *out_code = 0x11; return true;
+    case '1': *out_code = 0x12; return true;
+    case '2': *out_code = 0x13; return true;
+    case '3': *out_code = 0x14; return true;
+    case '4': *out_code = 0x15; return true;
+    case '6': *out_code = 0x16; return true;
+    case '5': *out_code = 0x17; return true;
+    case '=': *out_code = 0x18; return true;
+    case '9': *out_code = 0x19; return true;
+    case '7': *out_code = 0x1A; return true;
+    case '-': *out_code = 0x1B; return true;
+    case '8': *out_code = 0x1C; return true;
+    case '0': *out_code = 0x1D; return true;
+    case ']': *out_code = 0x1E; return true;
+    case 'o': *out_code = 0x1F; return true;
+    case 'u': *out_code = 0x20; return true;
+    case '[': *out_code = 0x21; return true;
+    case 'i': *out_code = 0x22; return true;
+    case 'p': *out_code = 0x23; return true;
+    case '\r': *out_code = 0x24; return true;
+    case 'l': *out_code = 0x25; return true;
+    case 'j': *out_code = 0x26; return true;
+    case '\'': *out_code = 0x27; return true;
+    case 'k': *out_code = 0x28; return true;
+    case ';': *out_code = 0x29; return true;
+    case '\\': *out_code = 0x2A; return true;
+    case ',': *out_code = 0x2B; return true;
+    case '/': *out_code = 0x2C; return true;
+    case 'n': *out_code = 0x2D; return true;
+    case 'm': *out_code = 0x2E; return true;
+    case '.': *out_code = 0x2F; return true;
+    case '\t': *out_code = 0x30; return true;
+    case ' ': *out_code = 0x31; return true;
+    case '`': *out_code = 0x32; return true;
+    case 0x08:
+    case 0x7F:
+        *out_code = 0x33;
+        return true;
+    case 0x1B:
+        *out_code = 0x35;
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void adb_enqueue_mouse(int8_t dx, int8_t dy) {
     adb_event_t event = {
         .type = ADB_EVENT_MOUSE,
@@ -441,14 +510,20 @@ static bool poll_cdc_adb(void) {
         }
 
         if (ch == '\r' || ch == '\n') {
-            adb_enqueue_key('\r', true);
-            adb_enqueue_key('\r', false);
+            uint8_t code = 0;
+            if (adb_ascii_to_keycode('\r', &code)) {
+                adb_enqueue_key(code, true);
+                adb_enqueue_key(code, false);
+            }
             continue;
         }
 
         if (ch == '\t' || ch == 0x08 || ch == 0x7F || (ch >= 0x20 && ch <= 0x7E)) {
-            adb_enqueue_key(ch, true);
-            adb_enqueue_key(ch, false);
+            uint8_t code = 0;
+            if (adb_ascii_to_keycode(ch, &code)) {
+                adb_enqueue_key(code, true);
+                adb_enqueue_key(code, false);
+            }
         }
     }
 

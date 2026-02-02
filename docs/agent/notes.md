@@ -26,3 +26,4 @@
 - ADB CDC2 test input currently treats ASCII bytes as key events (press+release) and uses arrow-key escape sequences plus `Ctrl+R` (`0x12`) to toggle the primary mouse button.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
 - ADB SRQ pulses are now generated in software (timed low pulse on the bus) and gated to idle windows; if this timing proves unstable, move SRQ handling into PIO once RX/TX timing is finalized.
+- CDC2 ASCII input now maps through the US ADB keycode table (no modifier synthesis yet), so shifted characters will be sent as their unshifted keycodes for early testing.
