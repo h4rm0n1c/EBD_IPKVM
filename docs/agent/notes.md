@@ -52,3 +52,4 @@
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.
 - ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
+- GPIO IRQ callbacks are per-core; using `gpio_set_irq_enabled_with_callback` for VSYNC overwrites the ADB callback, so ADB must use a raw IO_IRQ_BANK0 handler (hootswitch-style) to avoid losing ADB rise events.

@@ -4,6 +4,7 @@
 
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "pico/sem.h"
 #include "pico/rand.h"
@@ -118,13 +119,13 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
 static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id);
 static uint8_t adb_bus_get_handler_id(const adb_device_t *dev);
 
-static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
-    if (gpio != ADB_PIN_RECV) {
+static void adb_gpio_irq_handler(void) {
+    uint32_t events = gpio_get_irq_event_mask(ADB_PIN_RECV);
+    if (!(events & GPIO_IRQ_EDGE_RISE)) {
         return;
     }
-    if (events & GPIO_IRQ_EDGE_RISE) {
-        adb_gpio_rise = true;
-    }
+    gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
+    adb_gpio_rise = true;
 }
 
 static void adb_gpio_rise_arm(void) {
@@ -453,7 +454,9 @@ void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
     gpio_pull_up(ADB_PIN_RECV);
-    gpio_set_irq_enabled_with_callback(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false, adb_gpio_irq_handler);
+    gpio_add_raw_irq_handler_masked(1u << ADB_PIN_RECV, adb_gpio_irq_handler);
+    gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+    irq_set_enabled(IO_IRQ_BANK0, true);
 
     gpio_init(ADB_PIN_XMIT);
     gpio_set_dir(ADB_PIN_XMIT, GPIO_OUT);

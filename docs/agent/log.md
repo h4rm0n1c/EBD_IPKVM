@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-08: Switched ADB GPIO rising-edge detection to a raw IO_IRQ_BANK0 handler so it no longer conflicts with the VSYNC GPIO callback, matching hootswitch’s IRQ strategy and restoring ADB attention/rise detection.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.
