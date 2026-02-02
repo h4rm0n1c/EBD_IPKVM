@@ -31,6 +31,19 @@
 - Observed on hardware: with the Mac off, the ADB bus idles low; on power-up it rises high, then drops low for ~3.979 ms, and about 1 ms later the first host Talk traffic appears.
 - ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.
 - ADB PIO programs now use hootswitch’s device-side bus implementation (GPLv3); license text is stored in `licenses/hootswitch-GPLv3.txt`.
+- ADB reg3 Talk responses now use hootswitch’s randomized low nibble (not the device’s current address) to match hootswitch address-resolution behavior.
+- Talk register payloads are now guarded by a hootswitch-style semaphore; Talk commands will treat locked registers as empty to avoid partial reads.
+- Reg3 Talk responses are suppressed if the device handler ID is 0xFF (hootswitch-style “no reg3” gating).
+- SRQ pending flags are only asserted when SRQ is enabled on the device, matching hootswitch reg0 queue behavior.
+- Listen writes shorter than 2 bytes now clear Talk register data (and reg0 SRQ), matching hootswitch Talk length rules.
+- Reg3 Listen writes shorter than 2 bytes are ignored, matching hootswitch’s reg3 length handling.
+- ADB bus now tracks hootswitch-style lock-failure and collision counters; they are exposed in the CDC debug output.
+- Reg3 handler IDs are now sourced via a callback, matching hootswitch’s dynamic handler selection.
+- Reg0 queue drain now uses per-device pop callbacks and only fills when reg0 is empty and the lock is available (hootswitch queue-drain semantics).
+- Setter APIs are available to bind per-device reg0 pop and handler-ID callbacks for hootswitch-style driver queue integration.
+- Mouse reg0 payloads are now buffered in a per-device queue so Talk 0 drain follows hootswitch queue semantics.
+- Keyboard reg0 payloads are now buffered in a per-device queue so Talk 0 drain follows hootswitch queue semantics.
+- Reg0 pop callbacks now accept a queue-context pointer so driver-owned queues can supply Talk 0 payloads.
 - Attention completion now relies on a GPIO rising-edge IRQ (hootswitch-style) to decide reset vs command, rather than polling the line level.
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.

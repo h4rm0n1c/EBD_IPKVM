@@ -10,6 +10,21 @@
 - 2026-02-05: Align attention handling to hootswitch’s GPIO rising-edge flow (IRQ-driven) to decide reset vs command.
 - 2026-02-05: Align command/SRQ handling to hootswitch’s stop-bit + GPIO rise flow before executing Talk/Listen.
 - 2026-02-05: Track SRQ pending state with a hootswitch-style SRQ bitfield to simplify SRQ gating decisions.
+- 2026-02-05: Align ADB GPIO rising-edge handling to hootswitch’s setup flow so short attention/stop-bit rises execute immediately instead of waiting on an IRQ.
+- 2026-02-05: Match hootswitch SRQ gating so non-target Talk $0 commands still emit SRQ when any device has pending data.
+- 2026-02-05: Adopt hootswitch’s randomized reg3 address nibble for Talk responses to match address-resolution behavior.
+- 2026-02-05: Add hootswitch-style talk-register locking so Talk payloads are protected during updates.
+- 2026-02-05: Honor hootswitch reg3 handler ID gating by suppressing reg3 Talk when the handler is 0xFF.
+- 2026-02-05: Gate SRQ pending flags on reg0 queueing only when SRQ is enabled, matching hootswitch device behavior.
+- 2026-02-05: Match hootswitch Talk register length rules by treating Listen writes under 2 bytes as empty and clearing SRQ for reg0.
+- 2026-02-05: Ignore reg3 Listen writes shorter than 2 bytes, matching hootswitch’s reg3 length handling.
+- 2026-02-05: Add hootswitch-style lock/collision counters and expose them via the CDC debug status line.
+- 2026-02-05: Source reg3 handler IDs via a callback to allow hootswitch-style dynamic handler selection.
+- 2026-02-05: Drain reg0 from per-device pop callbacks only when empty and the lock is available (hootswitch queue-drain semantics).
+- 2026-02-05: Add setters to bind per-device reg0 pop and handler-id callbacks, enabling hootswitch-style driver-owned queue draining.
+- 2026-02-05: Buffer mouse reports into a per-device reg0 queue so Talk 0 drain matches hootswitch queue semantics.
+- 2026-02-05: Buffer keyboard reg0 reports into a per-device queue so Talk 0 drain mirrors hootswitch queue semantics.
+- 2026-02-05: Allow reg0 pop callbacks to carry a queue context pointer for hootswitch-style driver-owned queues.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

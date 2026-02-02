@@ -221,8 +221,10 @@ static void emit_debug_state(void) {
     uint16_t txq_r = 0;
     uint16_t txq_w = 0;
     adb_core_stats_t adb_stats = {0};
+    adb_bus_stats_t adb_bus_stats = {0};
     video_core_get_txq_indices(&txq_r, &txq_w);
     adb_core_get_stats(&adb_stats);
+    adb_bus_get_stats(&adb_bus_stats);
 
     cdc_ctrl_printf("[EBD_IPKVM] dbg a=%d cap=%d test=%d probe=%d vs=%s\n",
                     video_core_is_armed() ? 1 : 0,
@@ -239,11 +241,13 @@ static void emit_debug_state(void) {
                     (unsigned long)video_core_get_lines_drop(),
                     (unsigned long)video_core_get_frame_overrun(),
                     (unsigned long)video_core_get_frame_short());
-    cdc_ctrl_printf("[EBD_IPKVM] dbg adb pending=%lu key=%lu mouse=%lu drop=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM] dbg adb pending=%lu key=%lu mouse=%lu drop=%lu lock=%lu coll=%lu\n",
                     (unsigned long)adb_stats.pending,
                     (unsigned long)adb_stats.key_events,
                     (unsigned long)adb_stats.mouse_events,
-                    (unsigned long)adb_stats.drops);
+                    (unsigned long)adb_stats.drops,
+                    (unsigned long)adb_bus_stats.lock_fails,
+                    (unsigned long)adb_bus_stats.collisions);
 }
 
 static bool poll_cdc_commands(void) {
