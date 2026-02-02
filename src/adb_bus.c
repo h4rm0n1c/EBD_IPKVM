@@ -121,11 +121,13 @@ static uint8_t adb_bus_get_handler_id(const adb_device_t *dev);
 
 static void adb_gpio_irq_handler(void) {
     uint32_t events = gpio_get_irq_event_mask(ADB_PIN_RECV);
-    if (!(events & GPIO_IRQ_EDGE_RISE)) {
+    if (events == 0) {
         return;
     }
-    gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
-    adb_gpio_rise = true;
+    gpio_acknowledge_irq(ADB_PIN_RECV, events);
+    if (events & GPIO_IRQ_EDGE_RISE) {
+        adb_gpio_rise = true;
+    }
 }
 
 static void adb_gpio_rise_arm(void) {

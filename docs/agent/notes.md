@@ -53,3 +53,4 @@
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.
 - ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
 - GPIO IRQ callbacks are per-core; using `gpio_set_irq_enabled_with_callback` for VSYNC overwrites the ADB callback, so ADB must use a raw IO_IRQ_BANK0 handler (hootswitch-style) to avoid losing ADB rise events.
+- The ADB raw IRQ handler must acknowledge all pending GPIO IRQ bits for the pin; leaving an unacked edge can retrigger the IRQ and starve the main loop (seen as a CDC freeze).
