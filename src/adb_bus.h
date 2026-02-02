@@ -7,6 +7,12 @@
 typedef struct {
     uint32_t lock_fails;
     uint32_t collisions;
+    uint32_t attentions;
+    uint32_t attention_short;
+    uint32_t resets;
+    uint32_t aborts;
+    uint32_t abort_time;
+    uint32_t errors;
 } adb_bus_stats_t;
 
 struct adb_device;

@@ -74,6 +74,12 @@ typedef struct {
     bool talk_lock_held;
     uint32_t dbg_lock_fail;
     uint32_t dbg_collision;
+    uint32_t dbg_atn;
+    uint32_t dbg_atn_short;
+    uint32_t dbg_rst;
+    uint32_t dbg_abrt;
+    uint32_t dbg_abrt_time;
+    uint32_t dbg_err;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -171,6 +177,12 @@ static void adb_bus_reset_devices(void) {
     adb_state.talk_lock_held = false;
     adb_state.dbg_lock_fail = 0;
     adb_state.dbg_collision = 0;
+    adb_state.dbg_atn = 0;
+    adb_state.dbg_atn_short = 0;
+    adb_state.dbg_rst = 0;
+    adb_state.dbg_abrt = 0;
+    adb_state.dbg_abrt_time = 0;
+    adb_state.dbg_err = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -454,6 +466,8 @@ static void adb_bus_handle_command_irq(void) {
         adb_pio_stop();
         adb_state.phase = ADB_PHASE_IDLE;
         adb_pio_atn_start();
+        adb_state.dbg_abrt++;
+        adb_state.dbg_abrt_time = time_us_32();
         return;
     }
     uint8_t cmd = bus_rx_dev_get(adb_pio, adb_sm);
@@ -497,7 +511,9 @@ bool adb_bus_service(void) {
             int64_t delta = absolute_time_diff_us(get_absolute_time(), adb_state.attention_start);
             if (delta >= (int64_t)TIME_RESET_THRESH_US) {
                 adb_bus_reset_devices();
+                adb_state.dbg_rst++;
             }
+            adb_state.dbg_atn++;
             pio_interrupt_clear(adb_pio, adb_sm);
             adb_state.phase = ADB_PHASE_COMMAND;
             adb_pio_command_start();
@@ -524,6 +540,7 @@ bool adb_bus_service(void) {
             } else {
                 adb_state.phase = ADB_PHASE_COMMAND;
                 adb_pio_command_start();
+                adb_state.dbg_atn_short++;
                 did_work = true;
             }
             break;
@@ -573,6 +590,7 @@ bool adb_bus_service(void) {
             break;
         }
         default:
+            adb_state.dbg_err++;
             break;
         }
     }
@@ -590,6 +608,12 @@ void adb_bus_get_stats(adb_bus_stats_t *out) {
     }
     out->lock_fails = __atomic_load_n(&adb_state.dbg_lock_fail, __ATOMIC_ACQUIRE);
     out->collisions = __atomic_load_n(&adb_state.dbg_collision, __ATOMIC_ACQUIRE);
+    out->attentions = __atomic_load_n(&adb_state.dbg_atn, __ATOMIC_ACQUIRE);
+    out->attention_short = __atomic_load_n(&adb_state.dbg_atn_short, __ATOMIC_ACQUIRE);
+    out->resets = __atomic_load_n(&adb_state.dbg_rst, __ATOMIC_ACQUIRE);
+    out->aborts = __atomic_load_n(&adb_state.dbg_abrt, __ATOMIC_ACQUIRE);
+    out->abort_time = __atomic_load_n(&adb_state.dbg_abrt_time, __ATOMIC_ACQUIRE);
+    out->errors = __atomic_load_n(&adb_state.dbg_err, __ATOMIC_ACQUIRE);
 }
 
 bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, uint8_t stored_id)) {
