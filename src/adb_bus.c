@@ -8,6 +8,7 @@
 
 #define ADB_PIN_RECV 6
 #define ADB_PIN_XMIT 12
+#define ADB_RX_DRAIN_MAX 32u
 
 static PIO adb_pio = pio1;
 static uint adb_sm_rx = 0;
@@ -20,6 +21,7 @@ static volatile uint32_t adb_rx_activity = 0;
 void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
+    gpio_pull_up(ADB_PIN_RECV);
 
     gpio_init(ADB_PIN_XMIT);
     gpio_set_dir(ADB_PIN_XMIT, GPIO_OUT);
@@ -49,10 +51,18 @@ void adb_bus_init(void) {
 
 bool adb_bus_service(void) {
     bool did_work = false;
+    uint32_t drained = 0;
 
-    while (!pio_sm_is_rx_fifo_empty(adb_pio, adb_sm_rx)) {
+    while (!pio_sm_is_rx_fifo_empty(adb_pio, adb_sm_rx) && drained < ADB_RX_DRAIN_MAX) {
         (void)pio_sm_get(adb_pio, adb_sm_rx);
         did_work = true;
+        drained++;
+    }
+
+    if (!pio_sm_is_rx_fifo_empty(adb_pio, adb_sm_rx)) {
+        pio_sm_clear_fifos(adb_pio, adb_sm_rx);
+        pio_sm_restart(adb_pio, adb_sm_rx);
+        pio_sm_put(adb_pio, adb_sm_rx, 110);
     }
 
     if (did_work) {
