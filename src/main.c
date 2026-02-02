@@ -6,7 +6,6 @@
 #include "hardware/pio.h"
 
 #include "app_core.h"
-#include "adb_events.h"
 #include "classic_line.pio.h"
 #include "video_core.h"
 
@@ -14,8 +13,6 @@
 #define PIN_VSYNC  1   // active-low
 #define PIN_HSYNC  2   // active-low
 #define PIN_VIDEO  3
-#define PIN_ADB_RECV 6
-#define PIN_ADB_XMIT 12
 #define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
 
 int main(void) {
@@ -31,9 +28,6 @@ int main(void) {
     // VSYNC must remain SIO GPIO for IRQ to work
     gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_disable_pulls(PIN_VSYNC);
     gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
-    gpio_init(PIN_ADB_RECV); gpio_set_dir(PIN_ADB_RECV, GPIO_IN); gpio_disable_pulls(PIN_ADB_RECV);
-    gpio_init(PIN_ADB_XMIT); gpio_set_dir(PIN_ADB_XMIT, GPIO_IN); gpio_disable_pulls(PIN_ADB_XMIT);
-
     // Clear any stale IRQ state, core1 will enable callback
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
 
@@ -61,10 +55,7 @@ int main(void) {
         .offset_fall_pixrise = offset_fall_pixrise,
         .pin_video = PIN_VIDEO,
         .pin_vsync = PIN_VSYNC,
-        .pin_adb_recv = PIN_ADB_RECV,
-        .pin_adb_xmit = PIN_ADB_XMIT,
     };
-    adb_events_init();
     video_core_init(&video_cfg);
     video_core_launch();
 
@@ -74,8 +65,6 @@ int main(void) {
         .pin_hsync = PIN_HSYNC,
         .pin_video = PIN_VIDEO,
         .pin_ps_on = PIN_PS_ON,
-        .pin_adb_recv = PIN_ADB_RECV,
-        .pin_adb_xmit = PIN_ADB_XMIT,
     };
     app_core_init(&app_cfg);
 

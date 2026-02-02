@@ -2,9 +2,8 @@
 
 ## Status
 
-- ADB keyboard/mouse emulation is **in progress**. The immediate focus is enabling a first on-bus test: observe host polling, respond to Talk, and inject basic keyboard/mouse events via CDC2 per the implementation plan.
-- Current firmware exposes CDC2 for ADB test input and latches basic RX activity on the shared bus; basic Talk/Listen handling for keyboard + mouse is active.
-- Initial PIO RX/TX programs are in place to capture ADB low-pulse widths and drive low pulses on the bus (PIO1, separate RX/TX state machines).
+- The in-tree ADB implementation has been retired in favor of the RP2040-focused **hootswitch** project (`/opt/adb/hootswitch`).
+- Firmware no longer exposes the CDC2 ADB test channel; ADB bring-up will be driven by hootswitch integration work.
 
 ## GPIO assignment
 
@@ -19,22 +18,5 @@
 - Ground is common between the Mac ADB port and the RP2040.
 
 ## Implementation notes
-- ADB should follow the same core split as the video pipeline: PIO for timing and core1 for RX/TX state handling, with core0 only enqueueing host commands.
-- The current PIO RX program runs with a clkdiv of 8 and reports pulse widths in microseconds after firmware conversion; pulse filters are expressed in µs.
-- PIO RX counts decrement once per loop iteration (2 PIO cycles), so pulse widths are scaled by 2 ticks when converting to microseconds.
-- RX now captures both low and high pulse widths; a bit is decoded by comparing the low/high pair (short-low/long-high indicates a logical 1 and long-low/short-high indicates a logical 0) with a small deadband to avoid ambiguous widths. Start/stop bits are enforced around each frame, and invalid pairings reset the RX state.
-- RX pushes are non-blocking with a joined RX FIFO so bursts cannot stall the state machine.
-- The attention pulse detector is tightened to 700–900 µs now that capture skew is under control; sync remains 60–90 µs.
-- Minimal Talk responses are emitted for the active keyboard + mouse addresses (defaults 2 + 3):
-  - Reg 0: queued CDC2 key events (0xFF fill when idle).
-  - Reg 3: handler ID + current address byte.
-  - Mouse Reg 0: button + delta packets (7-bit two's complement) with button bits in the high positions.
-- Listen reg 3 is accepted to update keyboard/mouse addresses (handler ID 0x00/0xFE) or handler IDs (keyboard 0x02/0x03, mouse 0x01/0x03).
-- SRQ pulses are emitted when keyboard/mouse data is pending so the host polls for input.
-- TX low-pulse timing uses the PIO TX loop (1 cycle per decrement) with a one-cycle adjustment for the `set pindirs` assert.
-
-### PIO timing takeaways (ADB RX/TX)
-- Treat PIO loops as **multi-cycle timers**: count cycles per iteration and convert tick counts using that cadence, not just instruction count.
-- If the loop includes extra work (e.g., `set pindirs`, `wait`, or a branch delay), fold that into the conversion so pulses match real-time microseconds.
-- RX and TX loops can have different cycles-per-iteration, so document each program’s cadence separately instead of sharing a single “ticks-to-us” formula.
-- When tuning pulse-width filters, always validate with a scope or diagnostic bins to catch off-by-one-cycle errors early.
+- Electrical constraints and pin assignments remain unchanged, but firmware-level ADB handling will be driven by hootswitch.
+- Reference ADB timing/behavior details should come from `/opt/adb/hootswitch` and the Microchip AN591B tech note (`/opt/adb/miscdocs/an591b.pdf`).

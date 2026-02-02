@@ -17,8 +17,6 @@ Above output is current project output as of PR #19.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
-- `GPIO6` — ADB RECV (input via 74LVC245 from Mac ADB data)
-- `GPIO12` — ADB XMIT (output via ULN2803 to Mac ADB data, open-collector; 10k pulldown)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
@@ -31,12 +29,11 @@ Above output is current project output as of PR #19.
 - Line capture begins on the selected HSYNC edge.
 
 ## USB CDC interfaces
-The firmware exposes three CDC interfaces:
+The firmware exposes two CDC interfaces:
 - **CDC0 (stream)**: binary line packets (video data).
 - **CDC1 (control)**: ASCII commands + status text.
-- **CDC2 (ADB test)**: keyboard/mouse test input (arrow keys for mouse, `!` toggles button).
 
-On Linux, prefer `/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00|if02|if04`
+On Linux, prefer `/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_E6614C311B855539-if00|if02`
 instead of `/dev/ttyACM*` so enumeration changes do not break scripts. Use
 `udevadm info -n /dev/ttyACM2 | rg "ID_MODEL|ID_SERIAL|ID_USB_INTERFACE_NUM"`
 to map a new `/dev/ttyACM*` node to the correct interface number if needed.

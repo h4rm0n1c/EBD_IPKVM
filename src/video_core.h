@@ -20,8 +20,6 @@ typedef struct video_core_config {
     uint offset_fall_pixrise;
     uint pin_video;
     uint pin_vsync;
-    uint pin_adb_recv;
-    uint pin_adb_xmit;
 } video_core_config_t;
 
 #define VIDEO_CORE_MAX_PAYLOAD (CAP_BYTES_PER_LINE * 2)

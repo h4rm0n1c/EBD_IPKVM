@@ -4,7 +4,6 @@
 Macintosh Classic KVM:
 - Capture raw TTL video signals: PIXCLK + HSYNC + VSYNC + 1bpp VIDEO
 - RP2040 PIO+DMA capture → stream to a host/web UI
-- In progress: ADB keyboard+mouse emulation (see `docs/adb_implementation_plan.md` for bring-up steps)
 - Planned: ATX soft power, reset/NMI
 
 ## Current behavior (firmware)
@@ -14,8 +13,6 @@ Macintosh Classic KVM:
   - `GPIO2` HSYNC (PIO input, active-low)
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
-  - `GPIO6` ADB RECV (input via 74LVC245 from Mac ADB data)
-  - `GPIO12` ADB XMIT (output via ULN2803 to Mac ADB data, open-collector; 10k pulldown)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.
@@ -30,7 +27,7 @@ Macintosh Classic KVM:
   - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
   - Mode toggle: `M` switches between test and continuous capture cadence.
   - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
-  - CDC interfaces: CDC0 stream, CDC1 control/status, CDC2 ADB test input (arrow keys for mouse, `!` toggles button).
+  - CDC interfaces: CDC0 stream, CDC1 control/status.
 
 ## Host tooling
 - `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PBM frames (use `--pgm` for 8-bit output).

@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-05: Retired the in-tree ADB firmware modules and CDC2 test channel, updating docs/scripts to point ADB work at hootswitch.
 - 2026-02-04: Gate CDC1/CDC2 emits on `tud_ready()` in helpers to avoid disconnect freezes.
 - 2026-02-04: Guard CDC1/CDC2 diagnostic formatting with connection checks and `tud_ready()` to avoid USB-disconnect crashes.
 - 2026-02-04: Skip CDC1/CDC2 diagnostic writes when the CDC buffer can't fit a full line to avoid torn output.

@@ -10,9 +10,6 @@
 #include "hardware/watchdog.h"
 #include "tusb.h"
 
-#include "adb_bus.h"
-#include "adb_events.h"
-#include "adb_test_cdc.h"
 #include "core_bridge.h"
 #include "stream_protocol.h"
 #include "video_capture.h"
@@ -24,7 +21,6 @@
 
 #define CDC_STREAM 0
 #define CDC_CTRL 1
-#define CDC_ADB 2
 
 static app_core_config_t app_cfg;
 
@@ -46,11 +42,8 @@ static volatile uint32_t diag_video_edges = 0;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
-static absolute_time_t adb_rx_next;
-static bool adb_auto_rom_boot_done = false;
 static bool cdc1_prev_connected = false;
 static uint32_t cdc1_disconnects = 0;
-static const uint32_t adb_tx_test_pulse_us = 2000u;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -61,9 +54,6 @@ static inline bool can_emit_text(void) {
     return tud_ready() && tud_cdc_n_connected(CDC_CTRL);
 }
 
-static inline bool can_emit_adb_text(void) {
-    return tud_ready() && tud_cdc_n_connected(CDC_ADB);
-}
 
 static inline void reset_diag_counts(void) {
     diag_pixclk_edges = 0;
@@ -141,64 +131,6 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     cdc_ctrl_write(out, out_len);
 }
 
-static void cdc_adb_write(const char *buf, size_t len) {
-    if (!tud_ready() || !tud_cdc_n_connected(CDC_ADB) || len == 0) {
-        return;
-    }
-
-    int avail = tud_cdc_n_write_available(CDC_ADB);
-    if (avail <= 0) {
-        return;
-    }
-    size_t chunk = len;
-    if (chunk > (size_t)avail) {
-        chunk = (size_t)avail;
-    }
-    if (chunk == 0) {
-        return;
-    }
-    if (tud_cdc_n_write(CDC_ADB, buf, chunk) > 0) {
-        tud_cdc_n_write_flush(CDC_ADB);
-    }
-}
-
-static void cdc_adb_printf(const char *fmt, ...) {
-    if (!tud_cdc_n_connected(CDC_ADB)) {
-        return;
-    }
-    char buf[320];
-    char out[360];
-    va_list args;
-    va_start(args, fmt);
-    int len = vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-    if (len <= 0) {
-        return;
-    }
-    size_t raw_len = (size_t)len;
-    if (raw_len >= sizeof(buf)) {
-        raw_len = sizeof(buf) - 1;
-    }
-    size_t out_len = 0;
-    for (size_t i = 0; i < raw_len && out_len + 1 < sizeof(out); i++) {
-        if (buf[i] == '\n') {
-            if (out_len + 2 >= sizeof(out)) {
-                break;
-            }
-            out[out_len++] = '\r';
-        }
-        out[out_len++] = buf[i];
-    }
-    if (out_len == 0) {
-        return;
-    }
-    if (!tud_cdc_n_connected(CDC_ADB)
-        || tud_cdc_n_write_available(CDC_ADB) < (int)out_len) {
-        return;
-    }
-    cdc_adb_write(out, out_len);
-}
-
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
                                          bool *prev_pixclk, bool *prev_hsync,
                                          bool *prev_vsync, bool *prev_video) {
@@ -243,67 +175,21 @@ static void run_gpio_diag(void) {
     bool hsync = gpio_get(app_cfg.pin_hsync);
     bool vsync = gpio_get(app_cfg.pin_vsync);
     bool video = gpio_get(app_cfg.pin_video);
-    bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
-    bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
-
     gpio_set_function(app_cfg.pin_pixclk, GPIO_FUNC_PIO0);
     gpio_set_function(app_cfg.pin_hsync, GPIO_FUNC_PIO0);
     gpio_set_function(app_cfg.pin_video, GPIO_FUNC_PIO0);
 
-    cdc_ctrl_printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d adb=%d xmit=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM] gpio diag: pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
                     pixclk ? 1 : 0,
                     hsync ? 1 : 0,
                     vsync ? 1 : 0,
                     video ? 1 : 0,
-                    adb_recv ? 1 : 0,
-                    adb_xmit ? 1 : 0,
                     diag_ms / 1000.0,
                     (unsigned long)diag_pixclk_edges,
                     (unsigned long)diag_hsync_edges,
                     (unsigned long)diag_vsync_edges,
                     (unsigned long)diag_video_edges);
 }
-
-static void emit_adb_diag(void) {
-    adb_bus_stats_t adb_stats = {0};
-    adb_bus_get_stats(&adb_stats);
-    bool adb_recv = gpio_get(app_cfg.pin_adb_recv);
-    bool adb_xmit = gpio_get(app_cfg.pin_adb_xmit);
-
-    cdc_adb_printf("[EBD_IPKVM] adb diag: recv=%d xmit=%d rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus drop=%lu\n",
-                    adb_recv ? 1 : 0,
-                    adb_xmit ? 1 : 0,
-                    (unsigned long)adb_stats.rx_pulses,
-                    (unsigned long)adb_stats.rx_raw_pulses,
-                    (unsigned long)adb_stats.rx_overruns,
-                    (unsigned long)adb_stats.attention_pulses,
-                    (unsigned long)adb_stats.sync_pulses,
-                    (unsigned long)adb_stats.last_cmd,
-                    (unsigned long)adb_stats.cmd_bytes,
-                    (unsigned long)adb_stats.cmd_addr_miss,
-                    (unsigned long)adb_stats.srq_pulses,
-                    (unsigned long)adb_stats.events_pending,
-                    (unsigned long)adb_stats.tx_success,
-                    (unsigned long)adb_stats.tx_attempts,
-                    (unsigned long)adb_stats.tx_busy,
-                    (unsigned long)adb_stats.tx_late_busy,
-                    (unsigned long)adb_stats.last_pulse_us,
-                    (unsigned long)adb_events_get_drop_count());
-    cdc_adb_printf("[EBD_IPKVM] adb bins: min=%luus max=%luus zero=%lu <30=%lu 30-60=%lu 60-90=%lu 90-200=%lu 200-600=%lu 600-700=%lu 700-900=%lu 900-1100=%lu >1100=%lu\n",
-                   (unsigned long)adb_stats.min_pulse_us,
-                   (unsigned long)adb_stats.max_pulse_us,
-                   (unsigned long)adb_stats.pulse_zero_us,
-                   (unsigned long)adb_stats.pulse_lt_30_us,
-                   (unsigned long)adb_stats.pulse_30_60_us,
-                   (unsigned long)adb_stats.pulse_60_90_us,
-                   (unsigned long)adb_stats.pulse_90_200_us,
-                   (unsigned long)adb_stats.pulse_200_600_us,
-                    (unsigned long)adb_stats.pulse_600_700_us,
-                    (unsigned long)adb_stats.pulse_700_900_us,
-                    (unsigned long)adb_stats.pulse_900_1100_us,
-                    (unsigned long)adb_stats.pulse_gt_1100_us);
-}
-
 
 static bool try_send_probe_packet(void) {
     if (!tud_cdc_n_connected(CDC_STREAM)) return false;
@@ -404,7 +290,6 @@ static bool poll_cdc_commands(void) {
             }
         } else if (ch == 'p') {
             set_ps_on(false);
-            core_bridge_send(CORE_BRIDGE_CMD_RESET_ADB, 0);
             if (can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ps_on=0\n");
             }
@@ -532,22 +417,15 @@ static inline bool service_txq(void) {
 
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
-    adb_test_cdc_init();
-    adb_auto_rom_boot_done = false;
-
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
-    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status, CDC2=ADB test\n");
+    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: emitted on CDC2 once per second.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): send 't' to emit a TX pulse on GPIO12.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] ADB test (CDC2): arrows=mouse, '!' toggles button, Ctrl-B holds Cmd+Opt+X+O for ~30s (auto after first ADB cmd).\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
-    adb_rx_next = make_timeout_time_ms(3000);
 }
 
 void app_core_poll(void) {
@@ -567,25 +445,6 @@ void app_core_poll(void) {
     if (did_work) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
-    active_start = time_us_32();
-    if (adb_test_cdc_poll()) {
-        active_us += (uint32_t)(time_us_32() - active_start);
-    }
-    adb_bus_stats_t adb_stats = {0};
-    adb_bus_get_stats(&adb_stats);
-    if (!adb_auto_rom_boot_done && adb_stats.cmd_bytes > 0) {
-        adb_test_cdc_trigger_rom_boot();
-        adb_auto_rom_boot_done = true;
-    }
-    if (adb_test_cdc_take_tx_test_request()) {
-        bool ok = adb_bus_tx_test_pulse_us(adb_tx_test_pulse_us);
-        if (can_emit_adb_text()) {
-            cdc_adb_printf("[EBD_IPKVM] adb tx test: %s (%luus)\n",
-                           ok ? "ok" : "skipped",
-                           (unsigned long)adb_tx_test_pulse_us);
-        }
-    }
-
     /* Send queued binary packets from thread context (NOT IRQ). */
     if (probe_pending) {
         active_start = time_us_32();
@@ -640,48 +499,6 @@ void app_core_poll(void) {
                             (unsigned long)cdc1_disconnects);
         }
 
-        if (tud_ready() && can_emit_adb_text()) {
-            adb_bus_stats_t adb_stats = {0};
-            adb_bus_get_stats(&adb_stats);
-            if (adb_stats.rx_raw_pulses > 0u || adb_stats.attention_pulses > 0u
-                || adb_stats.sync_pulses > 0u || adb_stats.cmd_bytes > 0u) {
-                uint8_t adb_addr = (uint8_t)(adb_stats.last_cmd >> 4);
-                uint8_t adb_cmd = (uint8_t)(adb_stats.last_cmd & 0x0Fu);
-                uint8_t adb_reg = (uint8_t)(adb_stats.last_cmd & 0x03u);
-                uint8_t adb_type = (uint8_t)((adb_stats.last_cmd >> 2) & 0x03u);
-                cdc_adb_printf("[EBD_IPKVM] adb rx=%lu raw=%lu ov=%lu att=%lu syn=%lu cmd=%02lx cmds=%lu miss=%lu srq=%lu pend=%lu tx=%lu/%lu busy=%lu late=%lu last=%luus ev=%lu drop=%lu\n",
-                               (unsigned long)adb_stats.rx_pulses,
-                               (unsigned long)adb_stats.rx_raw_pulses,
-                               (unsigned long)adb_stats.rx_overruns,
-                               (unsigned long)adb_stats.attention_pulses,
-                               (unsigned long)adb_stats.sync_pulses,
-                               (unsigned long)adb_stats.last_cmd,
-                               (unsigned long)adb_stats.cmd_bytes,
-                               (unsigned long)adb_stats.cmd_addr_miss,
-                               (unsigned long)adb_stats.srq_pulses,
-                               (unsigned long)adb_stats.events_pending,
-                               (unsigned long)adb_stats.tx_success,
-                               (unsigned long)adb_stats.tx_attempts,
-                               (unsigned long)adb_stats.tx_busy,
-                               (unsigned long)adb_stats.tx_late_busy,
-                               (unsigned long)adb_stats.last_pulse_us,
-                               (unsigned long)adb_stats.events_consumed,
-                               (unsigned long)adb_events_get_drop_count());
-                cdc_adb_printf("[EBD_IPKVM] adb cmd decode: addr=%u cmd=%u type=%u reg=%u\n",
-                               adb_addr,
-                               adb_cmd,
-                               adb_type,
-                               adb_reg);
-                emit_adb_diag();
-            }
-
-            if (absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
-                if (adb_bus_take_rx_seen()) {
-                    adb_rx_next = delayed_by_ms(get_absolute_time(), 3000);
-                    cdc_adb_printf("[EBD_IPKVM] adb rx seen\n");
-                }
-            }
-        }
     }
 
     tight_loop_contents();

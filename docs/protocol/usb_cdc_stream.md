@@ -1,25 +1,23 @@
 # USB CDC line stream protocol
 
-The firmware exposes three USB CDC interfaces:
+The firmware exposes two USB CDC interfaces:
 
 - CDC0: video stream (binary packets).
 - CDC1: control + status (ASCII commands and logs).
-- CDC2: ADB test input (keyboard/mouse event injection).
 
 Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
 ### Identifying CDC0 vs CDC1 on Linux
-The USB interface strings are set to `EBD_IPKVM stream`, `EBD_IPKVM control`,
-and `EBD_IPKVM adb`,
+The USB interface strings are set to `EBD_IPKVM stream` and
+`EBD_IPKVM control`,
 which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
 also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
 number:
 
 - `...-if00` → CDC0 (stream)
 - `...-if02` → CDC1 (control)
-- `...-if04` → CDC2 (ADB test)
 
 Prefer the `/dev/serial/by-id/*EBD_IPKVM*ifXX` symlinks in scripts and terminal
 tools so changing `/dev/ttyACM*` enumeration does not break your workflows. If
@@ -65,7 +63,6 @@ The firmware is host-controlled over CDC1 (control channel):
 | `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
 | `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
-| `A` | Emit ADB pin levels + pulse stats (non-intrusive; does not stop capture). |
 | `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
 | `M` | Toggle capture cadence between ~30 fps test mode (100-frame cap) and continuous ~60 fps streaming. |
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
@@ -77,42 +74,12 @@ read without interfering with the CDC0 video stream. Utilization percentages
 work (only when those operations perform work), rather than total loop
 occupancy.
 
-ADB status is emitted on CDC2 (independent of CDC1 control status) once per
-second as:
-
-- `[EBD_IPKVM] adb rx=<filtered> raw=<total> ov=<overruns> att=<attention> syn=<sync> cmd=<last> cmds=<count> miss=<addr_miss> srq=<count> pend=<events> tx=<ok>/<attempts> busy=<early> late=<after_delay> last=<us> ev=<events> drop=<drops>`
-  - `rx` counts pulses that pass the ADB pulse-width filter (~30–1000 µs).
-  - `raw` counts all observed low pulses, even if they are too short/long.
-  - `ov` counts ADB poll iterations that hit the max pulse budget (backlog present).
-  - `att` counts low pulses in the attention-width window (~700–900 µs).
-  - `syn` counts low pulses in the sync-width window (~60–90 µs).
-  - `cmd` is the most recent decoded command byte after attention+sync.
-  - `cmds` counts decoded command bytes.
-  - `miss` counts command bytes that target a different address than the active ADB keyboard address.
-  - `srq` counts SRQ pulses emitted when keyboard/mouse data is pending.
-  - `pend` counts queued ADB events waiting to be transmitted.
-  - `tx` reports successful ADB responses vs. total response attempts.
-  - `busy` counts response attempts that failed because the line was not idle before the talk delay.
-  - `late` counts response attempts that failed because the line was not idle after the talk delay.
-  - `last` is the most recent observed low-pulse width in microseconds.
-- A second diagnostic line with pulse-width bins and min/max is also emitted once
-  per second:
-  - `[EBD_IPKVM] adb bins: min=<us> max=<us> zero=<n> <30=<n> 30-60=<n> 60-90=<n> 90-200=<n> 200-600=<n> 600-700=<n> 700-900=<n> 900-1100=<n> >1100=<n>`
-
-## ADB test channel (CDC2)
-- ANSI arrow keys inject mouse deltas (default 5 counts per press).
-- `!` toggles the mouse button state.
-- `t` emits a single ADB TX pulse (2 ms) for verifying GPIO12/ULN2803 wiring.
-- `Ctrl+B` holds Command+Option+X+O for ~30 seconds (ROM boot combo).
-- Firmware auto-triggers the same hold once after the first decoded ADB command byte to confirm the bus is alive.
-- Other printable characters are mapped to ADB keycodes and queued as press/release pairs.
-
 ### GPIO diagnostic output (`G`)
 - Emitted on CDC1 (control channel).
 - Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
 - Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:
-  - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> adb=<0|1> xmit=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
+  - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
 - Default mode streams every VSYNC (~60 fps).

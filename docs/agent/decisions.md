@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-05: Retire the in-tree ADB firmware implementation (including CDC2) and track future ADB work in hootswitch instead.
 - 2026-02-04: Compare low/high pulse widths with a small deadband when decoding ADB RX bits to avoid ambiguous short/short or long/long pairs.
 - 2026-02-04: Require explicit ADB start/stop bits around RX frames so decoded command/data bytes align with host framing.
 - 2026-02-04: Decode ADB RX bits from low+high pulse pairs (short-low/long-high = 1, long-low/short-high = 0) to match transition-based timing.
