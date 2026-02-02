@@ -53,6 +53,7 @@ typedef struct adb_device {
     uint8_t handler_id;
     adb_handler_id_fn handler_id_fn;
     bool (*reg0_pop)(struct adb_device *dev, uint8_t *first, uint8_t *second);
+    void *reg0_queue_ctx;
     bool srq_enabled;
     bool collision;
     bool srq_pending;
@@ -143,13 +144,19 @@ static uint8_t adb_bus_get_handler_id(const adb_device_t *dev) {
 }
 
 static bool adb_kbd_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
-    (void)dev;
-    return adb_kbd_queue_pop(&adb_state.kbd_queue, first, second);
+    adb_kbd_queue_t *queue = (adb_kbd_queue_t *)dev->reg0_queue_ctx;
+    if (!queue) {
+        return false;
+    }
+    return adb_kbd_queue_pop(queue, first, second);
 }
 
 static bool adb_mouse_reg0_pop(adb_device_t *dev, uint8_t *first, uint8_t *second) {
-    (void)dev;
-    return adb_mouse_queue_pop(&adb_state.mouse_queue, first, second);
+    adb_mouse_queue_t *queue = (adb_mouse_queue_t *)dev->reg0_queue_ctx;
+    if (!queue) {
+        return false;
+    }
+    return adb_mouse_queue_pop(queue, first, second);
 }
 
 static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
@@ -252,6 +259,7 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
     dev->address = address;
     dev->handler_id = handler_id;
     dev->handler_id_fn = adb_default_handler_id;
+    dev->reg0_queue_ctx = NULL;
     dev->srq_enabled = true;
     dev->collision = false;
     dev->srq_pending = false;
@@ -267,6 +275,8 @@ static void adb_bus_reset_devices(void) {
     adb_device_reset(&adb_devices[1], 3, 1);
     adb_devices[0].reg0_pop = adb_kbd_reg0_pop;
     adb_devices[1].reg0_pop = adb_mouse_reg0_pop;
+    adb_devices[0].reg0_queue_ctx = &adb_state.kbd_queue;
+    adb_devices[1].reg0_queue_ctx = &adb_state.mouse_queue;
     adb_state.key_queue.head = 0;
     adb_state.key_queue.tail = 0;
     adb_state.key_queue.count = 0;
@@ -761,11 +771,12 @@ bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, u
     return true;
 }
 
-bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, uint8_t *first, uint8_t *second)) {
+bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, uint8_t *first, uint8_t *second), void *queue_ctx) {
     adb_device_t *dev = adb_bus_find_device(address);
     if (!dev) {
         return false;
     }
     dev->reg0_pop = fn;
+    dev->reg0_queue_ctx = queue_ctx;
     return true;
 }
