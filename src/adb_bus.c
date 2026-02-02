@@ -23,6 +23,8 @@
 #define TIME_RESET_THRESH_US 400u
 
 typedef uint8_t (*adb_handler_id_fn)(uint8_t address, uint8_t stored_id);
+typedef void (*adb_listen_fn)(uint8_t address, uint8_t reg, const uint8_t *data, uint8_t len, void *ctx);
+typedef void (*adb_flush_fn)(uint8_t address, uint8_t reg, void *ctx);
 
 typedef enum {
     ADB_PHASE_IDLE = 0,
@@ -52,6 +54,10 @@ typedef struct adb_device {
     adb_handler_id_fn handler_id_fn;
     bool (*reg0_pop)(struct adb_device *dev, uint8_t *first, uint8_t *second);
     void *reg0_queue_ctx;
+    adb_listen_fn listen_fn;
+    adb_flush_fn flush_fn;
+    void *listen_ctx;
+    void *flush_ctx;
     bool srq_enabled;
     bool collision;
     bool srq_pending;
@@ -362,6 +368,9 @@ static void adb_bus_execute_command(void) {
         dev->regs[0].len = 0;
         dev->srq_pending = false;
         adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+        if (dev->flush_fn) {
+            dev->flush_fn(dev->address, reg, dev->flush_ctx);
+        }
         adb_pio_atn_start();
         adb_state.phase = ADB_PHASE_IDLE;
         break;
@@ -409,6 +418,9 @@ static void adb_bus_apply_listen(uint8_t bytes) {
         } else {
             dev->handler_id = low;
         }
+        if (dev->listen_fn) {
+            dev->listen_fn(dev->address, reg, adb_state.listen_buf, bytes, dev->listen_ctx);
+        }
         sem_release(&dev->talk_sem);
         return;
     }
@@ -430,6 +442,9 @@ static void adb_bus_apply_listen(uint8_t bytes) {
     dev->regs[reg].keep = true;
     for (uint8_t i = 0; i < bytes; i++) {
         dev->regs[reg].data[i] = adb_state.listen_buf[i];
+    }
+    if (dev->listen_fn) {
+        dev->listen_fn(dev->address, reg, dev->regs[reg].data, dev->regs[reg].len, dev->listen_ctx);
     }
     sem_release(&dev->talk_sem);
 }
@@ -633,6 +648,26 @@ bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, ui
     }
     dev->reg0_pop = fn;
     dev->reg0_queue_ctx = queue_ctx;
+    return true;
+}
+
+bool adb_bus_set_listen_fn(uint8_t address, void (*fn)(uint8_t address, uint8_t reg, const uint8_t *data, uint8_t len, void *ctx), void *ctx) {
+    adb_device_t *dev = adb_bus_find_device(address);
+    if (!dev) {
+        return false;
+    }
+    dev->listen_fn = fn;
+    dev->listen_ctx = ctx;
+    return true;
+}
+
+bool adb_bus_set_flush_fn(uint8_t address, void (*fn)(uint8_t address, uint8_t reg, void *ctx), void *ctx) {
+    adb_device_t *dev = adb_bus_find_device(address);
+    if (!dev) {
+        return false;
+    }
+    dev->flush_fn = fn;
+    dev->flush_ctx = ctx;
     return true;
 }
 
