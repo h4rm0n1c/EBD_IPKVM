@@ -5,6 +5,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "pico/sem.h"
 #include "pico/rand.h"
 #include "pico/stdlib.h"
 
@@ -50,6 +51,7 @@ typedef struct {
     bool srq_enabled;
     bool collision;
     bool srq_pending;
+    semaphore_t talk_sem;
     adb_register_t regs[4];
 } adb_device_t;
 
@@ -75,6 +77,7 @@ typedef struct {
     int16_t mouse_dy;
     uint8_t mouse_buttons;
     uint16_t srq_flags;
+    bool talk_lock_held;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -160,6 +163,7 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
     dev->srq_enabled = true;
     dev->collision = false;
     dev->srq_pending = false;
+    sem_init(&dev->talk_sem, 1, 1);
     for (size_t i = 0; i < 4; i++) {
         dev->regs[i].len = 0;
         dev->regs[i].keep = false;
@@ -176,6 +180,7 @@ static void adb_bus_reset_devices(void) {
     adb_state.mouse_dy = 0;
     adb_state.mouse_buttons = 0;
     adb_state.srq_flags = 0;
+    adb_state.talk_lock_held = false;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -189,12 +194,17 @@ static adb_device_t *adb_bus_find_device(uint8_t address) {
 
 static void adb_bus_queue_keyboard_data(void) {
     adb_device_t *kbd = &adb_devices[0];
+    if (!sem_try_acquire(&kbd->talk_sem)) {
+        return;
+    }
     if (kbd->regs[0].len != 0) {
+        sem_release(&kbd->talk_sem);
         return;
     }
     uint8_t first = 0xFF;
     uint8_t second = 0xFF;
     if (!adb_key_queue_pop(&adb_state.key_queue, &first)) {
+        sem_release(&kbd->talk_sem);
         return;
     }
     (void)adb_key_queue_pop(&adb_state.key_queue, &second);
@@ -204,16 +214,22 @@ static void adb_bus_queue_keyboard_data(void) {
     kbd->regs[0].keep = false;
     kbd->srq_pending = true;
     adb_state.srq_flags |= (uint16_t)(1u << kbd->address);
+    sem_release(&kbd->talk_sem);
 }
 
 static void adb_bus_queue_mouse_data(void) {
     adb_device_t *mouse = &adb_devices[1];
+    if (!sem_try_acquire(&mouse->talk_sem)) {
+        return;
+    }
     if (mouse->regs[0].len != 0) {
+        sem_release(&mouse->talk_sem);
         return;
     }
     int16_t dx = adb_state.mouse_dx;
     int16_t dy = adb_state.mouse_dy;
     if (dx == 0 && dy == 0) {
+        sem_release(&mouse->talk_sem);
         return;
     }
     if (dx > 127) {
@@ -235,6 +251,7 @@ static void adb_bus_queue_mouse_data(void) {
     adb_state.srq_flags |= (uint16_t)(1u << mouse->address);
     adb_state.mouse_dx = 0;
     adb_state.mouse_dy = 0;
+    sem_release(&mouse->talk_sem);
 }
 
 static void adb_bus_drain_events(void) {
@@ -351,21 +368,28 @@ static void adb_bus_execute_command(void) {
         if (reg == 3) {
             adb_bus_prepare_reg3(dev);
         }
-        if (dev->regs[reg].len == 0) {
-            if (reg == 0) {
-                dev->srq_pending = false;
-                adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+        if (reg == 3) {
+            adb_pio_tx_start();
+            bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
+            adb_state.phase = ADB_PHASE_TALK;
+        } else if (sem_try_acquire(&dev->talk_sem)) {
+            if (dev->regs[reg].len == 0) {
+                if (reg == 0) {
+                    dev->srq_pending = false;
+                    adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+                }
+                sem_release(&dev->talk_sem);
+                adb_pio_atn_start();
+                adb_state.phase = ADB_PHASE_IDLE;
+                return;
             }
+            adb_state.talk_lock_held = true;
+            adb_pio_tx_start();
+            bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
+            adb_state.phase = ADB_PHASE_TALK;
+        } else {
             adb_pio_atn_start();
             adb_state.phase = ADB_PHASE_IDLE;
-            return;
-        }
-        adb_pio_tx_start();
-        bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
-        adb_state.phase = ADB_PHASE_TALK;
-        if (reg == 0) {
-            dev->srq_pending = false;
-            adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
         }
         break;
     case ADB_CMD_LISTEN:
@@ -392,13 +416,18 @@ static void adb_bus_apply_listen(uint8_t bytes) {
         return;
     }
     uint8_t reg = adb_state.current_reg;
+    if (!sem_acquire_timeout_us(&dev->talk_sem, 1000)) {
+        return;
+    }
     if (reg == 3 && bytes >= 2) {
         uint8_t up = adb_state.listen_buf[0];
         uint8_t low = adb_state.listen_buf[1];
         if (dev->collision && low == 0xFE) {
+            sem_release(&dev->talk_sem);
             return;
         }
         if (low == 0xFD || low == 0xFF) {
+            sem_release(&dev->talk_sem);
             return;
         }
         if (low == 0x00 || low == 0xFE) {
@@ -413,6 +442,7 @@ static void adb_bus_apply_listen(uint8_t bytes) {
         } else {
             dev->handler_id = low;
         }
+        sem_release(&dev->talk_sem);
         return;
     }
 
@@ -424,6 +454,7 @@ static void adb_bus_apply_listen(uint8_t bytes) {
     for (uint8_t i = 0; i < bytes; i++) {
         dev->regs[reg].data[i] = adb_state.listen_buf[i];
     }
+    sem_release(&dev->talk_sem);
 }
 
 void adb_bus_init(void) {
@@ -449,6 +480,7 @@ void adb_bus_init(void) {
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();
     adb_state.phase = ADB_PHASE_IDLE;
+    adb_state.talk_lock_held = false;
     adb_pio_atn_start();
 }
 
@@ -550,6 +582,10 @@ bool adb_bus_service(void) {
                 if (adb_state.current_reg < 4 && !dev->regs[adb_state.current_reg].keep) {
                     dev->regs[adb_state.current_reg].len = 0;
                 }
+            }
+            if (dev && adb_state.talk_lock_held) {
+                sem_release(&dev->talk_sem);
+                adb_state.talk_lock_held = false;
             }
             __atomic_store_n(&adb_rx_activity, 1u, __ATOMIC_RELEASE);
             adb_pio_atn_start();
