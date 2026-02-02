@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-03: Added ADB event queue + core1 service stub plus CDC2 ADB test input for keyboard/mouse injection.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.

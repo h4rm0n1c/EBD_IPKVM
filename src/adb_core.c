@@ -14,23 +14,21 @@ void adb_core_init(void) {
     __atomic_store_n(&adb_pending, 0, __ATOMIC_RELEASE);
 }
 
+void adb_core_record_event(adb_event_type_t type) {
+    switch (type) {
+    case ADB_EVENT_KEY:
+        __atomic_fetch_add(&adb_key_events, 1u, __ATOMIC_RELAXED);
+        break;
+    case ADB_EVENT_MOUSE:
+        __atomic_fetch_add(&adb_mouse_events, 1u, __ATOMIC_RELAXED);
+        break;
+    default:
+        break;
+    }
+}
+
 bool adb_core_service(void) {
     bool did_work = false;
-    adb_event_t event;
-
-    while (adb_queue_pop(&event)) {
-        did_work = true;
-        switch (event.type) {
-        case ADB_EVENT_KEY:
-            __atomic_fetch_add(&adb_key_events, 1u, __ATOMIC_RELAXED);
-            break;
-        case ADB_EVENT_MOUSE:
-            __atomic_fetch_add(&adb_mouse_events, 1u, __ATOMIC_RELAXED);
-            break;
-        default:
-            break;
-        }
-    }
 
     uint32_t drops = adb_queue_take_drops();
     if (drops) {
