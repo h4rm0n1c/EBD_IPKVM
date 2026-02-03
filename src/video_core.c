@@ -226,7 +226,8 @@ static void service_vsync(uint32_t now_us) {
         return;
     }
 
-    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
+    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty() ||
+                   load_bool(&capture.postprocess_pending);
     capture_mode_t mode = __atomic_load_n(&capture_mode, __ATOMIC_ACQUIRE);
     if (mode == CAPTURE_MODE_TEST_30FPS) {
         bool toggle = !load_bool(&take_toggle);          // every other VSYNC => ~30fps
@@ -404,16 +405,18 @@ static void core1_entry(void) {
 
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
             uint32_t active_start = time_us_32();
-            if (video_capture_finalize_frame(&capture, frame_id)) {
-                frame_id++;
-                frames_done++;
-            } else {
-                frame_id++;
-            }
+            (void)video_capture_finalize_frame(&capture, frame_id);
+            frame_id++;
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
         uint32_t active_start = time_us_32();
+        if (video_capture_service_postprocess(&capture)) {
+            frames_done++;
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
+        active_start = time_us_32();
         if (service_test_frame()) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }

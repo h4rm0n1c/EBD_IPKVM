@@ -65,3 +65,4 @@
 - Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.
 - Video streaming now uses a vendor bulk endpoint (not CDC); host access requires libusb/pyusb while CDC1/CDC2 remain for control and ADB test input.
 - Helper scripts now target `/dev/serial/by-id/*-if01` for the CDC1 control console and `*-if03` for the CDC2 ADB console.
+- Capture post-processing uses the dedicated DMA channel with `bswap` and `DREQ_FORCE` after PIO capture completes; it does not alter PIO cycle timing, but capture start is gated until the postprocess DMA finishes.
