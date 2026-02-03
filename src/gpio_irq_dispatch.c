@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "pico/platform/compiler.h"
+
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/structs/io_bank0.h"
@@ -9,8 +11,6 @@
 #ifndef GPIO_IRQ_DISPATCH_MAX
 #define GPIO_IRQ_DISPATCH_MAX 4u
 #endif
-
-#define GPIO_IRQ_BANK_COUNT ((NUM_BANK0_GPIOS + 7u) / 8u)
 
 typedef struct {
     uint gpio;
@@ -24,9 +24,9 @@ static gpio_irq_dispatch_entry_t gpio_irq_entries[GPIO_IRQ_DISPATCH_MAX];
 static bool gpio_irq_installed = false;
 
 static void gpio_irq_bank0_dispatch(void) {
-    uint32_t pending[GPIO_IRQ_BANK_COUNT];
+    uint32_t pending[count_of(io_bank0_hw->intr)];
     bool any_pending = false;
-    for (uint bank = 0; bank < GPIO_IRQ_BANK_COUNT; bank++) {
+    for (uint bank = 0; bank < count_of(io_bank0_hw->intr); bank++) {
         pending[bank] = io_bank0_hw->intr[bank];
         if (pending[bank]) {
             any_pending = true;
@@ -35,7 +35,7 @@ static void gpio_irq_bank0_dispatch(void) {
     if (!any_pending) {
         return;
     }
-    for (uint bank = 0; bank < GPIO_IRQ_BANK_COUNT; bank++) {
+    for (uint bank = 0; bank < count_of(io_bank0_hw->intr); bank++) {
         if (pending[bank]) {
             io_bank0_hw->intr[bank] = pending[bank];
         }
