@@ -12,9 +12,6 @@ vendor bulk interface. The bulk endpoint is dedicated to the binary line
 stream; control/status stays on CDC1.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
-Multiple complete line packets may be coalesced into a single USB bulk transfer;
-hosts should frame packets using the header fields rather than assuming one
-transfer per packet.
 
 ### Identifying bulk stream vs CDC on Linux
 The USB interface strings are set to `EBD_IPKVM stream (bulk)`, `EBD_IPKVM control`,
