@@ -21,23 +21,21 @@ static gpio_irq_dispatch_entry_t gpio_irq_entries[GPIO_IRQ_DISPATCH_MAX];
 static bool gpio_irq_installed = false;
 
 static void gpio_irq_bank0_dispatch(void) {
-    for (size_t i = 0; i < GPIO_IRQ_DISPATCH_MAX; i++) {
-        gpio_irq_dispatch_entry_t *entry = &gpio_irq_entries[i];
-        if (!entry->active) {
-            continue;
-        }
-        uint gpio = entry->gpio;
-        uint32_t events = gpio_get_irq_event_mask(gpio);
+    for (uint pin = 0; pin < NUM_BANK0_GPIOS; pin++) {
+        uint32_t events = gpio_get_irq_event_mask(pin);
         if (!events) {
             continue;
         }
-        gpio_acknowledge_irq(gpio, events);
-        if (!entry->fn) {
-            continue;
-        }
-        uint32_t masked = events & entry->mask;
-        if (masked) {
-            entry->fn(gpio, masked, entry->ctx);
+        gpio_acknowledge_irq(pin, events);
+        for (size_t i = 0; i < GPIO_IRQ_DISPATCH_MAX; i++) {
+            gpio_irq_dispatch_entry_t *entry = &gpio_irq_entries[i];
+            if (!entry->active || entry->gpio != pin || !entry->fn) {
+                continue;
+            }
+            uint32_t masked = events & entry->mask;
+            if (masked) {
+                entry->fn(pin, masked, entry->ctx);
+            }
         }
     }
 }
