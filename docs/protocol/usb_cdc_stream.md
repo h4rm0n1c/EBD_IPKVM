@@ -100,8 +100,7 @@ for the core1 ADB service loop.
 | Enter (`\\r`/`\\n`) | Emit a Return key press + release. |
 
 ## Capture cadence
-- Default mode streams every VSYNC (~60 fps).
-- Test mode toggles `want_frame` every VSYNC to reduce output to ~30 fps.
+- Streams every VSYNC (~60 fps).
 - Frames are only marked for transmit when the TX path is idle (no queued packets, no pending frame-ready, and no in-flight frame), which prevents backpressure from skipping frame IDs.
 - VSYNC IRQs are debounced in firmware (edges closer than 8ms are ignored) to filter glitch pulses and stabilize frame boundaries.
 - VSYNC arms the next capture window; the current capture finishes when the fixed-length DMA transfer completes (not on the VSYNC edge).

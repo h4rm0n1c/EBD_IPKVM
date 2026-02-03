@@ -42,11 +42,6 @@ static volatile uint8_t ep0_cmd_queue[8];
 static volatile uint8_t ep0_cmd_r = 0;
 static volatile uint8_t ep0_cmd_w = 0;
 
-static volatile uint32_t diag_pixclk_edges = 0;
-static volatile uint32_t diag_hsync_edges = 0;
-static volatile uint32_t diag_vsync_edges = 0;
-static volatile uint32_t diag_video_edges = 0;
-
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t adb_rx_next;
@@ -77,13 +72,6 @@ static inline void set_ps_on(bool on) {
 
 static inline bool can_emit_text(void) {
     return tud_cdc_n_connected(CDC_CTRL);
-}
-
-static inline void reset_diag_counts(void) {
-    diag_pixclk_edges = 0;
-    diag_hsync_edges = 0;
-    diag_vsync_edges = 0;
-    diag_video_edges = 0;
 }
 
 static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us) {
@@ -172,67 +160,6 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     cdc_ctrl_write(out, out_len);
 }
 
-static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
-                                         bool *prev_pixclk, bool *prev_hsync,
-                                         bool *prev_vsync, bool *prev_video) {
-    if (pixclk != *prev_pixclk) diag_pixclk_edges++;
-    if (hsync != *prev_hsync) diag_hsync_edges++;
-    if (vsync != *prev_vsync) diag_vsync_edges++;
-    if (video != *prev_video) diag_video_edges++;
-    *prev_pixclk = pixclk;
-    *prev_hsync = hsync;
-    *prev_vsync = vsync;
-    *prev_video = video;
-}
-
-static void run_gpio_diag(void) {
-    const uint32_t diag_ms = 500;
-
-    gpio_set_function(app_cfg.pin_pixclk, GPIO_FUNC_SIO);
-    gpio_set_function(app_cfg.pin_hsync, GPIO_FUNC_SIO);
-    gpio_set_function(app_cfg.pin_video, GPIO_FUNC_SIO);
-
-    reset_diag_counts();
-
-    bool prev_pixclk = gpio_get(app_cfg.pin_pixclk);
-    bool prev_hsync = gpio_get(app_cfg.pin_hsync);
-    bool prev_vsync = gpio_get(app_cfg.pin_vsync);
-    bool prev_video = gpio_get(app_cfg.pin_video);
-
-    absolute_time_t end = make_timeout_time_ms(diag_ms);
-    while (absolute_time_diff_us(get_absolute_time(), end) > 0) {
-        tud_task();
-        bool pixclk = gpio_get(app_cfg.pin_pixclk);
-        bool hsync = gpio_get(app_cfg.pin_hsync);
-        bool vsync = gpio_get(app_cfg.pin_vsync);
-        bool video = gpio_get(app_cfg.pin_video);
-        diag_accumulate_edges(pixclk, hsync, vsync, video,
-                              &prev_pixclk, &prev_hsync, &prev_vsync, &prev_video);
-        sleep_us(2);
-        tight_loop_contents();
-    }
-
-    bool pixclk = gpio_get(app_cfg.pin_pixclk);
-    bool hsync = gpio_get(app_cfg.pin_hsync);
-    bool vsync = gpio_get(app_cfg.pin_vsync);
-    bool video = gpio_get(app_cfg.pin_video);
-
-    gpio_set_function(app_cfg.pin_pixclk, GPIO_FUNC_PIO0);
-    gpio_set_function(app_cfg.pin_hsync, GPIO_FUNC_PIO0);
-    gpio_set_function(app_cfg.pin_video, GPIO_FUNC_PIO0);
-
-    cdc_ctrl_printf("[EBD_IPKVM][diag] gpio pixclk=%d hsync=%d vsync=%d video=%d edges/%.2fs pixclk=%lu hsync=%lu vsync=%lu video=%lu\n",
-                    pixclk ? 1 : 0,
-                    hsync ? 1 : 0,
-                    vsync ? 1 : 0,
-                    video ? 1 : 0,
-                    diag_ms / 1000.0,
-                    (unsigned long)diag_pixclk_edges,
-                    (unsigned long)diag_hsync_edges,
-                    (unsigned long)diag_vsync_edges,
-                    (unsigned long)diag_video_edges);
-}
-
 static bool try_send_probe_packet(void) {
     if (!stream_ready()) return false;
 
@@ -265,7 +192,6 @@ static inline void request_probe_packet(void) {
 
 static void handle_reset_counters(void) {
     usb_drops = 0;
-    video_core_set_take_toggle(false);
     video_core_set_want_frame(false);
     txq_offset = 0;
     core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
@@ -370,12 +296,10 @@ static void emit_debug_state(void) {
     adb_core_get_stats(&adb_stats);
     adb_bus_get_stats(&adb_bus_stats);
 
-    cdc_ctrl_printf("[EBD_IPKVM][debug] armed=%d capture=%d test=%d probe=%d vsync_edge=%s\n",
+    cdc_ctrl_printf("[EBD_IPKVM][debug] armed=%d capture=%d probe=%d\n",
                     video_core_is_armed() ? 1 : 0,
                     video_core_capture_enabled() ? 1 : 0,
-                    video_core_test_frame_active() ? 1 : 0,
-                    __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
-                    video_core_get_vsync_edge() ? "fall" : "rise");
+                    __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0);
     cdc_ctrl_printf("[EBD_IPKVM][debug] txq=%u/%u stream_avail=%d frames=%lu lines=%lu drops=%lu overruns=%lu shorts=%lu\n",
                     (unsigned)txq_r,
                     (unsigned)txq_w,

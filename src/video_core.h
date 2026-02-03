@@ -8,11 +8,6 @@
 #include "stream_protocol.h"
 #include "video_capture.h"
 
-typedef enum {
-    CAPTURE_MODE_TEST_30FPS = 0,
-    CAPTURE_MODE_CONTINUOUS_60FPS = 1,
-} capture_mode_t;
-
 typedef struct video_core_config {
     PIO pio;
     uint sm;
@@ -34,16 +29,10 @@ bool video_core_can_emit_text(void);
 void video_core_set_armed(bool armed);
 bool video_core_is_armed(void);
 void video_core_set_want_frame(bool want_frame);
-void video_core_set_take_toggle(bool take_toggle);
-void video_core_set_capture_mode(capture_mode_t mode);
-capture_mode_t video_core_get_capture_mode(void);
-void video_core_set_vsync_edge(bool fall_edge);
-bool video_core_get_vsync_edge(void);
 void video_core_set_tx_rle_enabled(bool enabled);
 bool video_core_get_tx_rle_enabled(void);
 
 bool video_core_capture_enabled(void);
-bool video_core_test_frame_active(void);
 
 uint32_t video_core_get_lines_drop(void);
 uint32_t video_core_get_frames_done(void);

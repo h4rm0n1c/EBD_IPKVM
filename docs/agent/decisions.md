@@ -16,6 +16,7 @@
 - 2026-02-08: Use a dedicated DMA channel to byte-swap captured frame buffers in-place after the PIO RX DMA completes, removing per-line CPU byte swapping before transmit.
 - 2026-02-09: Track capture post-processing as a non-blocking DMA pass, only marking frames ready once the byte-swap DMA completes to keep core1 free for TX/ADB servicing.
 - 2026-02-10: Move capture-control commands to EP0 vendor control transfers so CDC1 can focus on status/debug and power/reset controls.
+- 2026-02-10: Lock capture to continuous mode with fixed VSYNC falling-edge sync, removing runtime mode/edge toggles to simplify the pipeline.
 - 2026-02-09: Limit core1 line enqueueing to batches of 8 per loop iteration, using TX queue depth to cap work and avoid starving capture/ADB servicing while keeping packet timing steady.
 - 2026-02-09: Revert bulk stream coalescing while investigating horizontal sync roll, keeping one packet per write for stable framing.
 - 2026-02-05: Provide hootswitch-style debug counters for lock failures/collisions in the ADB bus and surface them in CDC debug output.
