@@ -17,8 +17,8 @@ STREAM_RAW = False
 STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
-STREAM_DEV = "/dev/ttyACM0"
-CTRL_DEV = "/dev/ttyACM1"
+STREAM_DEV = "usb"
+CTRL_DEV = "/dev/ttyACM0"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -73,6 +73,8 @@ for arg in sys.argv[1:]:
         QUIET_SET = True
     elif arg.startswith("--stream-device="):
         STREAM_DEV = arg.split("=", 1)[1]
+    elif arg == "--stream-usb":
+        STREAM_DEV = "usb"
     elif arg.startswith("--ctrl-device="):
         CTRL_DEV = arg.split("=", 1)[1]
     elif arg.startswith("--force-after="):
@@ -213,10 +215,73 @@ def pop_one_packet(buf: bytearray):
     del buf[:total_len]
     return pkt
 
-stream_fd = os.open(STREAM_DEV, os.O_RDWR | os.O_NOCTTY)
-ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
-set_raw_and_dtr(stream_fd)
-set_raw_and_dtr(ctrl_fd)
+USB_VID = 0x2E8A
+USB_PID = 0x000A
+
+def open_usb_stream():
+    try:
+        import usb.core
+        import usb.util
+    except ImportError as exc:
+        print(f"[host] pyusb not available: {exc}. Install python3-usb or pyusb.", file=sys.stderr)
+        sys.exit(2)
+
+    dev = usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    if dev is None:
+        print("[host] USB device not found (VID/PID 0x2E8A:0x000A).", file=sys.stderr)
+        sys.exit(2)
+
+    try:
+        cfg = dev.get_active_configuration()
+    except usb.core.USBError:
+        cfg = None
+    if cfg is None:
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) != 16:
+                raise
+        cfg = dev.get_active_configuration()
+    intf = usb.util.find_descriptor(cfg, bInterfaceClass=0xFF)
+    if intf is None:
+        print("[host] bulk stream interface not found.", file=sys.stderr)
+        sys.exit(2)
+
+    if dev.is_kernel_driver_active(intf.bInterfaceNumber):
+        dev.detach_kernel_driver(intf.bInterfaceNumber)
+
+    usb.util.claim_interface(dev, intf.bInterfaceNumber)
+    ep_in = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+    )
+    if ep_in is None:
+        print("[host] bulk IN endpoint not found.", file=sys.stderr)
+        sys.exit(2)
+    return dev, intf.bInterfaceNumber, ep_in
+
+def read_usb_stream(ep_in, timeout_s: float) -> bytes:
+    timeout_ms = int(timeout_s * 1000)
+    try:
+        data = ep_in.read(8192, timeout=timeout_ms)
+        return bytes(data)
+    except Exception:
+        return b""
+
+use_usb_stream = STREAM_DEV == "usb" or STREAM_DEV.startswith("usb:")
+stream_fd = None
+usb_dev = None
+usb_intf = None
+usb_ep_in = None
+if use_usb_stream:
+    usb_dev, usb_intf, usb_ep_in = open_usb_stream()
+    ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+    set_raw_and_dtr(ctrl_fd)
+else:
+    stream_fd = os.open(STREAM_DEV, os.O_RDWR | os.O_NOCTTY)
+    ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+    set_raw_and_dtr(stream_fd)
+    set_raw_and_dtr(ctrl_fd)
 
 if SEND_BOOT:
     os.write(ctrl_fd, b"P")
@@ -267,10 +332,13 @@ if PROBE_ONLY:
     probe_deadline = time.time() + 1.0
     probe_bytes = 0
     while time.time() < probe_deadline:
-        r, _, _ = select.select([stream_fd], [], [], 0.25)
-        if not r:
-            continue
-        chunk = os.read(stream_fd, 8192)
+        if use_usb_stream:
+            chunk = read_usb_stream(usb_ep_in, 0.25)
+        else:
+            r, _, _ = select.select([stream_fd], [], [], 0.25)
+            if not r:
+                continue
+            chunk = os.read(stream_fd, 8192)
         if chunk:
             probe_bytes += len(chunk)
     print(f"[host] probe bytes received: {probe_bytes}")
@@ -309,8 +377,20 @@ try:
     while True:
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
-        r, _, _ = select.select([stream_fd], [], [], 0.25)
-        if not r:
+        try:
+            if use_usb_stream:
+                chunk = read_usb_stream(usb_ep_in, 0.25)
+            else:
+                r, _, _ = select.select([stream_fd], [], [], 0.25)
+                if not r:
+                    chunk = b""
+                else:
+                    chunk = os.read(stream_fd, 8192)
+        except KeyboardInterrupt:
+            log("[host] interrupted by user")
+            break
+
+        if not chunk:
             now = time.time()
             if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
                 os.write(ctrl_fd, b"F")
@@ -324,8 +404,6 @@ try:
                 log("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now
             continue
-
-        chunk = os.read(stream_fd, 8192)
         if not chunk:
             time.sleep(0.01)
             continue
@@ -425,8 +503,15 @@ finally:
         os.write(ctrl_fd, b"p")
     except OSError:
         pass
-    os.close(stream_fd)
+    if stream_fd is not None:
+        os.close(stream_fd)
     os.close(ctrl_fd)
+    if usb_dev is not None and usb_intf is not None:
+        try:
+            import usb.util
+            usb.util.release_interface(usb_dev, usb_intf)
+        except Exception:
+            pass
 
 if raw_stream and raw_stream is not sys.stdout.buffer:
     raw_stream.close()

@@ -34,7 +34,7 @@ def set_raw_and_dtr(fd: int) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send a CDC command and print ASCII response.")
-    parser.add_argument("--device", default="/dev/ttyACM1",
+    parser.add_argument("--device", default="/dev/ttyACM0",
                         help="CDC control device path (CDC1 by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")

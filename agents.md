@@ -36,7 +36,7 @@ After any non-trivial change:
 - Macintosh Classic video: 512×342, 1bpp, ~60 Hz interlaced-ish, negative syncs typical, pixel clock ~15.67 MHz.
 - PIO (`src/classic_line.pio`): must be cycle-precise on pixel clock sampling; any added instruction can shift alignment → re-verify with scope or test pattern.
 - DMA line queue: overflows drop frames silently → monitor queue depth in code.
-- USB: dual CDC (CDC0 = binary frames, CDC1 = JSON control) — preserve separation or host_recv_frames.py breaks.
+- USB: vendor bulk stream + CDC control/ADB — preserve separation or host_recv_frames.py breaks.
 - Signals: Mac video/ADB = 5V open-collector/bidirectional → **mandatory level shifters** (e.g. 74LVC245 or similar); never suggest direct GPIO connect.
 - Host verification flow: `python scripts/host_recv_frames.py --pgm` for PGM output; or `--raw | ffplay -f rawvideo -pixel_format monob -video_size 512x342 -framerate 60 -`
 - Use `./bootstrap_repo.sh` for fresh clones (SDK path, submodules if any).
@@ -45,6 +45,7 @@ After any non-trivial change:
 Start your response with:
 “I have reviewed agents.md, PROJECT_STATE.md, docs/protocol/, and any existing docs/agent/* files. Relevant points / conflicts: …”
 Then quote specifics if they exist (even if just “docs/agent/ is empty / not yet populated”).
+Also include a quick scan of the codebase and any relevant `/opt/` references (for example `/opt/MacDevDocs` or `/opt/adb`) as part of the mandatory memory check.
 
 ## PIO, DMA & Timing Discipline
 - PIO changes: always note cycle count impact (use pioasm output).
@@ -71,7 +72,8 @@ Then quote specifics if they exist (even if just “docs/agent/ is empty / not y
 
 ## Mandatory Memory Check – Updated for ADB Work
 Before any ADB-related proposal:
-- Review: agents.md, PROJECT_STATE.md, README.md (pin assignments), docs/protocol/ (if ADB sections added), /opt/adb references.
+- Review: agents.md, PROJECT_STATE.md, README.md (pin assignments), docs/protocol/ (if ADB sections added), the relevant code paths, and /opt/adb references.
+- If repo docs conflict with /opt/adb (hootswitch or other ADB sources), treat /opt/adb as the overriding source and call out the discrepancy.
 - Quote relevant pin / level-shift / inversion notes.
 - Start response with:
   “Reviewed agents.md + README pinout for ADB (GPIO6 RECV via 74LVC245 non-inverting, GPIO12 XMIT via ULN2803 inverted). Relevant constraints: …”

@@ -1,5 +1,14 @@
 # Log (running)
 
+- 2026-02-08: Switched ADB GPIO rising-edge detection to a raw IO_IRQ_BANK0 handler so it no longer conflicts with the VSYNC GPIO callback, matching hootswitch’s IRQ strategy and restoring ADB attention/rise detection.
+- 2026-02-08: Acknowledge all ADB GPIO IRQ event bits in the raw handler to prevent stuck IRQs (possible CDC freeze) while still latching rise events.
+- 2026-02-08: Set the ADB TX PIO pin direction/output mask on init (hootswitch-style) so the state machine can actively drive GPIO12 through the ULN2803.
+- 2026-02-08: Add ADB Talk debug counters (empty responses + total bytes) to confirm when Talk responses are actually emitted on the wire.
+- 2026-02-08: Disable the ADB GPIO rise interrupt inside the raw IRQ handler (hootswitch-style) to avoid repeated IRQ storms that can freeze the core.
+- 2026-02-08: Emit the CDC1 debug block as a single write (retrying when buffer space is low) and pause periodic status while a debug dump is pending so Talk counters reliably print.
+- 2026-02-08: Emit the periodic CDC1 status lines as a single buffered block to reduce control-endpoint churn and avoid partial writes when the host is slow to read.
+- 2026-02-08: Switch CDC1 debug/status output to a queued, chunked write path so large debug blocks can drain without stalling the main loop or starving capture/USB handling.
+- 2026-02-08: Re-enable CDC1 status/debug output during capture so control/status traffic remains available while the stream is active; rely on queued chunking to avoid blocking.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.
@@ -122,3 +131,9 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+- 2026-02-03: Drop CDC1 debug/status output when the control interface is disconnected or lacks write space, and clear any queued control text on disconnect to prevent backlog flushes.
+- 2026-02-03: Expanded mandatory memory checks to include codebase scans and relevant /opt references, with /opt/adb as the overriding source for ADB conflicts.
+- 2026-02-03: Switched the video stream from CDC0 to a vendor bulk endpoint and updated host tooling/docs accordingly.
+- 2026-02-03: Made the bulk-stream host helper tolerate USB “resource busy” by reusing the active configuration and ignoring EBUSY on set-configuration.
+- 2026-02-03: Updated debug/ADB console helper scripts to use the new CDC interface indices (if01 control, if03 ADB).
+- 2026-02-03: Handle Ctrl+C cleanly in host_recv_frames.py when reading from the bulk stream to avoid noisy tracebacks.

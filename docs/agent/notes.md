@@ -8,9 +8,9 @@
 - PIXCLK phase-lock after HSYNC (and a pre-roll high before falling-edge capture) prevents occasional 1-pixel capture phase slips.
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
-- Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
-- Host scripts default to `/dev/ttyACM0` for the CDC0 stream and `/dev/ttyACM1` for CDC1 control unless overridden.
-- Linux udev symlinks include `if00` (CDC0 stream) and `if02` (CDC1 control); use `/dev/serial/by-id` for stable naming.
+- Control/status traffic uses CDC1 while the video stream uses a vendor bulk endpoint; host tooling must open the CDC interface for commands and libusb/pyusb for the stream.
+- Host scripts default to `usb` for the bulk stream and `/dev/ttyACM0` for CDC1 control unless overridden.
+- Linux udev symlinks include `if02` (CDC1 control) and `if04` (CDC2 ADB test); use `/dev/serial/by-id` for stable naming.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
@@ -52,4 +52,16 @@
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.
 - ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
-- 2026-02-08: Capture post-processing now runs a DMA byte-swap pass after the PIO RX DMA completes; PIO timing/cycle counts are unchanged because the swap happens after the capture DMA is stopped.
+- GPIO IRQ callbacks are per-core; using `gpio_set_irq_enabled_with_callback` for VSYNC overwrites the ADB callback, so ADB must use a raw IO_IRQ_BANK0 handler (hootswitch-style) to avoid losing ADB rise events.
+- The ADB raw IRQ handler must acknowledge all pending GPIO IRQ bits for the pin; leaving an unacked edge can retrigger the IRQ and starve the main loop (seen as a CDC freeze).
+- PIO must explicitly set the ADB TX pin direction/output mask (GPIO12) after claiming the state machine; without that, the PIO sideset will not drive the ULN2803.
+- ADB Talk debug counters (empty responses + total bytes) now report if Talk replies are actually being emitted.
+- ADB GPIO rise IRQs should disable themselves in the raw handler (hootswitch-style) to avoid IRQ storms that can stall the core.
+- CDC1 debug dumps are now emitted as a single buffered block and retried if the control endpoint lacks space, with periodic status paused while a debug dump is pending to avoid dropping late debug lines (e.g., Talk counters).
+- Periodic CDC1 status is now emitted as a single buffered block to reduce control endpoint churn and avoid partial status writes when host reads are slow.
+- CDC1 debug/status blocks can exceed TinyUSB's per-interface write-available size; queue and chunk long control text to avoid repeated retries and timing side effects during capture.
+- CDC1 control/status output remains active during capture; chunked writes are used to avoid blocking while keeping CDC1 diagnostics available.
+- CDC1 control text is now dropped if the interface is disconnected or lacks write space, and any queued control block is discarded on disconnect to avoid backlogged status bursts.
+- Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.
+- Video streaming now uses a vendor bulk endpoint (not CDC); host access requires libusb/pyusb while CDC1/CDC2 remain for control and ADB test input.
+- Helper scripts now target `/dev/serial/by-id/*-if01` for the CDC1 control console and `*-if03` for the CDC2 ADB console.

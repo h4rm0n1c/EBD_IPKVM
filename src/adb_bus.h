@@ -13,6 +13,8 @@ typedef struct {
     uint32_t aborts;
     uint32_t abort_time;
     uint32_t errors;
+    uint32_t talk_empty;
+    uint32_t talk_bytes;
 } adb_bus_stats_t;
 
 struct adb_device;

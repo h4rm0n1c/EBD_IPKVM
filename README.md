@@ -9,7 +9,7 @@ Above output is current project output as of PR #19.
 
 ## Highlights
 - RP2040 PIO captures 512 pixels per line (1 bpp) on PIXCLK edges.
-- Lines are queued and streamed over USB CDC with a compact per-line header (optional RLE).
+- Lines are queued and streamed over a USB bulk endpoint with a compact per-line header (optional RLE).
 - Host test helper (`src/host_recv_frames.py`) reconstructs frames into PGM images (default).
 
 ## Signal/pin map (current firmware)
@@ -30,15 +30,15 @@ Above output is current project output as of PR #19.
 - Capture window: 370 HSYNCs total (28 VBL + 342 active)
 - Line capture begins on the selected HSYNC edge.
 
-## USB CDC interfaces
-The firmware exposes three CDC interfaces:
-- **CDC0 (stream)**: binary line packets (video data).
+## USB interfaces
+The firmware exposes one vendor bulk interface and two CDC interfaces:
+- **BULK0 (stream)**: binary line packets (video data).
 - **CDC1 (control)**: ASCII commands + status text.
 - **CDC2 (ADB test)**: ASCII test input for ADB keyboard/mouse events.
 
 See `docs/protocol/usb_cdc_stream.md` for details on interfaces and commands.
 
-### Stream packet format (CDC0)
+### Stream packet format (bulk)
 Each line is emitted as a packet with a compact header:
 
 ```
@@ -55,11 +55,12 @@ lines if RLE does not compress.
 ## Host capture helper
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --ctrl-device=/dev/ttyACM1
+python3 src/host_recv_frames.py usb frames --ctrl-device=/dev/ttyACM0
 ```
 
 This test script:
-- Uses the stream/control CDC ports (override with `--stream-device=` and `--ctrl-device=`).
+- Uses the bulk stream interface (via pyusb/libusb) plus the control CDC port (override with `--stream-device=usb` and `--ctrl-device=`).
+  - Install pyusb if needed: `python3 -m pip install pyusb` (or distro package `python3-usb`).
 - Optionally asserts `P` (power on) before capture; use `--no-boot` to skip.
 - Sends `X` to stop any prior run before arming (use `--no-stop` to skip).
 - Resets counters and arms capture by sending `R` then `S` (use `--no-reset` to skip).
@@ -74,14 +75,14 @@ This test script:
 Example: stream raw 512×342 8-bit frames to ffplay on stdout:
 
 ```bash
-python3 src/host_recv_frames.py /dev/ttyACM0 frames --stream-raw \
+python3 src/host_recv_frames.py usb frames --stream-raw \
   | ffplay -f rawvideo -pixel_format gray -video_size 512x342 -framerate 60 -
 ```
 
 ## Repo layout
 - `src/` firmware sources (Pico SDK)
   - `classic_line.pio`: PIO program for per-line capture.
-  - `main.c`: USB CDC streaming firmware.
+  - `main.c`: USB streaming firmware.
   - `host_recv_frames.py`: host-side test program for reassembling frames.
 - `docs/`
   - `PROJECT_STATE.md`: living status summary.

@@ -4,6 +4,7 @@
 
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "pico/sem.h"
 #include "pico/rand.h"
@@ -86,6 +87,8 @@ typedef struct {
     uint32_t dbg_abrt;
     uint32_t dbg_abrt_time;
     uint32_t dbg_err;
+    uint32_t dbg_talk_empty;
+    uint32_t dbg_talk_bytes;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -118,12 +121,15 @@ static void adb_device_reset(adb_device_t *dev, uint8_t address, uint8_t handler
 static uint8_t adb_default_handler_id(uint8_t address, uint8_t stored_id);
 static uint8_t adb_bus_get_handler_id(const adb_device_t *dev);
 
-static void adb_gpio_irq_handler(uint gpio, uint32_t events) {
-    if (gpio != ADB_PIN_RECV) {
+static void adb_gpio_irq_handler(void) {
+    uint32_t events = gpio_get_irq_event_mask(ADB_PIN_RECV);
+    if (events == 0) {
         return;
     }
+    gpio_acknowledge_irq(ADB_PIN_RECV, events);
     if (events & GPIO_IRQ_EDGE_RISE) {
         adb_gpio_rise = true;
+        gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
     }
 }
 
@@ -189,6 +195,8 @@ static void adb_bus_reset_devices(void) {
     adb_state.dbg_abrt = 0;
     adb_state.dbg_abrt_time = 0;
     adb_state.dbg_err = 0;
+    adb_state.dbg_talk_empty = 0;
+    adb_state.dbg_talk_bytes = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -336,11 +344,19 @@ static void adb_bus_execute_command(void) {
             adb_bus_prepare_reg3(dev, handler_id);
         }
         if (reg == 3) {
+            if (dev->regs[reg].len == 0) {
+                adb_state.dbg_talk_empty++;
+                adb_pio_atn_start();
+                adb_state.phase = ADB_PHASE_IDLE;
+                return;
+            }
+            adb_state.dbg_talk_bytes += dev->regs[reg].len;
             adb_pio_tx_start();
             bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
             adb_state.phase = ADB_PHASE_TALK;
         } else if (sem_try_acquire(&dev->talk_sem)) {
             if (dev->regs[reg].len == 0) {
+                adb_state.dbg_talk_empty++;
                 if (reg == 0) {
                     dev->srq_pending = false;
                     adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
@@ -350,6 +366,7 @@ static void adb_bus_execute_command(void) {
                 adb_state.phase = ADB_PHASE_IDLE;
                 return;
             }
+            adb_state.dbg_talk_bytes += dev->regs[reg].len;
             adb_state.talk_lock_held = true;
             adb_pio_tx_start();
             bus_tx_dev_putm(adb_pio, adb_sm, dev->regs[reg].data, dev->regs[reg].len);
@@ -453,7 +470,9 @@ void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
     gpio_pull_up(ADB_PIN_RECV);
-    gpio_set_irq_enabled_with_callback(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false, adb_gpio_irq_handler);
+    gpio_add_raw_irq_handler_masked(1u << ADB_PIN_RECV, adb_gpio_irq_handler);
+    gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+    irq_set_enabled(IO_IRQ_BANK0, true);
 
     gpio_init(ADB_PIN_XMIT);
     gpio_set_dir(ADB_PIN_XMIT, GPIO_OUT);
@@ -468,6 +487,9 @@ void adb_bus_init(void) {
 
     adb_sm = pio_claim_unused_sm(adb_pio, true);
     adb_dma_chan = dma_claim_unused_channel(true);
+
+    pio_sm_set_pindirs_with_mask(adb_pio, adb_sm, 1u << ADB_PIN_XMIT, 1u << ADB_PIN_XMIT);
+    pio_sm_set_pins_with_mask(adb_pio, adb_sm, 0u, 1u << ADB_PIN_XMIT);
 
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();
@@ -630,6 +652,8 @@ void adb_bus_get_stats(adb_bus_stats_t *out) {
     out->aborts = __atomic_load_n(&adb_state.dbg_abrt, __ATOMIC_ACQUIRE);
     out->abort_time = __atomic_load_n(&adb_state.dbg_abrt_time, __ATOMIC_ACQUIRE);
     out->errors = __atomic_load_n(&adb_state.dbg_err, __ATOMIC_ACQUIRE);
+    out->talk_empty = __atomic_load_n(&adb_state.dbg_talk_empty, __ATOMIC_ACQUIRE);
+    out->talk_bytes = __atomic_load_n(&adb_state.dbg_talk_bytes, __ATOMIC_ACQUIRE);
 }
 
 bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, uint8_t stored_id)) {

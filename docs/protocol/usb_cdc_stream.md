@@ -1,25 +1,31 @@
-# USB CDC line stream protocol
+# USB line stream protocol (bulk + CDC)
 
-The firmware exposes three USB CDC interfaces:
+The firmware exposes one vendor bulk interface for streaming and two CDC
+interfaces for control/ADB testing:
 
-- CDC0: video stream (binary packets).
+- BULK0 (vendor): video stream (binary packets).
 - CDC1: control + status (ASCII commands and logs).
 - CDC2: ADB test input (ASCII keystrokes and mouse motion).
 
-Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
+Captured Macintosh Classic video is streamed as fixed-size packets over the
+vendor bulk interface. The bulk endpoint is dedicated to the binary line
+stream; control/status stays on CDC1.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
-### Identifying CDC0 vs CDC1 on Linux
-The USB interface strings are set to `EBD_IPKVM stream`, `EBD_IPKVM control`,
+### Identifying bulk stream vs CDC on Linux
+The USB interface strings are set to `EBD_IPKVM stream (bulk)`, `EBD_IPKVM control`,
 and `EBD_IPKVM adb test`, which are visible in tools like `lsusb -v` or
-`udevadm info -a`. The kernel
-also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
-number:
+`udevadm info -a`. The kernel only exposes CDC interfaces under
+`/dev/serial/by-id`, so the stream endpoint is accessed via libusb/pyusb.
+`src/host_recv_frames.py` uses pyusb by default when `--stream-device=usb`.
 
-- `...-if00` → CDC0 (stream)
 - `...-if02` → CDC1 (control)
 - `...-if04` → CDC2 (ADB test input)
+
+On Linux, vendor-specific bulk interfaces typically show `usbfs` as the driver in
+`lsusb -t`. This is expected because no class driver is bound for the stream;
+libusb/pyusb talks to the bulk endpoints through usbfs.
 
 ## Packet layout (variable length)
 
@@ -64,7 +70,7 @@ The firmware is host-controlled over CDC1 (control channel):
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
 Status lines (including utilization counters) are emitted on CDC1 and can be
-read without interfering with the CDC0 video stream. Utilization percentages
+read without interfering with the bulk video stream. Utilization percentages
 (`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
 work (only when those operations perform work), rather than total loop
 occupancy.

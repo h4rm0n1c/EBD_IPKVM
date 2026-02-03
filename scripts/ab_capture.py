@@ -55,8 +55,8 @@ def run_host_capture(dev: str, ctrl_dev: str, outdir: str, max_frames: int, host
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="A/B test VIDEO inversion with capture runs.")
-    parser.add_argument("--stream-device", default="/dev/ttyACM0", help="CDC stream device (CDC0).")
-    parser.add_argument("--ctrl-device", default="/dev/ttyACM1", help="CDC control device (CDC1).")
+    parser.add_argument("--stream-device", default="usb", help="Bulk stream device ('usb' for vendor bulk).")
+    parser.add_argument("--ctrl-device", default="/dev/ttyACM0", help="CDC control device (CDC1).")
     parser.add_argument("--outdir", default="frames_ab", help="Output base directory.")
     parser.add_argument("--max-frames", type=int, default=30, help="Frames per run.")
     parser.add_argument("--settle", type=float, default=1.0, help="Seconds to wait after toggling inversion.")
