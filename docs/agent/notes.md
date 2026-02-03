@@ -56,6 +56,7 @@
 - ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
 - GPIO IRQ callbacks are per-core; using `gpio_set_irq_enabled_with_callback` for VSYNC overwrites the ADB callback, so ADB must use a raw IO_IRQ_BANK0 handler (hootswitch-style) to avoid losing ADB rise events.
 - The ADB raw IRQ handler must acknowledge all pending GPIO IRQ bits for the pin; leaving an unacked edge can retrigger the IRQ and starve the main loop (seen as a CDC freeze).
+- IO_IRQ_BANK0 dispatcher now reads pending bits from io_bank0_hw->intr and clears all banks up front, then dispatches only to registered GPIO entries to bound ISR work while still acknowledging every pending IRQ.
 - PIO must explicitly set the ADB TX pin direction/output mask (GPIO12) after claiming the state machine; without that, the PIO sideset will not drive the ULN2803.
 - ADB Talk debug counters (empty responses + total bytes) now report if Talk replies are actually being emitted.
 - ADB GPIO rise IRQs should disable themselves in the raw handler (hootswitch-style) to avoid IRQ storms that can stall the core.
