@@ -78,20 +78,22 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
     }
 }
 
-static void cdc_ctrl_write(const char *buf, size_t len) {
+static bool cdc_ctrl_write(const char *buf, size_t len) {
     if (!tud_cdc_n_connected(CDC_CTRL) || len == 0) {
-        return;
+        return false;
     }
 
     int avail = tud_cdc_n_write_available(CDC_CTRL);
     if (avail < (int)len) {
-        return;
+        return false;
     }
 
     uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf, len);
     if (wrote == len) {
         tud_cdc_n_write_flush(CDC_CTRL);
+        return true;
     }
+    return false;
 }
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
@@ -215,8 +217,10 @@ static inline void request_probe_packet(void) {
     probe_pending = 1;
 }
 
-static void emit_debug_state(void) {
-    if (!tud_cdc_n_connected(CDC_CTRL)) return;
+static bool emit_debug_state(void) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        return false;
+    }
 
     uint16_t txq_r = 0;
     uint16_t txq_w = 0;
@@ -226,38 +230,69 @@ static void emit_debug_state(void) {
     adb_core_get_stats(&adb_stats);
     adb_bus_get_stats(&adb_bus_stats);
 
-    cdc_ctrl_printf("[EBD_IPKVM] dbg a=%d cap=%d test=%d probe=%d vs=%s\n",
-                    video_core_is_armed() ? 1 : 0,
-                    video_core_capture_enabled() ? 1 : 0,
-                    video_core_test_frame_active() ? 1 : 0,
-                    __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
-                    video_core_get_vsync_edge() ? "fall" : "rise");
-    cdc_ctrl_printf("[EBD_IPKVM] dbg txq=%u/%u av=%d fr=%lu ln=%lu dr=%lu ov=%lu sh=%lu\n",
-                    (unsigned)txq_r,
-                    (unsigned)txq_w,
-                    tud_cdc_n_write_available(CDC_STREAM),
-                    (unsigned long)video_core_get_frames_done(),
-                    (unsigned long)video_core_get_lines_ok(),
-                    (unsigned long)video_core_get_lines_drop(),
-                    (unsigned long)video_core_get_frame_overrun(),
-                    (unsigned long)video_core_get_frame_short());
-    cdc_ctrl_printf("[EBD_IPKVM] dbg adb pending=%lu key=%lu mouse=%lu drop=%lu lock=%lu coll=%lu\n",
-                    (unsigned long)adb_stats.pending,
-                    (unsigned long)adb_stats.key_events,
-                    (unsigned long)adb_stats.mouse_events,
-                    (unsigned long)adb_stats.drops,
-                    (unsigned long)adb_bus_stats.lock_fails,
-                    (unsigned long)adb_bus_stats.collisions);
-    cdc_ctrl_printf("[EBD_IPKVM] dbg adb atn=%lu atnS=%lu rst=%lu abrt=%lu err=%lu abrt_t=%lu\n",
-                    (unsigned long)adb_bus_stats.attentions,
-                    (unsigned long)adb_bus_stats.attention_short,
-                    (unsigned long)adb_bus_stats.resets,
-                    (unsigned long)adb_bus_stats.aborts,
-                    (unsigned long)adb_bus_stats.errors,
-                    (unsigned long)adb_bus_stats.abort_time);
-    cdc_ctrl_printf("[EBD_IPKVM] dbg adb talk_empty=%lu talk_bytes=%lu\n",
-                    (unsigned long)adb_bus_stats.talk_empty,
-                    (unsigned long)adb_bus_stats.talk_bytes);
+    char out[512];
+    size_t out_len = 0;
+    int wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                         "[EBD_IPKVM] dbg a=%d cap=%d test=%d probe=%d vs=%s\n",
+                         video_core_is_armed() ? 1 : 0,
+                         video_core_capture_enabled() ? 1 : 0,
+                         video_core_test_frame_active() ? 1 : 0,
+                         __atomic_load_n(&probe_pending, __ATOMIC_ACQUIRE) ? 1 : 0,
+                         video_core_get_vsync_edge() ? "fall" : "rise");
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                     "[EBD_IPKVM] dbg txq=%u/%u av=%d fr=%lu ln=%lu dr=%lu ov=%lu sh=%lu\n",
+                     (unsigned)txq_r,
+                     (unsigned)txq_w,
+                     tud_cdc_n_write_available(CDC_STREAM),
+                     (unsigned long)video_core_get_frames_done(),
+                     (unsigned long)video_core_get_lines_ok(),
+                     (unsigned long)video_core_get_lines_drop(),
+                     (unsigned long)video_core_get_frame_overrun(),
+                     (unsigned long)video_core_get_frame_short());
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                     "[EBD_IPKVM] dbg adb pending=%lu key=%lu mouse=%lu drop=%lu lock=%lu coll=%lu\n",
+                     (unsigned long)adb_stats.pending,
+                     (unsigned long)adb_stats.key_events,
+                     (unsigned long)adb_stats.mouse_events,
+                     (unsigned long)adb_stats.drops,
+                     (unsigned long)adb_bus_stats.lock_fails,
+                     (unsigned long)adb_bus_stats.collisions);
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                     "[EBD_IPKVM] dbg adb atn=%lu atnS=%lu rst=%lu abrt=%lu err=%lu abrt_t=%lu\n",
+                     (unsigned long)adb_bus_stats.attentions,
+                     (unsigned long)adb_bus_stats.attention_short,
+                     (unsigned long)adb_bus_stats.resets,
+                     (unsigned long)adb_bus_stats.aborts,
+                     (unsigned long)adb_bus_stats.errors,
+                     (unsigned long)adb_bus_stats.abort_time);
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                     "[EBD_IPKVM] dbg adb talk_empty=%lu talk_bytes=%lu\n",
+                     (unsigned long)adb_bus_stats.talk_empty,
+                     (unsigned long)adb_bus_stats.talk_bytes);
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    if (out_len == 0 || out_len >= sizeof(out)) {
+        return false;
+    }
+    return cdc_ctrl_write(out, out_len);
 }
 
 static bool poll_cdc_commands(void) {
@@ -638,8 +673,9 @@ void app_core_poll(void) {
     }
     if (debug_requested && can_emit_text()) {
         active_start = time_us_32();
-        debug_requested = false;
-        emit_debug_state();
+        if (emit_debug_state()) {
+            debug_requested = false;
+        }
         active_us += (uint32_t)(time_us_32() - active_start);
     }
     active_start = time_us_32();
@@ -647,7 +683,7 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    if (can_emit_text()) {
+    if (can_emit_text() && !debug_requested) {
         if (adb_rx_seen && absolute_time_diff_us(get_absolute_time(), adb_rx_next) <= 0) {
             adb_rx_seen = false;
             adb_rx_next = delayed_by_ms(get_absolute_time(), 2000);
