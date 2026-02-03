@@ -2,6 +2,7 @@
 
 - 2026-02-09: Move VSYNC edge handling onto a raw IO_IRQ_BANK0 handler so ADB's raw IRQ usage can't override the VSYNC callback, reducing intermittent sync loss while ADB is active.
 - 2026-02-12: Add a shared IO_IRQ_BANK0 dispatcher so VSYNC + ADB acknowledge all pending GPIO IRQ bits in one handler, preventing IRQ storms that can break capture.
+- 2026-02-12: Reduce IO_IRQ_BANK0 dispatcher overhead by checking only registered GPIO pins per IRQ, to avoid starving core1 under frequent ADB edges.
 - 2026-02-12: Add ADB debug counters for reg0 fills/SRQ gating/rx-gate events and acknowledge the ADB GPIO rise IRQ in the raw handler to avoid stuck IRQs during coexistence debugging.
 - 2026-02-08: Switched ADB GPIO rising-edge detection to a raw IO_IRQ_BANK0 handler so it no longer conflicts with the VSYNC GPIO callback, matching hootswitch’s IRQ strategy and restoring ADB attention/rise detection.
 - 2026-02-08: Acknowledge all ADB GPIO IRQ event bits in the raw handler to prevent stuck IRQs (possible CDC freeze) while still latching rise events.
