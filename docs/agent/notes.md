@@ -52,3 +52,4 @@
 - Command completion now follows the hootswitch flow: stop-bit IRQ transitions into an SRQ phase and waits for the GPIO rise before executing Talk/Listen.
 - SRQ pending state now tracks a hootswitch-style bitfield keyed by device address, and SRQ gating uses that shared mask.
 - ADB validation checklist lives in `docs/protocol/adb.md`, covering scope/logic analyzer timing checks plus CDC2 input validation steps.
+- 2026-02-08: Capture post-processing now runs a DMA byte-swap pass after the PIO RX DMA completes; PIO timing/cycle counts are unchanged because the swap happens after the capture DMA is stopped.

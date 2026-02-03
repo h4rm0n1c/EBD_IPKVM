@@ -19,6 +19,26 @@ static inline void arm_dma(video_capture_t *cap, uint32_t *dst, uint32_t word_co
     );
 }
 
+static inline void arm_postprocess_dma(video_capture_t *cap, uint32_t *dst, uint32_t word_count) {
+    dma_channel_config c = dma_channel_get_default_config(cap->post_dma_chan);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+    channel_config_set_read_increment(&c, true);
+    channel_config_set_write_increment(&c, true);
+    channel_config_set_bswap(&c, true);
+    channel_config_set_dreq(&c, DREQ_FORCE);
+
+    dma_channel_configure(
+        cap->post_dma_chan,
+        &c,
+        dst,
+        dst,
+        word_count,
+        true
+    );
+    dma_channel_wait_for_finish_blocking(cap->post_dma_chan);
+    dma_hw->ints0 = 1u << cap->post_dma_chan;
+}
+
 static uint32_t (*select_capture_buffer(video_capture_t *cap))[CAP_WORDS_PER_LINE] {
     if (cap->inflight_buf == cap->framebuf_a) {
         if (cap->ready_buf == cap->framebuf_b) {
@@ -52,11 +72,13 @@ void video_capture_init(video_capture_t *cap,
                         PIO pio,
                         uint sm,
                         int dma_chan,
+                        int post_dma_chan,
                         uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE],
                         uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE]) {
     cap->pio = pio;
     cap->sm = sm;
     cap->dma_chan = dma_chan;
+    cap->post_dma_chan = post_dma_chan;
     cap->capture_enabled = false;
     cap->capture_want_frame = false;
     cap->lines_ok = 0;
@@ -78,6 +100,8 @@ void video_capture_stop(video_capture_t *cap) {
     pio_sm_set_enabled(cap->pio, cap->sm, false);
     dma_channel_abort(cap->dma_chan);
     dma_hw->ints0 = 1u << cap->dma_chan;
+    dma_channel_abort(cap->post_dma_chan);
+    dma_hw->ints0 = 1u << cap->post_dma_chan;
     pio_sm_clear_fifos(cap->pio, cap->sm);
     pio_sm_restart(cap->pio, cap->sm);
 }
@@ -118,6 +142,10 @@ bool video_capture_finalize_frame(video_capture_t *cap, uint16_t frame_id) {
         lines_captured = CAP_MAX_LINES;
     }
     cap->lines_ok += lines_captured;
+
+    if (lines_captured > 0) {
+        arm_postprocess_dma(cap, &cap->capture_buf[0][0], (uint32_t)lines_captured * CAP_WORDS_PER_LINE);
+    }
 
     if (!was_wanted) {
         return false;
