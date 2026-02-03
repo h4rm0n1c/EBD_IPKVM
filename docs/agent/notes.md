@@ -62,3 +62,4 @@
 - CDC1 debug/status blocks can exceed TinyUSB's per-interface write-available size; queue and chunk long control text to avoid repeated retries and timing side effects during capture.
 - CDC1 control/status output remains active during capture; chunked writes are used to avoid blocking while keeping CDC1 diagnostics available.
 - CDC1 control text is now dropped if the interface is disconnected or lacks write space, and any queued control block is discarded on disconnect to avoid backlogged status bursts.
+- Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.

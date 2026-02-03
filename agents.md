@@ -45,6 +45,7 @@ After any non-trivial change:
 Start your response with:
 “I have reviewed agents.md, PROJECT_STATE.md, docs/protocol/, and any existing docs/agent/* files. Relevant points / conflicts: …”
 Then quote specifics if they exist (even if just “docs/agent/ is empty / not yet populated”).
+Also include a quick scan of the codebase and any relevant `/opt/` references (for example `/opt/MacDevDocs` or `/opt/adb`) as part of the mandatory memory check.
 
 ## PIO, DMA & Timing Discipline
 - PIO changes: always note cycle count impact (use pioasm output).
@@ -71,7 +72,8 @@ Then quote specifics if they exist (even if just “docs/agent/ is empty / not y
 
 ## Mandatory Memory Check – Updated for ADB Work
 Before any ADB-related proposal:
-- Review: agents.md, PROJECT_STATE.md, README.md (pin assignments), docs/protocol/ (if ADB sections added), /opt/adb references.
+- Review: agents.md, PROJECT_STATE.md, README.md (pin assignments), docs/protocol/ (if ADB sections added), the relevant code paths, and /opt/adb references.
+- If repo docs conflict with /opt/adb (hootswitch or other ADB sources), treat /opt/adb as the overriding source and call out the discrepancy.
 - Quote relevant pin / level-shift / inversion notes.
 - Start response with:
   “Reviewed agents.md + README pinout for ADB (GPIO6 RECV via 74LVC245 non-inverting, GPIO12 XMIT via ULN2803 inverted). Relevant constraints: …”
