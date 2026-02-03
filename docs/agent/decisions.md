@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-09: Handle VSYNC edges via a raw IO_IRQ_BANK0 handler to avoid shared GPIO callback overrides when ADB is active, keeping capture sync stable.
 - 2026-02-05: Implement the initial ADB device model in core1 with keyboard/mouse registers (reg0 payloads, reg3 format) and a software-timed SRQ pulse gated to idle bus windows.
 - 2026-02-05: Map CDC2 ASCII input to the US ADB keycode table without modifier synthesis for the initial test workflow.
 - 2026-02-05: Switch ADB PIO programs to hootswitch’s device-side bus implementation (GPLv3) and keep its license text under licenses/.
@@ -13,6 +14,9 @@
 - 2026-02-05: Treat Listen writes shorter than 2 bytes as empty Talk data and clear reg0 SRQ flags, mirroring hootswitch Talk length handling.
 - 2026-02-05: Ignore reg3 Listen writes unless they are exactly 2 bytes, aligning with hootswitch reg3 handling.
 - 2026-02-08: Use a dedicated DMA channel to byte-swap captured frame buffers in-place after the PIO RX DMA completes, removing per-line CPU byte swapping before transmit.
+- 2026-02-09: Track capture post-processing as a non-blocking DMA pass, only marking frames ready once the byte-swap DMA completes to keep core1 free for TX/ADB servicing.
+- 2026-02-09: Limit core1 line enqueueing to batches of 8 per loop iteration, using TX queue depth to cap work and avoid starving capture/ADB servicing while keeping packet timing steady.
+- 2026-02-09: Revert bulk stream coalescing while investigating horizontal sync roll, keeping one packet per write for stable framing.
 - 2026-02-05: Provide hootswitch-style debug counters for lock failures/collisions in the ADB bus and surface them in CDC debug output.
 - 2026-02-05: Resolve reg3 handler IDs via a callback to match hootswitch’s dynamic handler selection.
 - 2026-02-05: Implement hootswitch-style reg0 queue drain via per-device pop callbacks that only fill reg0 when empty and unlocked.

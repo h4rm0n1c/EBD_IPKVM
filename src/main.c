@@ -32,7 +32,7 @@ int main(void) {
     gpio_init(PIN_VSYNC);  gpio_set_dir(PIN_VSYNC,  GPIO_IN); gpio_disable_pulls(PIN_VSYNC);
     gpio_init(PIN_PS_ON);  gpio_set_dir(PIN_PS_ON, GPIO_OUT); gpio_put(PIN_PS_ON, 0);
 
-    // Clear any stale IRQ state, core1 will enable callback
+    // Clear any stale IRQ state, core1 will enable the raw IRQ handler
     gpio_acknowledge_irq(PIN_VSYNC, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
 
     // Hand ONLY the pins PIO needs to PIO0

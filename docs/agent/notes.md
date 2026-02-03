@@ -1,5 +1,6 @@
 # Notes
 
+- VSYNC GPIO IRQ now uses a raw IO_IRQ_BANK0 handler to avoid the per-core callback override that can occur when ADB installs its own raw handler; this mitigates intermittent sync loss during shared GPIO IRQ handling.
 - Local reference: `/opt/MacDevDocs` contains Apple legacy Mac documentation to consult when needed for this project.
 - Local reference: `/opt/Pico-SDK` and `/opt/PicoHTTPServer` are available for Pico SDK API details and Pico W captive-portal web UI patterns.
 - Local reference: `/opt/SigrokPico` documents USB CDC RLE streaming patterns, and `/opt/picovga` shows a core1 video pipeline split for RP2040.
@@ -65,3 +66,4 @@
 - Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.
 - Video streaming now uses a vendor bulk endpoint (not CDC); host access requires libusb/pyusb while CDC1/CDC2 remain for control and ADB test input.
 - Helper scripts now target `/dev/serial/by-id/*-if01` for the CDC1 control console and `*-if03` for the CDC2 ADB console.
+- Capture post-processing uses the dedicated DMA channel with `bswap` and `DREQ_FORCE` after PIO capture completes; it does not alter PIO cycle timing, but capture start is gated until the postprocess DMA finishes.

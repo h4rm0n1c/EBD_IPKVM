@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-09: Move VSYNC edge handling onto a raw IO_IRQ_BANK0 handler so ADB's raw IRQ usage can't override the VSYNC callback, reducing intermittent sync loss while ADB is active.
 - 2026-02-08: Switched ADB GPIO rising-edge detection to a raw IO_IRQ_BANK0 handler so it no longer conflicts with the VSYNC GPIO callback, matching hootswitch’s IRQ strategy and restoring ADB attention/rise detection.
 - 2026-02-08: Acknowledge all ADB GPIO IRQ event bits in the raw handler to prevent stuck IRQs (possible CDC freeze) while still latching rise events.
 - 2026-02-08: Set the ADB TX PIO pin direction/output mask on init (hootswitch-style) so the state machine can actively drive GPIO12 through the ULN2803.
@@ -9,6 +10,9 @@
 - 2026-02-08: Emit the periodic CDC1 status lines as a single buffered block to reduce control-endpoint churn and avoid partial writes when the host is slow to read.
 - 2026-02-08: Switch CDC1 debug/status output to a queued, chunked write path so large debug blocks can drain without stalling the main loop or starving capture/USB handling.
 - 2026-02-08: Re-enable CDC1 status/debug output during capture so control/status traffic remains available while the stream is active; rely on queued chunking to avoid blocking.
+- 2026-02-09: Make capture byte-swap post-processing DMA non-blocking and gate new capture starts until the postprocess pass completes, keeping core1 loop work off the hot path.
+- 2026-02-09: Batch line enqueueing on core1 to 8 lines per loop iteration to limit queue churn and preserve capture/ADB servicing time.
+- 2026-02-09: Revert bulk line coalescing in the stream writer while investigating horizontal roll during capture.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

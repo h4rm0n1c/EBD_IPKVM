@@ -15,6 +15,7 @@
 
 #define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
+#define TXQ_BATCH_LINES 8
 
 #define PKT_MAX_PAYLOAD VIDEO_CORE_MAX_PAYLOAD
 #define PKT_MAX_BYTES VIDEO_CORE_MAX_PACKET_BYTES
@@ -64,8 +65,9 @@ static uint offset_fall_pixrise = 0;
 static uint pin_video = 0;
 static uint pin_vsync = 0;
 static volatile bool vsync_fall_edge = true;
+static volatile bool vsync_irq_ready = false;
 
-static void gpio_irq(uint gpio, uint32_t events);
+static void vsync_gpio_raw_irq_handler(void);
 
 static inline bool load_bool(const volatile bool *value) {
     return __atomic_load_n(value, __ATOMIC_ACQUIRE);
@@ -134,6 +136,16 @@ static inline bool txq_has_space(void) {
     uint16_t r = txq_load_r();
     uint16_t w = txq_load_w();
     return ((uint16_t)((w + 1) & TXQ_MASK)) != r;
+}
+
+static inline uint16_t txq_depth(void) {
+    uint16_t r = txq_load_r();
+    uint16_t w = txq_load_w();
+    return (uint16_t)((w - r) & TXQ_MASK);
+}
+
+static inline uint16_t txq_space(void) {
+    return (uint16_t)(TXQ_MASK - txq_depth());
 }
 
 static size_t rle_encode_line(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap) {
@@ -205,7 +217,13 @@ static void configure_pio_program(void) {
 static void configure_vsync_irq(void) {
     uint32_t edge = load_bool(&vsync_fall_edge) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     gpio_acknowledge_irq(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-    gpio_set_irq_enabled_with_callback(pin_vsync, edge, true, &gpio_irq);
+    if (!load_bool(&vsync_irq_ready)) {
+        gpio_add_raw_irq_handler_masked(1u << pin_vsync, vsync_gpio_raw_irq_handler);
+        irq_set_enabled(IO_IRQ_BANK0, true);
+        store_bool(&vsync_irq_ready, true);
+    }
+    gpio_set_irq_enabled(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(pin_vsync, edge, true);
 }
 
 static void service_vsync(uint32_t now_us) {
@@ -226,7 +244,8 @@ static void service_vsync(uint32_t now_us) {
         return;
     }
 
-    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty();
+    bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty() ||
+                   load_bool(&capture.postprocess_pending);
     capture_mode_t mode = __atomic_load_n(&capture_mode, __ATOMIC_ACQUIRE);
     if (mode == CAPTURE_MODE_TEST_30FPS) {
         bool toggle = !load_bool(&take_toggle);          // every other VSYNC => ~30fps
@@ -241,13 +260,21 @@ static void service_vsync(uint32_t now_us) {
     }
 }
 
-static void gpio_irq(uint gpio, uint32_t events) {
-    if (gpio != pin_vsync) return;
+static void vsync_gpio_raw_irq_handler(void) {
+    uint32_t events = gpio_get_irq_event_mask(pin_vsync);
+    if (events == 0) {
+        return;
+    }
+    gpio_acknowledge_irq(pin_vsync, events);
     bool fall_edge = load_bool(&vsync_fall_edge);
     if (fall_edge) {
-        if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+        if (!(events & GPIO_IRQ_EDGE_FALL)) {
+            return;
+        }
     } else {
-        if (!(events & GPIO_IRQ_EDGE_RISE)) return;
+        if (!(events & GPIO_IRQ_EDGE_RISE)) {
+            return;
+        }
     }
 
     service_vsync(time_us_32());
@@ -307,7 +334,13 @@ static bool service_frame_tx(void) {
         return true;
     }
 
-    while (frame_tx_line < CAP_ACTIVE_H) {
+    uint16_t batch_limit = TXQ_BATCH_LINES;
+    uint16_t space = txq_space();
+    if (batch_limit > space) {
+        batch_limit = space;
+    }
+
+    while (frame_tx_line < CAP_ACTIVE_H && batch_limit > 0) {
         if (!txq_has_space()) break;
 
         uint16_t src_line = (uint16_t)(frame_tx_line + frame_tx_start);
@@ -326,6 +359,7 @@ static bool service_frame_tx(void) {
 
         did_work = true;
         frame_tx_line++;
+        batch_limit--;
     }
 
     if (frame_tx_line >= CAP_ACTIVE_H) {
@@ -404,16 +438,18 @@ static void core1_entry(void) {
 
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
             uint32_t active_start = time_us_32();
-            if (video_capture_finalize_frame(&capture, frame_id)) {
-                frame_id++;
-                frames_done++;
-            } else {
-                frame_id++;
-            }
+            (void)video_capture_finalize_frame(&capture, frame_id);
+            frame_id++;
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
         uint32_t active_start = time_us_32();
+        if (video_capture_service_postprocess(&capture)) {
+            frames_done++;
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+
+        active_start = time_us_32();
         if (service_test_frame()) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
@@ -457,6 +493,7 @@ void video_core_init(const video_core_config_t *cfg) {
     store_bool(&test_frame_active, false);
     store_bool(&diag_active, false);
     store_bool(&tx_rle_enabled, true);
+    store_bool(&vsync_irq_ready, false);
     store_u16(&frame_id, 0);
     store_u32(&lines_drop, 0);
     store_u32(&frames_done, 0);
