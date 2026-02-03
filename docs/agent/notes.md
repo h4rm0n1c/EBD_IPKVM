@@ -67,7 +67,7 @@
 - CDC1 control text is now dropped if the interface is disconnected or lacks write space, and any queued control block is discarded on disconnect to avoid backlogged status bursts.
 - Capture control now uses EP0 vendor control transfers so CDC1 can remain dedicated to status/debug and power/reset commands.
 - Capture cadence is locked to continuous VSYNC capture; test-mode and VSYNC edge toggles were removed to simplify the video pipeline.
-- USB configuration descriptors must set bit 7 (bus-powered) in bAttributes; zeroed attributes violate the spec and can derail enumeration on some hosts/hubs.
+- USB config bAttributes should be left at 0 (bus-powered) because TinyUSB’s TUD_CONFIG_DESCRIPTOR macro sets bit 7 automatically; avoid using undefined BUS_POWERED macros.
 - Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.
 - Video streaming now uses a vendor bulk endpoint (not CDC); host access requires libusb/pyusb while CDC1/CDC2 remain for control and ADB test input.
 - Helper scripts now target `/dev/serial/by-id/*-if01` for the CDC1 control console and `*-if03` for the CDC2 ADB console.

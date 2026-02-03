@@ -157,4 +157,4 @@
 - 2026-02-11: Replaced the ADB bus state machine with hootswitch’s ISR-driven device-side flow (PIO IRQ + GPIO rise ISR), trimming to a single computer instance while keeping keyboard/mouse devices and the GPIO6/12 pin map.
 - 2026-02-11: Switched ADB PIO IRQ enablement to hootswitch-style mask-based configuration for the active state machine.
 - 2026-02-11: Aligned ADB handler ID callbacks with hootswitch’s get/set handle model, so reg3 Listen proposals route through driver validation before updating stored handler IDs.
-- 2026-02-14: Marked the USB configuration descriptor as bus-powered (bit 7 set) to avoid invalid bAttributes values during enumeration.
+- 2026-02-14: Clarified USB config attributes: leave bAttributes at 0 (bus-powered) because TUD_CONFIG_DESCRIPTOR sets bit 7, and avoid undefined TinyUSB macros.
