@@ -15,6 +15,7 @@
 - 2026-02-09: Revert bulk line coalescing in the stream writer while investigating horizontal roll during capture.
 - 2026-02-10: Reworked CDC debug/status output to use labeled prefixes and clearer fields, and lowered the picocom helper baud rate to 57600 with doc updates.
 - 2026-02-10: Simplified CDC1 output handling to emit debug/status lines directly without queued buffering so the console output is less likely to be dropped.
+- 2026-02-10: Switched CDC1 writes to a blocking/chunked loop to ensure full lines are delivered and merged status into a single line to reduce partial output.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

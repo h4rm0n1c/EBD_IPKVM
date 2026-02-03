@@ -98,9 +98,29 @@ static bool cdc_ctrl_write(const char *buf, size_t len) {
         return false;
     }
 
-    uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf, len);
-    tud_cdc_n_write_flush(CDC_CTRL);
-    return wrote > 0;
+    size_t offset = 0;
+    while (offset < len && tud_cdc_n_connected(CDC_CTRL)) {
+        int avail = tud_cdc_n_write_available(CDC_CTRL);
+        if (avail <= 0) {
+            tud_task();
+            sleep_us(200);
+            continue;
+        }
+        size_t to_write = (size_t)avail;
+        size_t remain = len - offset;
+        if (to_write > remain) {
+            to_write = remain;
+        }
+        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf + offset, to_write);
+        if (wrote == 0) {
+            tud_task();
+            sleep_us(200);
+            continue;
+        }
+        offset += wrote;
+        tud_cdc_n_write_flush(CDC_CTRL);
+    }
+    return offset == len;
 }
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
@@ -279,14 +299,13 @@ static void emit_status_state(uint32_t per_s,
                               uint32_t vsync_edges,
                               uint32_t core0_pct,
                               uint32_t core1_pct) {
-    cdc_ctrl_printf("[EBD_IPKVM][status] armed=%d capture=%d ps_on=%d lines/s=%lu total_lines=%lu frames=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM][status] armed=%d capture=%d ps_on=%d lines/s=%lu total_lines=%lu frames=%lu drops=%lu usb_drops=%lu overruns=%lu vsync/s=%lu core0=%lu%% core1=%lu%%\n",
                     video_core_is_armed() ? 1 : 0,
                     video_core_capture_enabled() ? 1 : 0,
                     ps_on_state ? 1 : 0,
                     (unsigned long)per_s,
                     (unsigned long)total_lines,
-                    (unsigned long)frames_done);
-    cdc_ctrl_printf("[EBD_IPKVM][status] drops=%lu usb_drops=%lu overruns=%lu vsync/s=%lu core0=%lu%% core1=%lu%%\n",
+                    (unsigned long)frames_done,
                     (unsigned long)drops,
                     (unsigned long)usb_drop_count,
                     (unsigned long)overruns,
