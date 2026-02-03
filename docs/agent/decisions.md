@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-09: Handle VSYNC edges via a raw IO_IRQ_BANK0 handler to avoid shared GPIO callback overrides when ADB is active, keeping capture sync stable.
 - 2026-02-05: Implement the initial ADB device model in core1 with keyboard/mouse registers (reg0 payloads, reg3 format) and a software-timed SRQ pulse gated to idle bus windows.
 - 2026-02-05: Map CDC2 ASCII input to the US ADB keycode table without modifier synthesis for the initial test workflow.
 - 2026-02-05: Switch ADB PIO programs to hootswitch’s device-side bus implementation (GPLv3) and keep its license text under licenses/.

@@ -65,8 +65,9 @@ static uint offset_fall_pixrise = 0;
 static uint pin_video = 0;
 static uint pin_vsync = 0;
 static volatile bool vsync_fall_edge = true;
+static volatile bool vsync_irq_ready = false;
 
-static void gpio_irq(uint gpio, uint32_t events);
+static void vsync_gpio_raw_irq_handler(void);
 
 static inline bool load_bool(const volatile bool *value) {
     return __atomic_load_n(value, __ATOMIC_ACQUIRE);
@@ -216,7 +217,13 @@ static void configure_pio_program(void) {
 static void configure_vsync_irq(void) {
     uint32_t edge = load_bool(&vsync_fall_edge) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     gpio_acknowledge_irq(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
-    gpio_set_irq_enabled_with_callback(pin_vsync, edge, true, &gpio_irq);
+    if (!load_bool(&vsync_irq_ready)) {
+        gpio_add_raw_irq_handler_masked(1u << pin_vsync, vsync_gpio_raw_irq_handler);
+        irq_set_enabled(IO_IRQ_BANK0, true);
+        store_bool(&vsync_irq_ready, true);
+    }
+    gpio_set_irq_enabled(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
+    gpio_set_irq_enabled(pin_vsync, edge, true);
 }
 
 static void service_vsync(uint32_t now_us) {
@@ -253,13 +260,21 @@ static void service_vsync(uint32_t now_us) {
     }
 }
 
-static void gpio_irq(uint gpio, uint32_t events) {
-    if (gpio != pin_vsync) return;
+static void vsync_gpio_raw_irq_handler(void) {
+    uint32_t events = gpio_get_irq_event_mask(pin_vsync);
+    if (events == 0) {
+        return;
+    }
+    gpio_acknowledge_irq(pin_vsync, events);
     bool fall_edge = load_bool(&vsync_fall_edge);
     if (fall_edge) {
-        if (!(events & GPIO_IRQ_EDGE_FALL)) return;
+        if (!(events & GPIO_IRQ_EDGE_FALL)) {
+            return;
+        }
     } else {
-        if (!(events & GPIO_IRQ_EDGE_RISE)) return;
+        if (!(events & GPIO_IRQ_EDGE_RISE)) {
+            return;
+        }
     }
 
     service_vsync(time_us_32());
@@ -478,6 +493,7 @@ void video_core_init(const video_core_config_t *cfg) {
     store_bool(&test_frame_active, false);
     store_bool(&diag_active, false);
     store_bool(&tx_rle_enabled, true);
+    store_bool(&vsync_irq_ready, false);
     store_u16(&frame_id, 0);
     store_u32(&lines_drop, 0);
     store_u32(&frames_done, 0);

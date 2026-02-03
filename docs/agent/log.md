@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-09: Move VSYNC edge handling onto a raw IO_IRQ_BANK0 handler so ADB's raw IRQ usage can't override the VSYNC callback, reducing intermittent sync loss while ADB is active.
 - 2026-02-08: Switched ADB GPIO rising-edge detection to a raw IO_IRQ_BANK0 handler so it no longer conflicts with the VSYNC GPIO callback, matching hootswitch’s IRQ strategy and restoring ADB attention/rise detection.
 - 2026-02-08: Acknowledge all ADB GPIO IRQ event bits in the raw handler to prevent stuck IRQs (possible CDC freeze) while still latching rise events.
 - 2026-02-08: Set the ADB TX PIO pin direction/output mask on init (hootswitch-style) so the state machine can actively drive GPIO12 through the ULN2803.
