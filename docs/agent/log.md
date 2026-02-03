@@ -135,3 +135,4 @@
 - 2026-02-03: Switched the video stream from CDC0 to a vendor bulk endpoint and updated host tooling/docs accordingly.
 - 2026-02-03: Made the bulk-stream host helper tolerate USB “resource busy” by reusing the active configuration and ignoring EBUSY on set-configuration.
 - 2026-02-03: Updated debug/ADB console helper scripts to use the new CDC interface indices (if01 control, if03 ADB).
+- 2026-02-03: Handle Ctrl+C cleanly in host_recv_frames.py when reading from the bulk stream to avoid noisy tracebacks.

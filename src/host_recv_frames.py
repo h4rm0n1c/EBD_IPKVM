@@ -377,14 +377,18 @@ try:
     while True:
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
-        if use_usb_stream:
-            chunk = read_usb_stream(usb_ep_in, 0.25)
-        else:
-            r, _, _ = select.select([stream_fd], [], [], 0.25)
-            if not r:
-                chunk = b""
+        try:
+            if use_usb_stream:
+                chunk = read_usb_stream(usb_ep_in, 0.25)
             else:
-                chunk = os.read(stream_fd, 8192)
+                r, _, _ = select.select([stream_fd], [], [], 0.25)
+                if not r:
+                    chunk = b""
+                else:
+                    chunk = os.read(stream_fd, 8192)
+        except KeyboardInterrupt:
+            log("[host] interrupted by user")
+            break
 
         if not chunk:
             now = time.time()
