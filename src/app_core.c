@@ -333,6 +333,14 @@ static void emit_debug_state(void) {
     cdc_ctrl_printf("[EBD_IPKVM][debug] adb talk_empty=%lu talk_bytes=%lu\n",
                     (unsigned long)adb_bus_stats.talk_empty,
                     (unsigned long)adb_bus_stats.talk_bytes);
+    cdc_ctrl_printf("[EBD_IPKVM][debug] adb reg0=%lu srq_set=%lu srq_clr=%lu srq_sup=%lu gate=%lu gate_hi=%lu rise=%lu\n",
+                    (unsigned long)adb_bus_stats.reg0_fills,
+                    (unsigned long)adb_bus_stats.srq_sets,
+                    (unsigned long)adb_bus_stats.srq_clears,
+                    (unsigned long)adb_bus_stats.srq_suppressed,
+                    (unsigned long)adb_bus_stats.rx_gate_armed,
+                    (unsigned long)adb_bus_stats.rx_gate_immediate,
+                    (unsigned long)adb_bus_stats.gpio_rise_events);
 }
 
 static void emit_status_state(uint32_t per_s,

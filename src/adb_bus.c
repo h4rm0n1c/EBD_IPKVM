@@ -93,6 +93,13 @@ typedef struct {
     uint32_t dbg_err;
     uint32_t dbg_talk_empty;
     uint32_t dbg_talk_bytes;
+    uint32_t dbg_reg0_fills;
+    uint32_t dbg_srq_set;
+    uint32_t dbg_srq_clear;
+    uint32_t dbg_srq_suppress;
+    uint32_t dbg_rx_gate_armed;
+    uint32_t dbg_rx_gate_immediate;
+    uint32_t dbg_gpio_rise;
 } adb_bus_state_t;
 
 static PIO adb_pio = pio1;
@@ -163,6 +170,13 @@ static void adb_bus_reset_devices(void) {
     adb_state.dbg_err = 0;
     adb_state.dbg_talk_empty = 0;
     adb_state.dbg_talk_bytes = 0;
+    adb_state.dbg_reg0_fills = 0;
+    adb_state.dbg_srq_set = 0;
+    adb_state.dbg_srq_clear = 0;
+    adb_state.dbg_srq_suppress = 0;
+    adb_state.dbg_rx_gate_armed = 0;
+    adb_state.dbg_rx_gate_immediate = 0;
+    adb_state.dbg_gpio_rise = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -195,6 +209,7 @@ static bool adb_bus_try_drain_reg0(adb_device_t *dev) {
         dev->regs[0].len = 2;
         dev->regs[0].keep = false;
         did_pop = true;
+        adb_state.dbg_reg0_fills++;
     } else {
         dev->regs[0].len = 0;
         dev->regs[0].keep = false;
@@ -203,6 +218,9 @@ static bool adb_bus_try_drain_reg0(adb_device_t *dev) {
         if (dev->srq_enabled) {
             dev->srq_pending = true;
             adb_state.srq_flags |= (uint16_t)(1u << dev->address);
+            adb_state.dbg_srq_set++;
+        } else {
+            adb_state.dbg_srq_suppress++;
         }
     }
     sem_release(&dev->talk_sem);
@@ -293,14 +311,17 @@ static void dev_pio_rx_start(void) {
 static bool setup_gpio_isr(void) {
     adb_state.time = time_us_32();
     if (gpio_get(ADB_PIN_RECV)) {
+        adb_state.dbg_rx_gate_immediate++;
         return false;
     }
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, true);
     if (gpio_get(ADB_PIN_RECV)) {
         gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
         gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
+        adb_state.dbg_rx_gate_immediate++;
         return false;
     }
+    adb_state.dbg_rx_gate_armed++;
     return true;
 }
 
@@ -363,6 +384,7 @@ static adb_phase_t isr_command_execute(void) {
                 if (reg == 0) {
                     dev->srq_pending = false;
                     adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+                    adb_state.dbg_srq_clear++;
                 }
                 sem_release(&dev->talk_sem);
                 dev_pio_stop();
@@ -409,6 +431,7 @@ static void isr_talk_complete(void) {
         if (adb_state.current_reg == 0) {
             dev->srq_pending = false;
             adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+            adb_state.dbg_srq_clear++;
         }
         if (adb_state.current_reg < 4 && !dev->regs[adb_state.current_reg].keep) {
             dev->regs[adb_state.current_reg].len = 0;
@@ -454,6 +477,7 @@ static void isr_listen_complete(void) {
                 if (!dev->srq_enabled) {
                     dev->srq_pending = false;
                     adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+                    adb_state.dbg_srq_clear++;
                 }
             }
         } else if (dev->set_handle_fn) {
@@ -478,6 +502,7 @@ static void isr_listen_complete(void) {
             if (reg == 0) {
                 dev->srq_pending = false;
                 adb_state.srq_flags &= (uint16_t)~(1u << dev->address);
+                adb_state.dbg_srq_clear++;
             }
             sem_release(&dev->talk_sem);
             return;
@@ -502,6 +527,8 @@ static void adb_gpio_isr(void) {
     }
 
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+    gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
+    adb_state.dbg_gpio_rise++;
 
     switch (adb_state.phase) {
     case ADB_PHASE_ATTENTION: {
@@ -654,6 +681,13 @@ void adb_bus_get_stats(adb_bus_stats_t *out) {
     out->errors = __atomic_load_n(&adb_state.dbg_err, __ATOMIC_ACQUIRE);
     out->talk_empty = __atomic_load_n(&adb_state.dbg_talk_empty, __ATOMIC_ACQUIRE);
     out->talk_bytes = __atomic_load_n(&adb_state.dbg_talk_bytes, __ATOMIC_ACQUIRE);
+    out->reg0_fills = __atomic_load_n(&adb_state.dbg_reg0_fills, __ATOMIC_ACQUIRE);
+    out->srq_sets = __atomic_load_n(&adb_state.dbg_srq_set, __ATOMIC_ACQUIRE);
+    out->srq_clears = __atomic_load_n(&adb_state.dbg_srq_clear, __ATOMIC_ACQUIRE);
+    out->srq_suppressed = __atomic_load_n(&adb_state.dbg_srq_suppress, __ATOMIC_ACQUIRE);
+    out->rx_gate_armed = __atomic_load_n(&adb_state.dbg_rx_gate_armed, __ATOMIC_ACQUIRE);
+    out->rx_gate_immediate = __atomic_load_n(&adb_state.dbg_rx_gate_immediate, __ATOMIC_ACQUIRE);
+    out->gpio_rise_events = __atomic_load_n(&adb_state.dbg_gpio_rise, __ATOMIC_ACQUIRE);
 }
 
 bool adb_bus_set_handle_fns(uint8_t address,

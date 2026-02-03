@@ -15,6 +15,13 @@ typedef struct {
     uint32_t errors;
     uint32_t talk_empty;
     uint32_t talk_bytes;
+    uint32_t reg0_fills;
+    uint32_t srq_sets;
+    uint32_t srq_clears;
+    uint32_t srq_suppressed;
+    uint32_t rx_gate_armed;
+    uint32_t rx_gate_immediate;
+    uint32_t gpio_rise_events;
 } adb_bus_stats_t;
 
 struct adb_device;
