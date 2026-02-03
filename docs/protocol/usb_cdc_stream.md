@@ -1,15 +1,16 @@
 # USB line stream protocol (bulk + CDC)
 
-The firmware exposes one vendor bulk interface for streaming and two CDC
-interfaces for control/ADB testing:
+The firmware exposes one vendor bulk interface for streaming, two CDC
+interfaces for status/ADB testing, and EP0 vendor control transfers for capture
+control:
 
 - BULK0 (vendor): video stream (binary packets).
-- CDC1: control + status (ASCII commands and logs).
+- CDC1: status + limited control (ASCII commands and logs).
 - CDC2: ADB test input (ASCII keystrokes and mouse motion).
 
 Captured Macintosh Classic video is streamed as fixed-size packets over the
 vendor bulk interface. The bulk endpoint is dedicated to the binary line
-stream; control/status stays on CDC1.
+stream; capture control uses EP0 vendor requests while status stays on CDC1.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
@@ -46,34 +47,50 @@ libusb/pyusb talks to the bulk endpoints through usbfs.
 - If bit 15 of `payload_len` is set, the payload is byte-wise RLE encoded as `(count, value)` pairs (count 1..255) and should expand to 64 bytes.
 - Firmware may emit raw packets even when RLE mode is enabled if the RLE payload is not smaller than 64 bytes.
 
-## Host control commands
-The firmware is host-controlled over CDC1 (control channel):
+## CDC1 control/status commands
+CDC1 now carries status output and limited control only (non-capture).
 
 | Command | Action |
 | ------- | ------ |
-| `S` | Arm capture (begin reacting to VSYNC). |
-| `X` | Stop capture, clear TX queue. |
 | `R` | Reset counters and internal state. |
-| `Q` | Park (stop capture and idle forever until reset). |
 | `P` | Assert ATX `PS_ON` (power on; GPIO9 high via ULN2803). |
 | `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
 | `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
-| `G` | Report GPIO input states and edge counts over a short sampling window. |
-| `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
-| `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
-| `U` | Emit a single probe packet (fixed payload) for raw CDC sanity checking. |
 | `I` | Emit a one-line debug summary of internal CDC/capture state. |
-| `V` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
-| `M` | Toggle capture cadence between ~30 fps test mode (100-frame cap) and continuous ~60 fps streaming. |
-| `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
-| `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
 Status lines (including utilization counters) are emitted on CDC1 and can be
 read without interfering with the bulk video stream. Utilization percentages
 (`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
 work (only when those operations perform work), rather than total loop
 occupancy.
+
+## EP0 vendor control requests (capture)
+Capture control is issued via EP0 vendor control transfers (host → device):
+
+- `bmRequestType`: `0x40` (vendor, host-to-device, device recipient)
+- `wValue`: `0`
+- `wIndex`: `0`
+- `wLength`: `0`
+- `bRequest`: command ID below
+
+| bRequest | Command | Action |
+| --- | --- | --- |
+| `0x01` | `CAPTURE_START` | Arm capture (begin reacting to VSYNC). |
+| `0x02` | `CAPTURE_STOP` | Stop capture, clear TX queue. |
+| `0x03` | `RESET_COUNTERS` | Reset counters and internal state. |
+| `0x04` | `FORCE_FRAME` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
+| `0x05` | `TEST_FRAME` | Transmit a synthetic test frame and emit a probe packet. |
+| `0x06` | `PROBE_PACKET` | Emit a single probe packet (fixed payload) for sanity checking. |
+| `0x07` | `TOGGLE_VSYNC` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
+| `0x08` | `TOGGLE_MODE` | Toggle capture cadence between ~30 fps test mode and continuous ~60 fps streaming. |
+| `0x09` | `RLE_ON` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
+| `0x0A` | `RLE_OFF` | Disable RLE line encoding (force raw 64-byte payloads). |
+| `0x0B` | `GPIO_DIAG` | Report GPIO input states and edge counts over a short sampling window. |
+| `0x0C` | `CAPTURE_PARK` | Park (stop capture and idle forever until reset). |
+
+`src/host_recv_frames.py` defaults to EP0 control transfers for capture commands
+and can be forced back to CDC with `--ctrl-cdc` if needed for legacy testing.
 
 ## CDC2 ADB test input
 CDC2 is a development-only input channel for ADB keyboard/mouse testing. It
@@ -87,12 +104,13 @@ for the core1 ADB service loop.
 | Printable ASCII, Tab, Backspace, Delete | Emit a key press + release. |
 | Enter (`\\r`/`\\n`) | Emit a Return key press + release. |
 
-### GPIO diagnostic output (`G`)
-- Emitted on CDC1 (control channel).
+### GPIO diagnostic output (`GPIO_DIAG`)
+- Triggered via EP0 vendor request `0x0B` (`GPIO_DIAG`).
+- Emitted on CDC1 (status channel).
 - Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
 - Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:
-  - `[EBD_IPKVM] gpio diag: pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
+  - `[EBD_IPKVM][diag] gpio pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
 - Default mode streams every VSYNC (~60 fps).

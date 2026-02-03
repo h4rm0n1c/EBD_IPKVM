@@ -24,18 +24,17 @@ Macintosh Classic KVM:
   - Test mode alternates frames on each VSYNC to target ~30 fps.
 - USB streaming:
   - Video stream uses a vendor bulk endpoint (binary line packets).
-  - CDC1 remains control/status; CDC2 remains ADB test input.
+  - CDC1 provides status + limited control; CDC2 remains ADB test input.
+  - Capture control commands are issued via EP0 vendor control transfers.
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
-  - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
-  - Edge testing: `H` toggles HSYNC edge, `K` toggles PIXCLK edge, `V` toggles VSYNC edge (stops capture + clears queue).
-  - Mode toggle: `M` switches between test and continuous capture cadence.
-  - Power/control: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
+  - Capture control uses EP0 vendor requests (see `docs/protocol/usb_cdc_stream.md`).
+  - Power/control on CDC1: `P` asserts ATX `PS_ON`, `p` deasserts it, `B` enters BOOTSEL, `Z` watchdog resets firmware.
 - AppleCore (core1) is the time-sensitive Apple I/O service loop: it owns video capture today and will host ADB bus timing/state in the future, while core0 handles USB/CDC and app logic.
 
 ## Host tooling
 - `src/host_recv_frames.py` is the host-side test program; it reads bulk stream packets and emits PBM frames (use `--pgm` for 8-bit output).
 - Script expects 512×342 frames and writes `frames/frame_###.pbm` by default.
-- `scripts/cdc_cmd.py` sends CDC command bytes (for example, `I` or `G`) and prints ASCII responses.
+- `scripts/cdc_cmd.py` sends CDC command bytes (for example, `I` or `P`) and prints ASCII responses.
 - `scripts/ab_capture.py` runs two capture passes, toggling VIDEO inversion between runs (requires firmware support for the `O` command).
 - GIF helper (PBM/PGM frames): `ffmpeg -framerate 30 -i frame_%03d.pbm -vf "palettegen" palette.png` then `ffmpeg -framerate 30 -i frame_%03d.pbm -i palette.png -lavfi paletteuse output.gif` (swap `.pgm` if using `--pgm`).
