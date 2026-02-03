@@ -19,7 +19,7 @@ sudo dmesg | tail -n 50
 ls -l /dev/ttyACM*
 
 #check if pico is talking
-picocom -b 115200 /dev/ttyACM0
+picocom -b 57600 /dev/ttyACM0
 
 #this is where I usually operate from
 cd ~/pico/EBD_IPKVM/src/

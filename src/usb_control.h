@@ -1,0 +1,13 @@
+#pragma once
+
+#include <stdint.h>
+
+enum usb_ctrl_request {
+    USB_CTRL_REQ_CAPTURE_START = 0x01,
+    USB_CTRL_REQ_CAPTURE_STOP = 0x02,
+    USB_CTRL_REQ_RESET_COUNTERS = 0x03,
+    USB_CTRL_REQ_PROBE_PACKET = 0x04,
+    USB_CTRL_REQ_RLE_ON = 0x05,
+    USB_CTRL_REQ_RLE_OFF = 0x06,
+    USB_CTRL_REQ_CAPTURE_PARK = 0x07,
+};

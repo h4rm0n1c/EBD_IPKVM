@@ -22,23 +22,16 @@
 
 static volatile bool armed = false;
 static volatile bool want_frame = false;
-static volatile bool take_toggle = false;
-static volatile capture_mode_t capture_mode = CAPTURE_MODE_CONTINUOUS_60FPS;
 
 static volatile uint16_t frame_id = 0;
 static volatile uint32_t lines_drop = 0;
 
 static volatile uint32_t vsync_edges = 0;
 static volatile uint32_t frames_done = 0;
-static volatile bool test_frame_active = false;
-static volatile bool diag_active = false;
 static volatile uint32_t last_vsync_us = 0;
 static volatile bool tx_rle_enabled = true;
 static volatile uint32_t core1_busy_us = 0;
 static volatile uint32_t core1_total_us = 0;
-
-static uint16_t test_line = 0;
-static uint8_t test_line_buf[CAP_BYTES_PER_LINE];
 
 static uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
 static uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE];
@@ -64,7 +57,6 @@ static uint sm = 0;
 static uint offset_fall_pixrise = 0;
 static uint pin_video = 0;
 static uint pin_vsync = 0;
-static volatile bool vsync_fall_edge = true;
 static volatile bool vsync_irq_ready = false;
 
 static void vsync_gpio_raw_irq_handler(void);
@@ -215,7 +207,6 @@ static void configure_pio_program(void) {
 }
 
 static void configure_vsync_irq(void) {
-    uint32_t edge = load_bool(&vsync_fall_edge) ? GPIO_IRQ_EDGE_FALL : GPIO_IRQ_EDGE_RISE;
     gpio_acknowledge_irq(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
     if (!load_bool(&vsync_irq_ready)) {
         gpio_add_raw_irq_handler_masked(1u << pin_vsync, vsync_gpio_raw_irq_handler);
@@ -223,7 +214,7 @@ static void configure_vsync_irq(void) {
         store_bool(&vsync_irq_ready, true);
     }
     gpio_set_irq_enabled(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
-    gpio_set_irq_enabled(pin_vsync, edge, true);
+    gpio_set_irq_enabled(pin_vsync, GPIO_IRQ_EDGE_FALL, true);
 }
 
 static void service_vsync(uint32_t now_us) {
@@ -234,9 +225,6 @@ static void service_vsync(uint32_t now_us) {
 
     vsync_edges++;
 
-    if (load_bool(&diag_active)) {
-        return;
-    }
     if (load_bool(&capture.capture_enabled)) {
         return;
     }
@@ -246,14 +234,7 @@ static void service_vsync(uint32_t now_us) {
 
     bool tx_busy = (frame_tx_buf != NULL) || capture.frame_ready || !txq_is_empty() ||
                    load_bool(&capture.postprocess_pending);
-    capture_mode_t mode = __atomic_load_n(&capture_mode, __ATOMIC_ACQUIRE);
-    if (mode == CAPTURE_MODE_TEST_30FPS) {
-        bool toggle = !load_bool(&take_toggle);          // every other VSYNC => ~30fps
-        store_bool(&take_toggle, toggle);
-        store_bool(&want_frame, toggle && !tx_busy);
-    } else {
-        store_bool(&want_frame, !tx_busy);
-    }
+    store_bool(&want_frame, !tx_busy);
 
     if (load_bool(&want_frame)) {
         video_capture_start(&capture, true);
@@ -266,42 +247,11 @@ static void vsync_gpio_raw_irq_handler(void) {
         return;
     }
     gpio_acknowledge_irq(pin_vsync, events);
-    bool fall_edge = load_bool(&vsync_fall_edge);
-    if (fall_edge) {
-        if (!(events & GPIO_IRQ_EDGE_FALL)) {
-            return;
-        }
-    } else {
-        if (!(events & GPIO_IRQ_EDGE_RISE)) {
-            return;
-        }
+    if (!(events & GPIO_IRQ_EDGE_FALL)) {
+        return;
     }
 
     service_vsync(time_us_32());
-}
-
-static bool service_test_frame(void) {
-    if (!load_bool(&test_frame_active) || load_bool(&capture.capture_enabled)) return false;
-
-    bool did_work = false;
-    while (load_bool(&test_frame_active)) {
-        uint8_t fill = (test_line & 1) ? 0xFF : 0x00;
-        memset(test_line_buf, fill, CAP_BYTES_PER_LINE);
-        if (!txq_enqueue_line(frame_id, test_line, test_line_buf)) {
-            break;
-        }
-
-        did_work = true;
-        test_line++;
-        if (test_line >= CAP_ACTIVE_H) {
-            store_bool(&test_frame_active, false);
-            test_line = 0;
-            frame_id++;
-            frames_done++;
-            break;
-        }
-    }
-    return did_work;
 }
 
 static bool service_frame_tx(void) {
@@ -371,9 +321,6 @@ static bool service_frame_tx(void) {
 
 static void core1_stop_capture_and_reset(void) {
     store_bool(&want_frame, false);
-    store_bool(&take_toggle, false);
-    store_bool(&test_frame_active, false);
-    test_line = 0;
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
@@ -382,7 +329,6 @@ static void core1_stop_capture_and_reset(void) {
 static void core1_handle_command(uint32_t cmd) {
     switch (core_bridge_unpack_code(cmd)) {
     case CORE_BRIDGE_CMD_STOP_CAPTURE:
-        store_bool(&diag_active, false);
         core1_stop_capture_and_reset();
         break;
     case CORE_BRIDGE_CMD_RESET_COUNTERS:
@@ -393,30 +339,6 @@ static void core1_handle_command(uint32_t cmd) {
         store_u32(&capture.lines_ok, 0);
         __atomic_store_n(&capture.frame_overrun, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&capture.frame_short, 0, __ATOMIC_RELEASE);
-        break;
-    case CORE_BRIDGE_CMD_SINGLE_FRAME:
-        if (!capture.capture_enabled) {
-            store_bool(&want_frame, true);
-            video_capture_start(&capture, true);
-        }
-        break;
-    case CORE_BRIDGE_CMD_START_TEST:
-        store_bool(&armed, false);
-        store_bool(&diag_active, false);
-        core1_stop_capture_and_reset();
-        store_bool(&test_frame_active, true);
-        test_line = 0;
-        break;
-    case CORE_BRIDGE_CMD_CONFIG_VSYNC:
-        configure_vsync_irq();
-        break;
-    case CORE_BRIDGE_CMD_DIAG_PREP:
-        store_bool(&armed, false);
-        store_bool(&diag_active, true);
-        core1_stop_capture_and_reset();
-        break;
-    case CORE_BRIDGE_CMD_DIAG_DONE:
-        store_bool(&diag_active, false);
         break;
     default:
         break;
@@ -446,11 +368,6 @@ static void core1_entry(void) {
         uint32_t active_start = time_us_32();
         if (video_capture_service_postprocess(&capture)) {
             frames_done++;
-            active_us += (uint32_t)(time_us_32() - active_start);
-        }
-
-        active_start = time_us_32();
-        if (service_test_frame()) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
 
@@ -485,13 +402,8 @@ void video_core_init(const video_core_config_t *cfg) {
     pin_video = cfg->pin_video;
     pin_vsync = cfg->pin_vsync;
 
-    vsync_fall_edge = true;
-    __atomic_store_n(&capture_mode, CAPTURE_MODE_CONTINUOUS_60FPS, __ATOMIC_RELEASE);
     store_bool(&armed, false);
     store_bool(&want_frame, false);
-    store_bool(&take_toggle, false);
-    store_bool(&test_frame_active, false);
-    store_bool(&diag_active, false);
     store_bool(&tx_rle_enabled, true);
     store_bool(&vsync_irq_ready, false);
     store_u16(&frame_id, 0);
@@ -501,8 +413,6 @@ void video_core_init(const video_core_config_t *cfg) {
     store_u32(&last_vsync_us, 0);
     store_u32(&core1_busy_us, 0);
     store_u32(&core1_total_us, 0);
-    test_line = 0;
-
     configure_pio_program();
     video_capture_init(&capture,
                        pio,
@@ -522,7 +432,6 @@ void video_core_launch(void) {
 
 bool video_core_can_emit_text(void) {
     return !load_bool(&capture.capture_enabled)
-           && !load_bool(&test_frame_active)
            && txq_is_empty()
            && !load_bool(&armed);
 }
@@ -539,25 +448,6 @@ void video_core_set_want_frame(bool value) {
     store_bool(&want_frame, value);
 }
 
-void video_core_set_take_toggle(bool value) {
-    store_bool(&take_toggle, value);
-}
-
-void video_core_set_capture_mode(capture_mode_t mode) {
-    __atomic_store_n(&capture_mode, mode, __ATOMIC_RELEASE);
-}
-
-capture_mode_t video_core_get_capture_mode(void) {
-    return __atomic_load_n(&capture_mode, __ATOMIC_ACQUIRE);
-}
-
-void video_core_set_vsync_edge(bool fall_edge) {
-    store_bool(&vsync_fall_edge, fall_edge);
-}
-
-bool video_core_get_vsync_edge(void) {
-    return load_bool(&vsync_fall_edge);
-}
 
 void video_core_set_tx_rle_enabled(bool enabled) {
     store_bool(&tx_rle_enabled, enabled);
@@ -571,9 +461,6 @@ bool video_core_capture_enabled(void) {
     return load_bool(&capture.capture_enabled);
 }
 
-bool video_core_test_frame_active(void) {
-    return load_bool(&test_frame_active);
-}
 
 uint32_t video_core_get_lines_drop(void) {
     return load_u32(&lines_drop);

@@ -6,10 +6,6 @@ SEND_STOP = True
 SEND_BOOT = True
 BOOT_WAIT = 12.0
 DIAG_SECS = 12.0
-FORCE_AFTER = 2.0
-FORCE_START = False
-TEST_AFTER = 0.0
-TEST_START = False
 PROBE_ONLY = False
 RLE_MODE = True
 OUTPUT_FORMAT = "pgm"
@@ -19,6 +15,7 @@ QUIET = False
 QUIET_SET = False
 STREAM_DEV = "usb"
 CTRL_DEV = "/dev/ttyACM0"
+CTRL_MODE = "ep0"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -41,20 +38,12 @@ for arg in sys.argv[1:]:
         except ValueError:
             print(f"[host] invalid --diag-secs value: {value}")
             sys.exit(2)
-    elif arg == "--force-start":
-        FORCE_START = True
-    elif arg == "--test-frame":
-        TEST_START = True
     elif arg == "--probe":
         PROBE_ONLY = True
     elif arg == "--rle":
         RLE_MODE = True
     elif arg == "--raw":
         RLE_MODE = False
-    elif arg == "--no-force":
-        FORCE_AFTER = 0.0
-    elif arg == "--no-test":
-        TEST_AFTER = 0.0
     elif arg == "--pgm":
         OUTPUT_FORMAT = "pgm"
     elif arg == "--pbm":
@@ -77,20 +66,13 @@ for arg in sys.argv[1:]:
         STREAM_DEV = "usb"
     elif arg.startswith("--ctrl-device="):
         CTRL_DEV = arg.split("=", 1)[1]
-    elif arg.startswith("--force-after="):
-        value = arg.split("=", 1)[1]
-        try:
-            FORCE_AFTER = float(value)
-        except ValueError:
-            print(f"[host] invalid --force-after value: {value}")
-            sys.exit(2)
-    elif arg.startswith("--test-after="):
-        value = arg.split("=", 1)[1]
-        try:
-            TEST_AFTER = float(value)
-        except ValueError:
-            print(f"[host] invalid --test-after value: {value}")
-            sys.exit(2)
+    elif arg == "--ctrl-ep0":
+        CTRL_MODE = "ep0"
+    elif arg == "--ctrl-cdc":
+        CTRL_MODE = "cdc"
+    elif arg.startswith("--force-after=") or arg.startswith("--test-after="):
+        print("[host] force/test capture options removed; use EP0 capture start.", file=sys.stderr)
+        sys.exit(2)
     else:
         ARGS.append(arg)
 
@@ -218,6 +200,14 @@ def pop_one_packet(buf: bytearray):
 USB_VID = 0x2E8A
 USB_PID = 0x000A
 
+CTRL_REQ_CAPTURE_START = 0x01
+CTRL_REQ_CAPTURE_STOP = 0x02
+CTRL_REQ_RESET_COUNTERS = 0x03
+CTRL_REQ_PROBE_PACKET = 0x04
+CTRL_REQ_RLE_ON = 0x05
+CTRL_REQ_RLE_OFF = 0x06
+CTRL_REQ_CAPTURE_PARK = 0x07
+
 def open_usb_stream():
     try:
         import usb.core
@@ -260,6 +250,34 @@ def open_usb_stream():
         sys.exit(2)
     return dev, intf.bInterfaceNumber, ep_in
 
+def open_usb_device_for_control():
+    try:
+        import usb.core
+    except ImportError as exc:
+        print(f"[host] pyusb not available: {exc}. Install python3-usb or pyusb.", file=sys.stderr)
+        sys.exit(2)
+
+    dev = usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    if dev is None:
+        print("[host] USB device not found (VID/PID 0x2E8A:0x000A).", file=sys.stderr)
+        sys.exit(2)
+
+    try:
+        dev.get_active_configuration()
+    except Exception:
+        try:
+            dev.set_configuration()
+        except Exception:
+            pass
+    return dev
+
+def send_ep0_cmd(dev, req):
+    try:
+        dev.ctrl_transfer(0x40, req, 0, 0, None)
+    except Exception as exc:
+        print(f"[host] EP0 control transfer failed (req=0x{req:02X}): {exc}", file=sys.stderr)
+        sys.exit(2)
+
 def read_usb_stream(ep_in, timeout_s: float) -> bytes:
     timeout_ms = int(timeout_s * 1000)
     try:
@@ -282,12 +300,21 @@ else:
     ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
     set_raw_and_dtr(stream_fd)
     set_raw_and_dtr(ctrl_fd)
+    if CTRL_MODE == "ep0":
+        usb_dev = open_usb_device_for_control()
+
+if CTRL_MODE == "ep0" and usb_dev is None:
+    print("[host] EP0 control selected but USB device is unavailable.", file=sys.stderr)
+    sys.exit(2)
 
 if SEND_BOOT:
     os.write(ctrl_fd, b"P")
 
 if SEND_STOP:
-    os.write(ctrl_fd, b"X")
+    if CTRL_MODE == "ep0":
+        send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
+    else:
+        os.write(ctrl_fd, b"X")
     time.sleep(0.05)
 
 if DIAG_SECS > 0:
@@ -318,16 +345,28 @@ if BOOT_WAIT > 0:
 
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
-    os.write(ctrl_fd, b"R")
+    if CTRL_MODE == "ep0":
+        send_ep0_cmd(usb_dev, CTRL_REQ_RESET_COUNTERS)
+    else:
+        os.write(ctrl_fd, b"R")
     time.sleep(0.05)
 if RLE_MODE is True:
-    os.write(ctrl_fd, b"E")
+    if CTRL_MODE == "ep0":
+        send_ep0_cmd(usb_dev, CTRL_REQ_RLE_ON)
+    else:
+        os.write(ctrl_fd, b"E")
     time.sleep(0.01)
 elif RLE_MODE is False:
-    os.write(ctrl_fd, b"e")
+    if CTRL_MODE == "ep0":
+        send_ep0_cmd(usb_dev, CTRL_REQ_RLE_OFF)
+    else:
+        os.write(ctrl_fd, b"e")
     time.sleep(0.01)
 if PROBE_ONLY:
-    os.write(ctrl_fd, b"U")
+    if CTRL_MODE == "ep0":
+        send_ep0_cmd(usb_dev, CTRL_REQ_PROBE_PACKET)
+    else:
+        os.write(ctrl_fd, b"U")
     time.sleep(0.2)
     probe_deadline = time.time() + 1.0
     probe_bytes = 0
@@ -343,12 +382,8 @@ if PROBE_ONLY:
             probe_bytes += len(chunk)
     print(f"[host] probe bytes received: {probe_bytes}")
     sys.exit(0)
-if TEST_START:
-    os.write(ctrl_fd, b"T")
-    FORCE_AFTER = 0.0
-    FORCE_START = False
-elif FORCE_START:
-    os.write(ctrl_fd, b"F")
+if CTRL_MODE == "ep0":
+    send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_START)
 else:
     os.write(ctrl_fd, b"S")
 
@@ -370,8 +405,6 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 start_rx = last_rx
-force_sent = FORCE_START or TEST_START
-test_sent = TEST_START
 
 try:
     while True:
@@ -392,14 +425,6 @@ try:
 
         if not chunk:
             now = time.time()
-            if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
-                os.write(ctrl_fd, b"F")
-                force_sent = True
-                log(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
-            if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
-                os.write(ctrl_fd, b"T")
-                test_sent = True
-                log(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:
                 log("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now
@@ -496,7 +521,10 @@ try:
 finally:
     if SEND_STOP:
         try:
-            os.write(ctrl_fd, b"X")
+            if CTRL_MODE == "ep0":
+                send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
+            else:
+                os.write(ctrl_fd, b"X")
         except OSError:
             pass
     try:

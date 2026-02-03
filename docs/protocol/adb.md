@@ -64,7 +64,7 @@ timing windows and the AN591B reference for signal diagrams.
 - Open CDC1 and verify the firmware is alive and reporting status:
   - `scripts/open_debug_console.sh`
 - Open CDC2 and inject test inputs:
-  - `picocom -b 115200 /dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_*-if04`
+  - `scripts/open_adb_console.sh` (picocom @ 57600 baud).
   - Type ASCII to generate key events, use arrow keys for mouse moves, and
     `Ctrl+R` to toggle the primary mouse button.
 - On the Mac, confirm keyboard input and mouse motion are recognized. If SRQ
