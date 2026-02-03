@@ -117,7 +117,13 @@ static bool ctrl_tx_enqueue(const char *buf, size_t len) {
 }
 
 static bool ctrl_tx_service(void) {
-    if (!ctrl_tx_pending || !tud_cdc_n_connected(CDC_CTRL)) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        ctrl_tx_pending = false;
+        ctrl_tx_len = 0;
+        ctrl_tx_off = 0;
+        return false;
+    }
+    if (!ctrl_tx_pending) {
         return false;
     }
 
@@ -148,6 +154,9 @@ static bool ctrl_tx_service(void) {
 }
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        return;
+    }
     char buf[320];
     char out[360];
     va_list args;
@@ -770,11 +779,16 @@ void app_core_poll(void) {
             active_us += (uint32_t)(time_us_32() - active_start);
         }
     }
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        debug_requested = false;
+    }
     if (debug_requested && can_emit_text()) {
         if (!ctrl_tx_busy()) {
             active_start = time_us_32();
             size_t out_len = 0;
-            if (build_debug_state(ctrl_tx_buf, sizeof(ctrl_tx_buf), &out_len)) {
+            int avail = tud_cdc_n_write_available(CDC_CTRL);
+            if (avail > 0 && build_debug_state(ctrl_tx_buf, sizeof(ctrl_tx_buf), &out_len) &&
+                out_len <= (size_t)avail) {
                 ctrl_tx_enqueue(ctrl_tx_buf, out_len);
                 debug_requested = false;
             }
@@ -815,18 +829,20 @@ void app_core_poll(void) {
             uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
             size_t out_len = 0;
-            if (build_status_state(ctrl_tx_buf,
-                                   sizeof(ctrl_tx_buf),
-                                   &out_len,
-                                   per_s,
-                                   l,
-                                   video_core_get_frames_done(),
-                                   video_core_get_lines_drop(),
-                                   usb_drops,
-                                   video_core_get_frame_overrun(),
-                                   ve,
-                                   core0_pct,
-                                   core1_pct)) {
+            int avail = tud_cdc_n_write_available(CDC_CTRL);
+            if (avail > 0 && build_status_state(ctrl_tx_buf,
+                                                sizeof(ctrl_tx_buf),
+                                                &out_len,
+                                                per_s,
+                                                l,
+                                                video_core_get_frames_done(),
+                                                video_core_get_lines_drop(),
+                                                usb_drops,
+                                                video_core_get_frame_overrun(),
+                                                ve,
+                                                core0_pct,
+                                                core1_pct) &&
+                out_len <= (size_t)avail) {
                 ctrl_tx_enqueue(ctrl_tx_buf, out_len);
             }
         }
