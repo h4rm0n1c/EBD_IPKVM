@@ -59,3 +59,4 @@
 - ADB GPIO rise IRQs should disable themselves in the raw handler (hootswitch-style) to avoid IRQ storms that can stall the core.
 - CDC1 debug dumps are now emitted as a single buffered block and retried if the control endpoint lacks space, with periodic status paused while a debug dump is pending to avoid dropping late debug lines (e.g., Talk counters).
 - Periodic CDC1 status is now emitted as a single buffered block to reduce control endpoint churn and avoid partial status writes when host reads are slow.
+- CDC1 debug/status blocks can exceed TinyUSB's per-interface write-available size; queue and chunk long control text to avoid repeated retries and timing side effects during capture.
