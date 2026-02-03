@@ -19,6 +19,7 @@
 - 2026-02-10: Added EP0 vendor control commands for capture control, moved capture-related CDC1 commands to EP0, and updated host tooling/docs accordingly.
 - 2026-02-10: Removed legacy capture diagnostics/toggles (force/test frame, VSYNC/mode toggle, GPIO diag) from EP0 control and host tooling.
 - 2026-02-10: Removed capture test-mode and VSYNC-edge toggle codepaths from the video core to lock continuous capture and reduce runtime toggle overhead.
+- 2026-02-10: Added a timeout to CDC1 blocking writes so control console disconnects or flow stalls don't hang the main loop.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

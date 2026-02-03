@@ -102,11 +102,15 @@ static bool cdc_ctrl_write(const char *buf, size_t len) {
         return false;
     }
 
+    absolute_time_t deadline = make_timeout_time_ms(20);
     size_t offset = 0;
     while (offset < len && tud_cdc_n_connected(CDC_CTRL)) {
         int avail = tud_cdc_n_write_available(CDC_CTRL);
         if (avail <= 0) {
             tud_task();
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
             sleep_us(200);
             continue;
         }
@@ -118,6 +122,9 @@ static bool cdc_ctrl_write(const char *buf, size_t len) {
         uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf + offset, to_write);
         if (wrote == 0) {
             tud_task();
+            if (absolute_time_diff_us(get_absolute_time(), deadline) <= 0) {
+                break;
+            }
             sleep_us(200);
             continue;
         }
