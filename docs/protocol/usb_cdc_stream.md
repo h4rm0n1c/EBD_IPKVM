@@ -23,6 +23,10 @@ and `EBD_IPKVM adb test`, which are visible in tools like `lsusb -v` or
 - `...-if02` → CDC1 (control)
 - `...-if04` → CDC2 (ADB test input)
 
+On Linux, vendor-specific bulk interfaces typically show `usbfs` as the driver in
+`lsusb -t`. This is expected because no class driver is bound for the stream;
+libusb/pyusb talks to the bulk endpoints through usbfs.
+
 ## Packet layout (variable length)
 
 | Offset | Size | Field | Notes |
