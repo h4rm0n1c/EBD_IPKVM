@@ -148,3 +148,6 @@
 - 2026-02-03: Made the bulk-stream host helper tolerate USB “resource busy” by reusing the active configuration and ignoring EBUSY on set-configuration.
 - 2026-02-03: Updated debug/ADB console helper scripts to use the new CDC interface indices (if01 control, if03 ADB).
 - 2026-02-03: Handle Ctrl+C cleanly in host_recv_frames.py when reading from the bulk stream to avoid noisy tracebacks.
+- 2026-02-11: Replaced the ADB bus state machine with hootswitch’s ISR-driven device-side flow (PIO IRQ + GPIO rise ISR), trimming to a single computer instance while keeping keyboard/mouse devices and the GPIO6/12 pin map.
+- 2026-02-11: Switched ADB PIO IRQ enablement to hootswitch-style mask-based configuration for the active state machine.
+- 2026-02-11: Aligned ADB handler ID callbacks with hootswitch’s get/set handle model, so reg3 Listen proposals route through driver validation before updating stored handler IDs.

@@ -166,8 +166,8 @@ void adb_driver_bind_callbacks(adb_driver_state_t *state) {
     if (!state) {
         return;
     }
-    (void)adb_bus_set_handler_id_fn(2u, adb_driver_handler_id);
-    (void)adb_bus_set_handler_id_fn(3u, adb_driver_handler_id);
+    (void)adb_bus_set_handle_fns(2u, adb_driver_get_handle, adb_driver_set_handle, state);
+    (void)adb_bus_set_handle_fns(3u, adb_driver_get_handle, adb_driver_set_handle, state);
     (void)adb_bus_set_reg0_pop(2u, adb_driver_kbd_reg0_pop, &state->kbd_queue);
     (void)adb_bus_set_reg0_pop(3u, adb_driver_mouse_reg0_pop, &state->mouse_queue);
     (void)adb_bus_set_listen_fn(2u, adb_driver_listen, state);
@@ -192,7 +192,10 @@ bool adb_driver_mouse_reg0_pop(struct adb_device *dev, uint8_t *first, uint8_t *
     return adb_mouse_queue_pop(queue, first, second);
 }
 
-uint8_t adb_driver_handler_id(uint8_t address, uint8_t stored_id) {
+static uint8_t adb_driver_validate_handle(uint8_t address, uint8_t stored_id) {
+    if (stored_id == 0xFFu) {
+        return 0xFFu;
+    }
     switch (address) {
     case 2u:
         if (stored_id >= 0x01u && stored_id <= 0x03u) {
@@ -206,6 +209,25 @@ uint8_t adb_driver_handler_id(uint8_t address, uint8_t stored_id) {
         return 0x01u;
     default:
         return stored_id;
+    }
+}
+
+void adb_driver_get_handle(uint8_t address, uint8_t stored_id, uint8_t *out, void *ctx) {
+    (void)ctx;
+    if (!out) {
+        return;
+    }
+    *out = adb_driver_validate_handle(address, stored_id);
+}
+
+void adb_driver_set_handle(uint8_t address, uint8_t proposed, uint8_t *stored_id, void *ctx) {
+    (void)ctx;
+    if (!stored_id) {
+        return;
+    }
+    uint8_t validated = adb_driver_validate_handle(address, proposed);
+    if (validated == proposed) {
+        *stored_id = validated;
     }
 }
 

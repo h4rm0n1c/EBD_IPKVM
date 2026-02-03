@@ -23,7 +23,10 @@ void adb_bus_init(void);
 bool adb_bus_service(void);
 bool adb_bus_take_activity(void);
 void adb_bus_get_stats(adb_bus_stats_t *out);
-bool adb_bus_set_handler_id_fn(uint8_t address, uint8_t (*fn)(uint8_t address, uint8_t stored_id));
+bool adb_bus_set_handle_fns(uint8_t address,
+                            void (*get_fn)(uint8_t address, uint8_t stored_id, uint8_t *out, void *ctx),
+                            void (*set_fn)(uint8_t address, uint8_t proposed, uint8_t *stored_id, void *ctx),
+                            void *ctx);
 bool adb_bus_set_reg0_pop(uint8_t address, bool (*fn)(struct adb_device *dev, uint8_t *first, uint8_t *second), void *queue_ctx);
 bool adb_bus_set_listen_fn(uint8_t address, void (*fn)(uint8_t address, uint8_t reg, const uint8_t *data, uint8_t len, void *ctx), void *ctx);
 bool adb_bus_set_flush_fn(uint8_t address, void (*fn)(uint8_t address, uint8_t reg, void *ctx), void *ctx);

@@ -73,3 +73,5 @@
 - 2026-01-25: Add runtime CDC toggle for PIXCLK edge selection to diagnose sampling phase.
 
 - 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
+- 2026-02-11: Replace the custom ADB bus polling/state machine with hootswitch’s ISR-driven device-side implementation (PIO IRQ + GPIO rise ISR), retaining only the project’s GPIO6/12 pin assignments and inversion requirements.
+- 2026-02-11: Use hootswitch-style get/set handler callbacks for reg3 handling, routing handler ID proposals through driver validation instead of direct bus storage.

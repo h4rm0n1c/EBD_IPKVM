@@ -45,7 +45,8 @@ void adb_driver_flush(adb_driver_state_t *state, uint32_t *lock_fail_counter);
 void adb_driver_bind_callbacks(adb_driver_state_t *state);
 bool adb_driver_kbd_reg0_pop(struct adb_device *dev, uint8_t *first, uint8_t *second);
 bool adb_driver_mouse_reg0_pop(struct adb_device *dev, uint8_t *first, uint8_t *second);
-uint8_t adb_driver_handler_id(uint8_t address, uint8_t stored_id);
+void adb_driver_get_handle(uint8_t address, uint8_t stored_id, uint8_t *out, void *ctx);
+void adb_driver_set_handle(uint8_t address, uint8_t proposed, uint8_t *stored_id, void *ctx);
 void adb_driver_listen(uint8_t address, uint8_t reg, const uint8_t *data, uint8_t len, void *ctx);
 void adb_driver_flush_reg(uint8_t address, uint8_t reg, void *ctx);
 
