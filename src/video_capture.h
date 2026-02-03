@@ -16,6 +16,7 @@ typedef struct video_capture {
     PIO pio;
     uint sm;
     int dma_chan;
+    int post_dma_chan;
 
     volatile bool capture_enabled;
     volatile bool capture_want_frame;
@@ -38,6 +39,7 @@ void video_capture_init(video_capture_t *cap,
                         PIO pio,
                         uint sm,
                         int dma_chan,
+                        int post_dma_chan,
                         uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE],
                         uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE]);
 void video_capture_start(video_capture_t *cap, bool want_frame);

@@ -12,6 +12,7 @@
 - 2026-02-05: Only raise SRQ flags when SRQ is enabled on the device, aligning reg0 queue behavior with hootswitch.
 - 2026-02-05: Treat Listen writes shorter than 2 bytes as empty Talk data and clear reg0 SRQ flags, mirroring hootswitch Talk length handling.
 - 2026-02-05: Ignore reg3 Listen writes unless they are exactly 2 bytes, aligning with hootswitch reg3 handling.
+- 2026-02-08: Use a dedicated DMA channel to byte-swap captured frame buffers in-place after the PIO RX DMA completes, removing per-line CPU byte swapping before transmit.
 - 2026-02-05: Provide hootswitch-style debug counters for lock failures/collisions in the ADB bus and surface them in CDC debug output.
 - 2026-02-05: Resolve reg3 handler IDs via a callback to match hootswitch’s dynamic handler selection.
 - 2026-02-05: Implement hootswitch-style reg0 queue drain via per-device pop callbacks that only fill reg0 when empty and unlocked.

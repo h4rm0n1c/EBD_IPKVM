@@ -47,7 +47,6 @@ static uint16_t frame_tx_id = 0;
 static uint16_t frame_tx_line = 0;
 static uint16_t frame_tx_lines = 0;
 static uint16_t frame_tx_start = 0;
-static uint32_t frame_tx_line_buf[CAP_WORDS_PER_LINE];
 static uint8_t rle_line_buf[PKT_MAX_PAYLOAD];
 
 typedef struct {
@@ -196,12 +195,6 @@ static inline bool txq_enqueue_line(uint16_t fid, uint16_t lid, const uint8_t *d
     return txq_enqueue_payload(fid, lid, data64, CAP_BYTES_PER_LINE, false);
 }
 
-static inline void reorder_line_words(uint32_t *buf) {
-    for (size_t i = 0; i < CAP_WORDS_PER_LINE; i++) {
-        buf[i] = __builtin_bswap32(buf[i]);
-    }
-}
-
 static void configure_pio_program(void) {
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
@@ -324,10 +317,9 @@ static bool service_frame_tx(void) {
             video_capture_set_inflight(&capture, NULL);
             return true;
         }
-        memcpy(frame_tx_line_buf, frame_tx_buf[src_line], sizeof(frame_tx_line_buf));
-        reorder_line_words(frame_tx_line_buf);
-
-        if (!txq_enqueue_line(frame_tx_id, frame_tx_line, (const uint8_t *)frame_tx_line_buf)) {
+        if (!txq_enqueue_line(frame_tx_id,
+                              frame_tx_line,
+                              (const uint8_t *)frame_tx_buf[src_line])) {
             lines_drop++;
             break;
         }
@@ -475,7 +467,13 @@ void video_core_init(const video_core_config_t *cfg) {
     test_line = 0;
 
     configure_pio_program();
-    video_capture_init(&capture, pio, sm, cfg->dma_chan, framebuf_a, framebuf_b);
+    video_capture_init(&capture,
+                       pio,
+                       sm,
+                       cfg->dma_chan,
+                       cfg->post_dma_chan,
+                       framebuf_a,
+                       framebuf_b);
     video_capture_stop(&capture);
     txq_reset();
     reset_frame_tx_state();
