@@ -231,8 +231,17 @@ def open_usb_stream():
         print("[host] USB device not found (VID/PID 0x2E8A:0x000A).", file=sys.stderr)
         sys.exit(2)
 
-    dev.set_configuration()
-    cfg = dev.get_active_configuration()
+    try:
+        cfg = dev.get_active_configuration()
+    except usb.core.USBError:
+        cfg = None
+    if cfg is None:
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) != 16:
+                raise
+        cfg = dev.get_active_configuration()
     intf = usb.util.find_descriptor(cfg, bInterfaceClass=0xFF)
     if intf is None:
         print("[host] bulk stream interface not found.", file=sys.stderr)
