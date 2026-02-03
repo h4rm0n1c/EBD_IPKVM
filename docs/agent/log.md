@@ -8,7 +8,7 @@
 - 2026-02-08: Emit the CDC1 debug block as a single write (retrying when buffer space is low) and pause periodic status while a debug dump is pending so Talk counters reliably print.
 - 2026-02-08: Emit the periodic CDC1 status lines as a single buffered block to reduce control-endpoint churn and avoid partial writes when the host is slow to read.
 - 2026-02-08: Switch CDC1 debug/status output to a queued, chunked write path so large debug blocks can drain without stalling the main loop or starving capture/USB handling.
-- 2026-02-08: Gate CDC1 text output on video_core_can_emit_text so control/status traffic pauses during active capture to avoid USB bandwidth contention and capture disturbances.
+- 2026-02-08: Re-enable CDC1 status/debug output during capture so control/status traffic remains available while the stream is active; rely on queued chunking to avoid blocking.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

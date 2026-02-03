@@ -61,7 +61,7 @@ static inline void set_ps_on(bool on) {
 }
 
 static inline bool can_emit_text(void) {
-    return tud_cdc_n_connected(CDC_CTRL) && video_core_can_emit_text();
+    return tud_cdc_n_connected(CDC_CTRL);
 }
 
 static inline void reset_diag_counts(void) {
