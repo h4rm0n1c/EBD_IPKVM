@@ -21,6 +21,7 @@
 #define APP_PKT_MAX_PAYLOAD (CAP_BYTES_PER_LINE * 2)
 #define APP_PKT_MAX_BYTES (STREAM_HEADER_BYTES + APP_PKT_MAX_PAYLOAD)
 #define APP_PKT_RAW_BYTES (STREAM_HEADER_BYTES + CAP_BYTES_PER_LINE)
+#define BULK_COALESCE_MAX_PACKETS 4
 
 #define CDC_CTRL 0
 #define CDC_ADB 1
@@ -30,10 +31,14 @@ static app_core_config_t app_cfg;
 static volatile bool ps_on_state = false;
 static uint32_t usb_drops = 0;
 static uint16_t txq_offset = 0;
+static uint8_t bulk_coalesce_buf[APP_PKT_MAX_BYTES * BULK_COALESCE_MAX_PACKETS];
 
 static uint8_t probe_buf[APP_PKT_MAX_BYTES];
 static volatile uint8_t probe_pending = 0;
 static uint16_t probe_offset = 0;
+static size_t bulk_coalesce_len = 0;
+static size_t bulk_coalesce_off = 0;
+static bool bulk_coalesce_pending = false;
 static volatile bool debug_requested = false;
 static char ctrl_tx_buf[512];
 static size_t ctrl_tx_len = 0;
@@ -708,6 +713,32 @@ static inline bool service_txq(void) {
     bool wrote_any = false;
 
     while (true) {
+        if (bulk_coalesce_pending) {
+            int avail = stream_write_available();
+            if (avail <= 0) {
+                break;
+            }
+            size_t remain = bulk_coalesce_len - bulk_coalesce_off;
+            size_t to_write = (size_t)avail;
+            if (to_write > remain) {
+                to_write = remain;
+            }
+            uint32_t n = stream_write(&bulk_coalesce_buf[bulk_coalesce_off], (uint32_t)to_write);
+            if (n == 0) {
+                usb_drops++;
+                break;
+            }
+            bulk_coalesce_off += n;
+            wrote_any = true;
+            if (bulk_coalesce_off >= bulk_coalesce_len) {
+                bulk_coalesce_pending = false;
+                bulk_coalesce_len = 0;
+                bulk_coalesce_off = 0;
+                continue;
+            }
+            break;
+        }
+
         const uint8_t *data = NULL;
         uint16_t pkt_len = 0;
         if (!video_core_txq_peek(&data, &pkt_len)) {
@@ -722,6 +753,35 @@ static inline bool service_txq(void) {
 
         int avail = stream_write_available();
         if (avail <= 0) break;
+
+        if (txq_offset == 0 && avail >= pkt_len) {
+            size_t batch_len = 0;
+            size_t batch_limit = sizeof(bulk_coalesce_buf);
+            const uint8_t *batch_data = NULL;
+            uint16_t batch_pkt_len = 0;
+
+            while (video_core_txq_peek(&batch_data, &batch_pkt_len)) {
+                if (batch_pkt_len == 0 || batch_pkt_len > APP_PKT_MAX_BYTES) {
+                    txq_offset = 0;
+                    video_core_txq_consume();
+                    continue;
+                }
+                if (batch_len + batch_pkt_len > batch_limit) {
+                    break;
+                }
+                memcpy(&bulk_coalesce_buf[batch_len], batch_data, batch_pkt_len);
+                batch_len += batch_pkt_len;
+                video_core_txq_consume();
+                wrote_any = true;
+            }
+
+            if (batch_len > 0) {
+                bulk_coalesce_pending = true;
+                bulk_coalesce_len = batch_len;
+                bulk_coalesce_off = 0;
+                continue;
+            }
+        }
 
         uint32_t remain = (uint32_t)(pkt_len - txq_offset);
         uint32_t to_write = (uint32_t)avail;
