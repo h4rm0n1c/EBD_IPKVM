@@ -79,15 +79,10 @@ Capture control is issued via EP0 vendor control transfers (host → device):
 | `0x01` | `CAPTURE_START` | Arm capture (begin reacting to VSYNC). |
 | `0x02` | `CAPTURE_STOP` | Stop capture, clear TX queue. |
 | `0x03` | `RESET_COUNTERS` | Reset counters and internal state. |
-| `0x04` | `FORCE_FRAME` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
-| `0x05` | `TEST_FRAME` | Transmit a synthetic test frame and emit a probe packet. |
-| `0x06` | `PROBE_PACKET` | Emit a single probe packet (fixed payload) for sanity checking. |
-| `0x07` | `TOGGLE_VSYNC` | Toggle VSYNC edge (fall↔rise), stop capture, and reset the line queue. |
-| `0x08` | `TOGGLE_MODE` | Toggle capture cadence between ~30 fps test mode and continuous ~60 fps streaming. |
-| `0x09` | `RLE_ON` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
-| `0x0A` | `RLE_OFF` | Disable RLE line encoding (force raw 64-byte payloads). |
-| `0x0B` | `GPIO_DIAG` | Report GPIO input states and edge counts over a short sampling window. |
-| `0x0C` | `CAPTURE_PARK` | Park (stop capture and idle forever until reset). |
+| `0x04` | `PROBE_PACKET` | Emit a single probe packet (fixed payload) for sanity checking. |
+| `0x05` | `RLE_ON` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
+| `0x06` | `RLE_OFF` | Disable RLE line encoding (force raw 64-byte payloads). |
+| `0x07` | `CAPTURE_PARK` | Park (stop capture and idle forever until reset). |
 
 `src/host_recv_frames.py` defaults to EP0 control transfers for capture commands
 and can be forced back to CDC with `--ctrl-cdc` if needed for legacy testing.
@@ -103,14 +98,6 @@ for the core1 ADB service loop.
 | `Ctrl+R` (`0x12`) | Toggle primary mouse button and emit a button event. |
 | Printable ASCII, Tab, Backspace, Delete | Emit a key press + release. |
 | Enter (`\\r`/`\\n`) | Emit a Return key press + release. |
-
-### GPIO diagnostic output (`GPIO_DIAG`)
-- Triggered via EP0 vendor request `0x0B` (`GPIO_DIAG`).
-- Emitted on CDC1 (status channel).
-- Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
-- Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
-- Output format:
-  - `[EBD_IPKVM][diag] gpio pixclk=<0|1> hsync=<0|1> vsync=<0|1> video=<0|1> edges/<secs> pixclk=<count> hsync=<count> vsync=<count> video=<count>`
 
 ## Capture cadence
 - Default mode streams every VSYNC (~60 fps).

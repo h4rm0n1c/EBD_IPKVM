@@ -6,10 +6,6 @@ SEND_STOP = True
 SEND_BOOT = True
 BOOT_WAIT = 12.0
 DIAG_SECS = 12.0
-FORCE_AFTER = 2.0
-FORCE_START = False
-TEST_AFTER = 0.0
-TEST_START = False
 PROBE_ONLY = False
 RLE_MODE = True
 OUTPUT_FORMAT = "pgm"
@@ -42,20 +38,12 @@ for arg in sys.argv[1:]:
         except ValueError:
             print(f"[host] invalid --diag-secs value: {value}")
             sys.exit(2)
-    elif arg == "--force-start":
-        FORCE_START = True
-    elif arg == "--test-frame":
-        TEST_START = True
     elif arg == "--probe":
         PROBE_ONLY = True
     elif arg == "--rle":
         RLE_MODE = True
     elif arg == "--raw":
         RLE_MODE = False
-    elif arg == "--no-force":
-        FORCE_AFTER = 0.0
-    elif arg == "--no-test":
-        TEST_AFTER = 0.0
     elif arg == "--pgm":
         OUTPUT_FORMAT = "pgm"
     elif arg == "--pbm":
@@ -82,20 +70,9 @@ for arg in sys.argv[1:]:
         CTRL_MODE = "ep0"
     elif arg == "--ctrl-cdc":
         CTRL_MODE = "cdc"
-    elif arg.startswith("--force-after="):
-        value = arg.split("=", 1)[1]
-        try:
-            FORCE_AFTER = float(value)
-        except ValueError:
-            print(f"[host] invalid --force-after value: {value}")
-            sys.exit(2)
-    elif arg.startswith("--test-after="):
-        value = arg.split("=", 1)[1]
-        try:
-            TEST_AFTER = float(value)
-        except ValueError:
-            print(f"[host] invalid --test-after value: {value}")
-            sys.exit(2)
+    elif arg.startswith("--force-after=") or arg.startswith("--test-after="):
+        print("[host] force/test capture options removed; use EP0 capture start.", file=sys.stderr)
+        sys.exit(2)
     else:
         ARGS.append(arg)
 
@@ -226,15 +203,10 @@ USB_PID = 0x000A
 CTRL_REQ_CAPTURE_START = 0x01
 CTRL_REQ_CAPTURE_STOP = 0x02
 CTRL_REQ_RESET_COUNTERS = 0x03
-CTRL_REQ_FORCE_FRAME = 0x04
-CTRL_REQ_TEST_FRAME = 0x05
-CTRL_REQ_PROBE_PACKET = 0x06
-CTRL_REQ_TOGGLE_VSYNC = 0x07
-CTRL_REQ_TOGGLE_MODE = 0x08
-CTRL_REQ_RLE_ON = 0x09
-CTRL_REQ_RLE_OFF = 0x0A
-CTRL_REQ_GPIO_DIAG = 0x0B
-CTRL_REQ_CAPTURE_PARK = 0x0C
+CTRL_REQ_PROBE_PACKET = 0x04
+CTRL_REQ_RLE_ON = 0x05
+CTRL_REQ_RLE_OFF = 0x06
+CTRL_REQ_CAPTURE_PARK = 0x07
 
 def open_usb_stream():
     try:
@@ -410,23 +382,10 @@ if PROBE_ONLY:
             probe_bytes += len(chunk)
     print(f"[host] probe bytes received: {probe_bytes}")
     sys.exit(0)
-if TEST_START:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_TEST_FRAME)
-    else:
-        os.write(ctrl_fd, b"T")
-    FORCE_AFTER = 0.0
-    FORCE_START = False
-elif FORCE_START:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_FORCE_FRAME)
-    else:
-        os.write(ctrl_fd, b"F")
+if CTRL_MODE == "ep0":
+    send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_START)
 else:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_START)
-    else:
-        os.write(ctrl_fd, b"S")
+    os.write(ctrl_fd, b"S")
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
@@ -446,8 +405,6 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 start_rx = last_rx
-force_sent = FORCE_START or TEST_START
-test_sent = TEST_START
 
 try:
     while True:
@@ -468,20 +425,6 @@ try:
 
         if not chunk:
             now = time.time()
-            if not force_sent and FORCE_AFTER > 0 and now - start_rx > FORCE_AFTER:
-                if CTRL_MODE == "ep0":
-                    send_ep0_cmd(usb_dev, CTRL_REQ_FORCE_FRAME)
-                else:
-                    os.write(ctrl_fd, b"F")
-                force_sent = True
-                log(f"[host] no packets yet; sent force-start after {FORCE_AFTER:.2f}s")
-            if not test_sent and TEST_AFTER > 0 and now - start_rx > TEST_AFTER:
-                if CTRL_MODE == "ep0":
-                    send_ep0_cmd(usb_dev, CTRL_REQ_TEST_FRAME)
-                else:
-                    os.write(ctrl_fd, b"T")
-                test_sent = True
-                log(f"[host] no packets yet; sent test-frame after {TEST_AFTER:.2f}s")
             if now - last_rx > 2.0:
                 log("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now

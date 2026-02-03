@@ -299,16 +299,6 @@ static void handle_capture_command(uint8_t ch) {
         }
         while (true) { tud_task(); sleep_ms(50); }
         break;
-    case 'F':
-        core_bridge_send(CORE_BRIDGE_CMD_SINGLE_FRAME, 0);
-        break;
-    case 'T':
-        video_core_set_armed(false);
-        video_core_set_want_frame(false);
-        txq_offset = 0;
-        core_bridge_send(CORE_BRIDGE_CMD_START_TEST, 0);
-        request_probe_packet();
-        break;
     case 'U':
         request_probe_packet();
         break;
@@ -324,43 +314,6 @@ static void handle_capture_command(uint8_t ch) {
             cdc_ctrl_printf("[EBD_IPKVM][cmd] rle=off\n");
         }
         break;
-    case 'G':
-        if (can_emit_text()) {
-            core_bridge_send(CORE_BRIDGE_CMD_DIAG_PREP, 0);
-            run_gpio_diag();
-            core_bridge_send(CORE_BRIDGE_CMD_DIAG_DONE, 0);
-        }
-        break;
-    case 'V': {
-        bool new_edge = !video_core_get_vsync_edge();
-        video_core_set_vsync_edge(new_edge);
-        video_core_set_armed(false);
-        video_core_set_want_frame(false);
-        txq_offset = 0;
-        core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-        core_bridge_send(CORE_BRIDGE_CMD_CONFIG_VSYNC, 0);
-        if (can_emit_text()) {
-            cdc_ctrl_printf("[EBD_IPKVM][cmd] vsync_edge=%s\n", new_edge ? "fall" : "rise");
-        }
-        break;
-    }
-    case 'M': {
-        capture_mode_t mode = video_core_get_capture_mode();
-        capture_mode_t next_mode = (mode == CAPTURE_MODE_TEST_30FPS)
-                                       ? CAPTURE_MODE_CONTINUOUS_60FPS
-                                       : CAPTURE_MODE_TEST_30FPS;
-        video_core_set_capture_mode(next_mode);
-        video_core_set_want_frame(false);
-        video_core_set_take_toggle(false);
-        txq_offset = 0;
-        core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-        if (can_emit_text()) {
-            cdc_ctrl_printf("[EBD_IPKVM][cmd] mode=%s\n",
-                            next_mode == CAPTURE_MODE_CONTINUOUS_60FPS ? "60fps-continuous"
-                                                                      : "30fps-test");
-        }
-        break;
-    }
     default:
         break;
     }
@@ -380,29 +333,14 @@ static void handle_ep0_command(uint8_t cmd) {
     case USB_CTRL_REQ_RESET_COUNTERS:
         handle_reset_counters();
         break;
-    case USB_CTRL_REQ_FORCE_FRAME:
-        handle_capture_command('F');
-        break;
-    case USB_CTRL_REQ_TEST_FRAME:
-        handle_capture_command('T');
-        break;
     case USB_CTRL_REQ_PROBE_PACKET:
         handle_capture_command('U');
-        break;
-    case USB_CTRL_REQ_TOGGLE_VSYNC:
-        handle_capture_command('V');
-        break;
-    case USB_CTRL_REQ_TOGGLE_MODE:
-        handle_capture_command('M');
         break;
     case USB_CTRL_REQ_RLE_ON:
         handle_capture_command('E');
         break;
     case USB_CTRL_REQ_RLE_OFF:
         handle_capture_command('e');
-        break;
-    case USB_CTRL_REQ_GPIO_DIAG:
-        handle_capture_command('G');
         break;
     default:
         break;
