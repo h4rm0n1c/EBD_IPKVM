@@ -132,3 +132,4 @@
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
 - 2026-02-03: Drop CDC1 debug/status output when the control interface is disconnected or lacks write space, and clear any queued control text on disconnect to prevent backlog flushes.
 - 2026-02-03: Expanded mandatory memory checks to include codebase scans and relevant /opt references, with /opt/adb as the overriding source for ADB conflicts.
+- 2026-02-03: Switched the video stream from CDC0 to a vendor bulk endpoint and updated host tooling/docs accordingly.

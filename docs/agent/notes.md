@@ -8,9 +8,9 @@
 - PIXCLK phase-lock after HSYNC (and a pre-roll high before falling-edge capture) prevents occasional 1-pixel capture phase slips.
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
-- Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
-- Host scripts default to `/dev/ttyACM0` for the CDC0 stream and `/dev/ttyACM1` for CDC1 control unless overridden.
-- Linux udev symlinks include `if00` (CDC0 stream) and `if02` (CDC1 control); use `/dev/serial/by-id` for stable naming.
+- Control/status traffic uses CDC1 while the video stream uses a vendor bulk endpoint; host tooling must open the CDC interface for commands and libusb/pyusb for the stream.
+- Host scripts default to `usb` for the bulk stream and `/dev/ttyACM0` for CDC1 control unless overridden.
+- Linux udev symlinks include `if02` (CDC1 control) and `if04` (CDC2 ADB test); use `/dev/serial/by-id` for stable naming.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
@@ -63,3 +63,4 @@
 - CDC1 control/status output remains active during capture; chunked writes are used to avoid blocking while keeping CDC1 diagnostics available.
 - CDC1 control text is now dropped if the interface is disconnected or lacks write space, and any queued control block is discarded on disconnect to avoid backlogged status bursts.
 - Mandatory memory checks now include a quick codebase scan plus relevant /opt references; for ADB, /opt/adb is authoritative when repo docs conflict.
+- Video streaming now uses a vendor bulk endpoint (not CDC); host access requires libusb/pyusb while CDC1/CDC2 remain for control and ADB test input.

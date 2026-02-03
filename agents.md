@@ -36,7 +36,7 @@ After any non-trivial change:
 - Macintosh Classic video: 512×342, 1bpp, ~60 Hz interlaced-ish, negative syncs typical, pixel clock ~15.67 MHz.
 - PIO (`src/classic_line.pio`): must be cycle-precise on pixel clock sampling; any added instruction can shift alignment → re-verify with scope or test pattern.
 - DMA line queue: overflows drop frames silently → monitor queue depth in code.
-- USB: dual CDC (CDC0 = binary frames, CDC1 = JSON control) — preserve separation or host_recv_frames.py breaks.
+- USB: vendor bulk stream + CDC control/ADB — preserve separation or host_recv_frames.py breaks.
 - Signals: Mac video/ADB = 5V open-collector/bidirectional → **mandatory level shifters** (e.g. 74LVC245 or similar); never suggest direct GPIO connect.
 - Host verification flow: `python scripts/host_recv_frames.py --pgm` for PGM output; or `--raw | ffplay -f rawvideo -pixel_format monob -video_size 512x342 -framerate 60 -`
 - Use `./bootstrap_repo.sh` for fresh clones (SDK path, submodules if any).

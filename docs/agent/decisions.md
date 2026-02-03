@@ -29,6 +29,7 @@
 - 2026-02-04: Start the ADB bring-up by landing the hootswitch-derived RX/TX PIO programs on PIO1 with a minimal core1 service loop before adding protocol logic.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
+- 2026-02-03: Move the video stream to a vendor bulk endpoint while keeping CDC1/CDC2 for control and ADB test input to avoid CDC overhead in the capture path.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
 - 2026-02-01: Only accrue utilization time when USB/capture/TX routines make progress so idle loops report near-zero activity.
 - 2026-02-02: Assign ADB RECV to GPIO7 and ADB XMIT to GPIO8 on the shared ADB data line (superseded by 2026-02-03 wiring update).

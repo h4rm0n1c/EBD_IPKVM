@@ -22,9 +22,8 @@
 #define APP_PKT_MAX_BYTES (STREAM_HEADER_BYTES + APP_PKT_MAX_PAYLOAD)
 #define APP_PKT_RAW_BYTES (STREAM_HEADER_BYTES + CAP_BYTES_PER_LINE)
 
-#define CDC_STREAM 0
-#define CDC_CTRL 1
-#define CDC_ADB 2
+#define CDC_CTRL 0
+#define CDC_ADB 1
 
 static app_core_config_t app_cfg;
 
@@ -54,6 +53,22 @@ static absolute_time_t adb_rx_next;
 static bool adb_rx_seen = false;
 static uint8_t adb_esc_state = 0;
 static uint8_t adb_mouse_buttons = 0;
+
+static inline bool stream_ready(void) {
+    return tud_ready();
+}
+
+static inline int stream_write_available(void) {
+    return tud_vendor_write_available();
+}
+
+static inline uint32_t stream_write(const void *buf, uint32_t len) {
+    return tud_vendor_write(buf, len);
+}
+
+static inline void stream_flush(void) {
+    tud_vendor_flush();
+}
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -248,7 +263,7 @@ static void run_gpio_diag(void) {
 }
 
 static bool try_send_probe_packet(void) {
-    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
+    if (!stream_ready()) return false;
 
     if (probe_offset == 0) {
         stream_write_header(probe_buf, 0x55AAu, 0x1234u, CAP_BYTES_PER_LINE);
@@ -256,19 +271,19 @@ static bool try_send_probe_packet(void) {
     }
 
     while (probe_offset < APP_PKT_RAW_BYTES) {
-        int avail = tud_cdc_n_write_available(CDC_STREAM);
+        int avail = stream_write_available();
         if (avail <= 0) return false;
         uint32_t to_write = (uint32_t)avail;
         uint32_t remain = (uint32_t)(APP_PKT_RAW_BYTES - probe_offset);
         if (to_write > remain) {
             to_write = remain;
         }
-        uint32_t wrote = tud_cdc_n_write(CDC_STREAM, &probe_buf[probe_offset], to_write);
+        uint32_t wrote = stream_write(&probe_buf[probe_offset], to_write);
         if (wrote == 0) return false;
         probe_offset = (uint16_t)(probe_offset + wrote);
     }
 
-    tud_cdc_n_write_flush(CDC_STREAM);
+    stream_flush();
     return true;
 }
 
@@ -306,7 +321,7 @@ static bool build_debug_state(char *out, size_t out_size, size_t *out_len) {
                      "[EBD_IPKVM] dbg txq=%u/%u av=%d fr=%lu ln=%lu dr=%lu ov=%lu sh=%lu\n",
                      (unsigned)txq_r,
                      (unsigned)txq_w,
-                     tud_cdc_n_write_available(CDC_STREAM),
+                     stream_write_available(),
                      (unsigned long)video_core_get_frames_done(),
                      (unsigned long)video_core_get_lines_ok(),
                      (unsigned long)video_core_get_lines_drop(),
@@ -688,7 +703,7 @@ static bool poll_cdc_adb(void) {
 }
 
 static inline bool service_txq(void) {
-    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
+    if (!stream_ready()) return false;
 
     bool wrote_any = false;
 
@@ -705,7 +720,7 @@ static inline bool service_txq(void) {
             continue;
         }
 
-        int avail = tud_cdc_n_write_available(CDC_STREAM);
+        int avail = stream_write_available();
         if (avail <= 0) break;
 
         uint32_t remain = (uint32_t)(pkt_len - txq_offset);
@@ -714,7 +729,7 @@ static inline bool service_txq(void) {
             to_write = remain;
         }
 
-        uint32_t n = tud_cdc_n_write(CDC_STREAM, &data[txq_offset], to_write);
+        uint32_t n = stream_write(&data[txq_offset], to_write);
         if (n == 0) {
             usb_drops++;
             break;
@@ -730,7 +745,7 @@ static inline bool service_txq(void) {
     }
 
     if (wrote_any) {
-        tud_cdc_n_write_flush(CDC_STREAM);
+        stream_flush();
     }
     return wrote_any;
 }
@@ -739,7 +754,7 @@ void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
-    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC1=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] CDC2=ADB test input (arrow keys, Ctrl+R click, ASCII text)\n");
     cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");

@@ -22,7 +22,9 @@ Macintosh Classic KVM:
 - Throughput controls:
   - Default continuous mode streams every VSYNC (~60 fps) and runs until stopped (toggle with `M`).
   - Test mode alternates frames on each VSYNC to target ~30 fps.
-- USB CDC streaming:
+- USB streaming:
+  - Video stream uses a vendor bulk endpoint (binary line packets).
+  - CDC1 remains control/status; CDC2 remains ADB test input.
   - Lines buffered in a 512-entry ring buffer (72 bytes/packet).
   - Packets are fixed-size and headered (`0xEB 0xD1`).
   - Host must send `S` to arm, `X` to stop, `R` to reset counters, `Q` to park.
@@ -32,7 +34,7 @@ Macintosh Classic KVM:
 - AppleCore (core1) is the time-sensitive Apple I/O service loop: it owns video capture today and will host ADB bus timing/state in the future, while core0 handles USB/CDC and app logic.
 
 ## Host tooling
-- `src/host_recv_frames.py` is the host-side test program; it reads CDC packets and emits PBM frames (use `--pgm` for 8-bit output).
+- `src/host_recv_frames.py` is the host-side test program; it reads bulk stream packets and emits PBM frames (use `--pgm` for 8-bit output).
 - Script expects 512×342 frames and writes `frames/frame_###.pbm` by default.
 - `scripts/cdc_cmd.py` sends CDC command bytes (for example, `I` or `G`) and prints ASCII responses.
 - `scripts/ab_capture.py` runs two capture passes, toggling VIDEO inversion between runs (requires firmware support for the `O` command).
