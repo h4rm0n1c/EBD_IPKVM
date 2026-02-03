@@ -110,6 +110,7 @@ static uint adb_offset_rx = 0;
 static uint adb_offset_tx = 0;
 static int adb_dma_chan = -1;
 static volatile uint32_t adb_rx_activity = 0;
+static uint32_t adb_gpio_last_rise = 0;
 
 static const uint8_t adb_rand_table[] = {
     0x25, 0x5D, 0x05, 0x17, 0x58, 0xE9, 0x5E, 0xD4,
@@ -178,6 +179,7 @@ static void adb_bus_reset_devices(void) {
     adb_state.dbg_rx_gate_armed = 0;
     adb_state.dbg_rx_gate_immediate = 0;
     adb_state.dbg_gpio_rise = 0;
+    adb_gpio_last_rise = 0;
 }
 
 static adb_device_t *adb_bus_find_device(uint8_t address) {
@@ -531,6 +533,12 @@ static void adb_gpio_isr(uint gpio, uint32_t events, void *ctx) {
 
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
     adb_state.dbg_gpio_rise++;
+    uint32_t now = time_us_32();
+    if ((uint32_t)(now - adb_gpio_last_rise) < 50u) {
+        adb_gpio_last_rise = now;
+        return;
+    }
+    adb_gpio_last_rise = now;
 
     switch (adb_state.phase) {
     case ADB_PHASE_ATTENTION: {
@@ -628,7 +636,7 @@ static void adb_pio_isr(void) {
 void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
-    gpio_disable_pulls(ADB_PIN_RECV);
+    gpio_pull_up(ADB_PIN_RECV);
     (void)gpio_irq_dispatch_register(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, adb_gpio_isr, NULL);
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
 

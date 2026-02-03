@@ -29,7 +29,7 @@
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
 - ADB SRQ pulses are now handled by the hootswitch device-side PIO (bus_rx_dev), removing the prior software-timed SRQ pulse logic.
 - CDC2 ASCII input now maps through the US ADB keycode table (no modifier synthesis yet), so shifted characters will be sent as their unshifted keycodes for early testing.
-- ADB RX is now held off until a low→high transition on the bus; the RX state machine stays disabled and FIFOs are cleared while the line is held low to avoid phantom RX activity when the Mac is off.
+- ADB RX is now held off until a low→high transition on the bus; the RX state machine stays disabled and FIFOs are cleared while the line is held low to avoid phantom RX activity when the Mac is off. A weak pull-up on GPIO6 is enabled to keep the input stable when the bus is floating.
 - Observed on hardware: with the Mac off, the ADB bus idles low; on power-up it rises high, then drops low for ~3.979 ms, and about 1 ms later the first host Talk traffic appears.
 - ADB RX activity is now latched only when a command or listen payload completes (timeout), rather than on every sampled bit, to reduce false “RX seen” noise during idle.
 - ADB PIO programs now use hootswitch’s device-side bus implementation (GPLv3); license text is stored in `licenses/hootswitch-GPLv3.txt`.
