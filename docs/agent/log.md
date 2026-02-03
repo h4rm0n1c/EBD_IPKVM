@@ -126,3 +126,4 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+- 2026-02-03: Emit the CDC1 debug snapshot as a single write and defer until space is available to prevent partial/missing debug lines.
