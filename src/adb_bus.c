@@ -631,9 +631,11 @@ void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
     gpio_pull_up(ADB_PIN_RECV);
-    irq_set_exclusive_handler(IO_IRQ_BANK0, adb_gpio_bank0_isr);
-    irq_set_enabled(IO_IRQ_BANK0, true);
+    gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
+    irq_set_exclusive_handler(IO_IRQ_BANK0, adb_gpio_bank0_isr);
+    irq_set_priority(IO_IRQ_BANK0, 2);
+    irq_set_enabled(IO_IRQ_BANK0, true);
 
     gpio_set_slew_rate(ADB_PIN_XMIT, GPIO_SLEW_RATE_SLOW);
     gpio_init(ADB_PIN_XMIT);
@@ -652,10 +654,12 @@ void adb_bus_init(void) {
     pio_sm_set_pindirs_with_mask(adb_pio, adb_sm, 1u << ADB_PIN_XMIT, 1u << ADB_PIN_XMIT);
     pio_sm_set_pins_with_mask(adb_pio, adb_sm, 0u, 1u << ADB_PIN_XMIT);
 
+    pio_interrupt_clear(adb_pio, adb_sm);
     pio_set_irq0_source_mask_enabled(adb_pio,
                                      1u << (PIO_INTR_SM0_LSB + adb_sm),
                                      true);
     irq_set_exclusive_handler(PIO1_IRQ_0, adb_pio_isr);
+    irq_set_priority(PIO1_IRQ_0, 2);
     irq_set_enabled(PIO1_IRQ_0, true);
 
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
