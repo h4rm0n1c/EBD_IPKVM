@@ -10,6 +10,8 @@
 #define GPIO_IRQ_DISPATCH_MAX 4u
 #endif
 
+#define GPIO_IRQ_BANK_COUNT ((NUM_BANK0_GPIOS + 7u) / 8u)
+
 typedef struct {
     uint gpio;
     uint32_t mask;
@@ -22,9 +24,9 @@ static gpio_irq_dispatch_entry_t gpio_irq_entries[GPIO_IRQ_DISPATCH_MAX];
 static bool gpio_irq_installed = false;
 
 static void gpio_irq_bank0_dispatch(void) {
-    uint32_t pending[NUM_BANK0_IRQS];
+    uint32_t pending[GPIO_IRQ_BANK_COUNT];
     bool any_pending = false;
-    for (uint bank = 0; bank < NUM_BANK0_IRQS; bank++) {
+    for (uint bank = 0; bank < GPIO_IRQ_BANK_COUNT; bank++) {
         pending[bank] = io_bank0_hw->intr[bank];
         if (pending[bank]) {
             any_pending = true;
@@ -33,7 +35,7 @@ static void gpio_irq_bank0_dispatch(void) {
     if (!any_pending) {
         return;
     }
-    for (uint bank = 0; bank < NUM_BANK0_IRQS; bank++) {
+    for (uint bank = 0; bank < GPIO_IRQ_BANK_COUNT; bank++) {
         if (pending[bank]) {
             io_bank0_hw->intr[bank] = pending[bank];
         }
