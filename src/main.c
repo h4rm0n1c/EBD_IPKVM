@@ -50,12 +50,14 @@ int main(void) {
     uint offset_fall_pixrise = pio_add_program(pio, &classic_line_fall_pixrise_program);
 
     int dma_chan = dma_claim_unused_channel(true);
+    int post_dma_chan = dma_claim_unused_channel(true);
     irq_set_priority(USBCTRL_IRQ, 1);
 
     video_core_config_t video_cfg = {
         .pio = pio,
         .sm = sm,
         .dma_chan = dma_chan,
+        .post_dma_chan = post_dma_chan,
         .offset_fall_pixrise = offset_fall_pixrise,
         .pin_video = PIN_VIDEO,
         .pin_vsync = PIN_VSYNC,
