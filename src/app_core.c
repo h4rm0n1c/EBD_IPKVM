@@ -295,6 +295,48 @@ static bool emit_debug_state(void) {
     return cdc_ctrl_write(out, out_len);
 }
 
+static bool emit_status_state(uint32_t per_s,
+                              uint32_t total_lines,
+                              uint32_t frames_done,
+                              uint32_t drops,
+                              uint32_t usb_drop_count,
+                              uint32_t overruns,
+                              uint32_t vsync_edges,
+                              uint32_t core0_pct,
+                              uint32_t core1_pct) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        return false;
+    }
+
+    char out[256];
+    size_t out_len = 0;
+    int wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                         "[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
+                         video_core_is_armed() ? 1 : 0,
+                         video_core_capture_enabled() ? 1 : 0,
+                         ps_on_state ? 1 : 0,
+                         (unsigned long)per_s,
+                         (unsigned long)total_lines,
+                         (unsigned long)frames_done);
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    wrote = snprintf(out + out_len, sizeof(out) - out_len,
+                     "[EBD_IPKVM] dr=%lu usb=%lu ov=%lu vs/s=%lu c0=%lu%% c1=%lu%%\n",
+                     (unsigned long)drops,
+                     (unsigned long)usb_drop_count,
+                     (unsigned long)overruns,
+                     (unsigned long)vsync_edges,
+                     (unsigned long)core0_pct,
+                     (unsigned long)core1_pct);
+    if (wrote < 0 || (size_t)wrote >= sizeof(out) - out_len) {
+        return false;
+    }
+    out_len += (size_t)wrote;
+    return cdc_ctrl_write(out, out_len);
+}
+
 static bool poll_cdc_commands(void) {
     // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
     bool did_work = false;
@@ -707,20 +749,15 @@ void app_core_poll(void) {
             uint32_t core1_pct = core1_total ? (uint32_t)((core1_busy * 100u) / core1_total) : 0;
             uint32_t core0_pct = core0_total ? (uint32_t)((core0_busy * 100u) / core0_total) : 0;
 
-            cdc_ctrl_printf("[EBD_IPKVM] a=%d c=%d ps=%d l/s=%lu tot=%lu fr=%lu\n",
-                            video_core_is_armed() ? 1 : 0,
-                            video_core_capture_enabled() ? 1 : 0,
-                            ps_on_state ? 1 : 0,
-                            (unsigned long)per_s,
-                            (unsigned long)l,
-                            (unsigned long)video_core_get_frames_done());
-            cdc_ctrl_printf("[EBD_IPKVM] dr=%lu usb=%lu ov=%lu vs/s=%lu c0=%lu%% c1=%lu%%\n",
-                            (unsigned long)video_core_get_lines_drop(),
-                            (unsigned long)usb_drops,
-                            (unsigned long)video_core_get_frame_overrun(),
-                            (unsigned long)ve,
-                            (unsigned long)core0_pct,
-                            (unsigned long)core1_pct);
+            (void)emit_status_state(per_s,
+                                    l,
+                                    video_core_get_frames_done(),
+                                    video_core_get_lines_drop(),
+                                    usb_drops,
+                                    video_core_get_frame_overrun(),
+                                    ve,
+                                    core0_pct,
+                                    core1_pct);
         }
     }
 

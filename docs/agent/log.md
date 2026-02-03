@@ -6,6 +6,7 @@
 - 2026-02-08: Add ADB Talk debug counters (empty responses + total bytes) to confirm when Talk responses are actually emitted on the wire.
 - 2026-02-08: Disable the ADB GPIO rise interrupt inside the raw IRQ handler (hootswitch-style) to avoid repeated IRQ storms that can freeze the core.
 - 2026-02-08: Emit the CDC1 debug block as a single write (retrying when buffer space is low) and pause periodic status while a debug dump is pending so Talk counters reliably print.
+- 2026-02-08: Emit the periodic CDC1 status lines as a single buffered block to reduce control-endpoint churn and avoid partial writes when the host is slow to read.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

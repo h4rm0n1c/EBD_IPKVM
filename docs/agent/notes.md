@@ -58,3 +58,4 @@
 - ADB Talk debug counters (empty responses + total bytes) now report if Talk replies are actually being emitted.
 - ADB GPIO rise IRQs should disable themselves in the raw handler (hootswitch-style) to avoid IRQ storms that can stall the core.
 - CDC1 debug dumps are now emitted as a single buffered block and retried if the control endpoint lacks space, with periodic status paused while a debug dump is pending to avoid dropping late debug lines (e.g., Talk counters).
+- Periodic CDC1 status is now emitted as a single buffered block to reduce control endpoint churn and avoid partial status writes when host reads are slow.
