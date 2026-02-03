@@ -14,7 +14,6 @@
 #include "adb_core.h"
 #include "adb_driver.h"
 #include "adb_queue.h"
-#include "gpio_irq_dispatch.h"
 
 #define ADB_PIN_RECV 6
 #define ADB_PIN_XMIT 12
@@ -524,13 +523,8 @@ static void isr_listen_complete(void) {
     __atomic_store_n(&adb_rx_activity, 1u, __ATOMIC_RELEASE);
 }
 
-static void adb_gpio_isr(uint gpio, uint32_t events, void *ctx) {
-    (void)gpio;
-    (void)ctx;
-    if (!(events & GPIO_IRQ_EDGE_RISE)) {
-        return;
-    }
-
+static void adb_gpio_bank0_isr(void) {
+    gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
     adb_state.dbg_gpio_rise++;
     uint32_t now = time_us_32();
@@ -637,7 +631,8 @@ void adb_bus_init(void) {
     gpio_init(ADB_PIN_RECV);
     gpio_set_dir(ADB_PIN_RECV, GPIO_IN);
     gpio_pull_up(ADB_PIN_RECV);
-    (void)gpio_irq_dispatch_register(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, adb_gpio_isr, NULL);
+    irq_set_exclusive_handler(IO_IRQ_BANK0, adb_gpio_bank0_isr);
+    irq_set_enabled(IO_IRQ_BANK0, true);
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
 
     gpio_set_slew_rate(ADB_PIN_XMIT, GPIO_SLEW_RATE_SLOW);

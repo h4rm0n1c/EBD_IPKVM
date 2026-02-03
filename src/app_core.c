@@ -650,6 +650,15 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
+    active_start = time_us_32();
+    if (adb_core_service()) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    active_start = time_us_32();
+    if (adb_bus_service()) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+
     if (adb_bus_take_activity()) {
         adb_rx_seen = true;
     }

@@ -16,7 +16,6 @@ add_executable(EBD_IPKVM
     src/adb_queue.c
     src/app_core.c
     src/core_bridge.c
-    src/gpio_irq_dispatch.c
     src/main.c
     src/usb_control.c
     src/usb_descriptors.c
