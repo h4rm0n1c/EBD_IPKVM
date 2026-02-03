@@ -10,6 +10,7 @@
 - 2026-02-08: Switch CDC1 debug/status output to a queued, chunked write path so large debug blocks can drain without stalling the main loop or starving capture/USB handling.
 - 2026-02-08: Re-enable CDC1 status/debug output during capture so control/status traffic remains available while the stream is active; rely on queued chunking to avoid blocking.
 - 2026-02-09: Make capture byte-swap post-processing DMA non-blocking and gate new capture starts until the postprocess pass completes, keeping core1 loop work off the hot path.
+- 2026-02-09: Batch line enqueueing on core1 to 8 lines per loop iteration to limit queue churn and preserve capture/ADB servicing time.
 - 2026-02-05: Implemented the core1 ADB bus state machine with Talk/Listen parsing, register storage for keyboard/mouse, SRQ gating, and CDC2 queue draining into register 0 payloads.
 - 2026-02-05: Added CDC2 ASCII-to-ADB keycode mapping and aligned ADB event decoding to the adb_queue union layout.
 - 2026-02-05: Gate ADB RX sampling on a rising edge and keep the RX state machine disabled while the bus is held low to avoid false RX activity.

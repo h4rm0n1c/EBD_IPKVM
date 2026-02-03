@@ -15,6 +15,7 @@
 
 #define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
+#define TXQ_BATCH_LINES 8
 
 #define PKT_MAX_PAYLOAD VIDEO_CORE_MAX_PAYLOAD
 #define PKT_MAX_BYTES VIDEO_CORE_MAX_PACKET_BYTES
@@ -134,6 +135,16 @@ static inline bool txq_has_space(void) {
     uint16_t r = txq_load_r();
     uint16_t w = txq_load_w();
     return ((uint16_t)((w + 1) & TXQ_MASK)) != r;
+}
+
+static inline uint16_t txq_depth(void) {
+    uint16_t r = txq_load_r();
+    uint16_t w = txq_load_w();
+    return (uint16_t)((w - r) & TXQ_MASK);
+}
+
+static inline uint16_t txq_space(void) {
+    return (uint16_t)(TXQ_MASK - txq_depth());
 }
 
 static size_t rle_encode_line(const uint8_t *src, size_t src_len, uint8_t *dst, size_t dst_cap) {
@@ -308,7 +319,13 @@ static bool service_frame_tx(void) {
         return true;
     }
 
-    while (frame_tx_line < CAP_ACTIVE_H) {
+    uint16_t batch_limit = TXQ_BATCH_LINES;
+    uint16_t space = txq_space();
+    if (batch_limit > space) {
+        batch_limit = space;
+    }
+
+    while (frame_tx_line < CAP_ACTIVE_H && batch_limit > 0) {
         if (!txq_has_space()) break;
 
         uint16_t src_line = (uint16_t)(frame_tx_line + frame_tx_start);
@@ -327,6 +344,7 @@ static bool service_frame_tx(void) {
 
         did_work = true;
         frame_tx_line++;
+        batch_limit--;
     }
 
     if (frame_tx_line >= CAP_ACTIVE_H) {
