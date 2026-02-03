@@ -6,12 +6,12 @@
 #include "pico/multicore.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
-#include "hardware/irq.h"
 
 #include "classic_line.pio.h"
 #include "core_bridge.h"
 #include "adb_bus.h"
 #include "adb_core.h"
+#include "gpio_irq_dispatch.h"
 
 #define TXQ_DEPTH 512
 #define TXQ_MASK  (TXQ_DEPTH - 1)
@@ -59,7 +59,7 @@ static uint pin_video = 0;
 static uint pin_vsync = 0;
 static volatile bool vsync_irq_ready = false;
 
-static void vsync_gpio_raw_irq_handler(void);
+static void vsync_gpio_raw_irq_handler(uint gpio, uint32_t events, void *ctx);
 
 static inline bool load_bool(const volatile bool *value) {
     return __atomic_load_n(value, __ATOMIC_ACQUIRE);
@@ -209,8 +209,7 @@ static void configure_pio_program(void) {
 static void configure_vsync_irq(void) {
     gpio_acknowledge_irq(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE);
     if (!load_bool(&vsync_irq_ready)) {
-        gpio_add_raw_irq_handler_masked(1u << pin_vsync, vsync_gpio_raw_irq_handler);
-        irq_set_enabled(IO_IRQ_BANK0, true);
+        (void)gpio_irq_dispatch_register(pin_vsync, GPIO_IRQ_EDGE_FALL, vsync_gpio_raw_irq_handler, NULL);
         store_bool(&vsync_irq_ready, true);
     }
     gpio_set_irq_enabled(pin_vsync, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
@@ -241,12 +240,9 @@ static void service_vsync(uint32_t now_us) {
     }
 }
 
-static void vsync_gpio_raw_irq_handler(void) {
-    uint32_t events = gpio_get_irq_event_mask(pin_vsync);
-    if (events == 0) {
-        return;
-    }
-    gpio_acknowledge_irq(pin_vsync, events);
+static void vsync_gpio_raw_irq_handler(uint gpio, uint32_t events, void *ctx) {
+    (void)gpio;
+    (void)ctx;
     if (!(events & GPIO_IRQ_EDGE_FALL)) {
         return;
     }
