@@ -60,3 +60,4 @@
 - CDC1 debug dumps are now emitted as a single buffered block and retried if the control endpoint lacks space, with periodic status paused while a debug dump is pending to avoid dropping late debug lines (e.g., Talk counters).
 - Periodic CDC1 status is now emitted as a single buffered block to reduce control endpoint churn and avoid partial status writes when host reads are slow.
 - CDC1 debug/status blocks can exceed TinyUSB's per-interface write-available size; queue and chunk long control text to avoid repeated retries and timing side effects during capture.
+- CDC1 text output is now gated by video_core_can_emit_text so status/debug lines pause during active capture, avoiding CDC1 bandwidth contention that can disturb the video stream.
