@@ -273,7 +273,11 @@ def open_usb_device_for_control():
 
 def send_ep0_cmd(dev, req):
     try:
-        dev.ctrl_transfer(0x40, req, 0, 0, None)
+        # 0x41 = Host-to-Device | Vendor | Interface recipient
+        # wIndex=0 targets the vendor bulk interface (ITF_NUM_VENDOR_STREAM).
+        # Device-level vendor requests (0x40) may not be routed to
+        # tud_vendor_control_xfer_cb by all TinyUSB versions.
+        dev.ctrl_transfer(0x41, req, 0, 0, None)
     except Exception as exc:
         print(f"[host] EP0 control transfer failed (req=0x{req:02X}): {exc}", file=sys.stderr)
         sys.exit(2)

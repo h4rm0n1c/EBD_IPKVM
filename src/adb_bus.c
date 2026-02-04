@@ -9,6 +9,7 @@
 #include "pico/sem.h"
 #include "pico/rand.h"
 #include "pico/stdlib.h"
+#include "tusb.h"
 
 #include "adb_bus.pio.h"
 #include "adb_core.h"
@@ -639,6 +640,9 @@ void adb_bus_init(void) {
     irq_set_priority(IO_IRQ_BANK0, 0xC0);
     irq_set_enabled(IO_IRQ_BANK0, true);
 
+    // Keep USB responsive while we set up ADB hardware.
+    tud_task();
+
     gpio_set_slew_rate(ADB_PIN_XMIT, GPIO_SLEW_RATE_SLOW);
     gpio_init(ADB_PIN_XMIT);
     gpio_set_dir(ADB_PIN_XMIT, GPIO_OUT);
@@ -653,6 +657,8 @@ void adb_bus_init(void) {
     adb_sm = pio_claim_unused_sm(adb_pio, true);
     adb_dma_chan = dma_claim_unused_channel(true);
 
+    tud_task();
+
     pio_sm_set_pindirs_with_mask(adb_pio, adb_sm, 1u << ADB_PIN_XMIT, 1u << ADB_PIN_XMIT);
     pio_sm_set_pins_with_mask(adb_pio, adb_sm, 0u, 1u << ADB_PIN_XMIT);
 
@@ -663,6 +669,8 @@ void adb_bus_init(void) {
     irq_set_exclusive_handler(PIO1_IRQ_0, adb_pio_isr);
     irq_set_priority(PIO1_IRQ_0, 0xC0);
     irq_set_enabled(PIO1_IRQ_0, true);
+
+    tud_task();
 
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
     adb_bus_reset_devices();

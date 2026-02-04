@@ -21,13 +21,20 @@ int main(void) {
     stdio_init_all();
     tud_init(0);
 
-    // Service USB while waiting for external hardware to settle.
+    // Service USB until the host finishes enumeration (SET_CONFIGURATION).
     // tud_task() MUST run during this window — the host starts
     // enumeration as soon as tud_init() connects the D+ pull-up.
+    // Wait up to 5 seconds, but require at least 200ms for hw settle
+    // even after tud_ready() returns true.
     {
-        absolute_time_t deadline = make_timeout_time_ms(1200);
+        absolute_time_t deadline = make_timeout_time_ms(5000);
+        absolute_time_t min_wait = make_timeout_time_ms(200);
         while (absolute_time_diff_us(get_absolute_time(), deadline) > 0) {
             tud_task();
+            if (tud_ready() &&
+                absolute_time_diff_us(get_absolute_time(), min_wait) <= 0) {
+                break;
+            }
             sleep_us(100);
         }
     }
