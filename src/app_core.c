@@ -48,6 +48,7 @@ static absolute_time_t adb_rx_next;
 static bool adb_rx_seen = false;
 static uint8_t adb_esc_state = 0;
 static uint8_t adb_mouse_buttons = 0;
+static bool adb_bus_started = false;
 
 static inline bool stream_ready(void) {
     return tud_ready();
@@ -638,6 +639,15 @@ void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
     tud_task();
+
+    if (!adb_bus_started && tud_ready()) {
+        adb_bus_init();
+        adb_bus_started = true;
+        if (can_emit_text()) {
+            cdc_ctrl_printf("[EBD_IPKVM][info] ADB bus started (USB ready)\n");
+        }
+    }
+
     service_ep0_commands();
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
@@ -654,13 +664,15 @@ void app_core_poll(void) {
     if (adb_core_service()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
-    active_start = time_us_32();
-    if (adb_bus_service()) {
-        active_us += (uint32_t)(time_us_32() - active_start);
-    }
+    if (adb_bus_started) {
+        active_start = time_us_32();
+        if (adb_bus_service()) {
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
 
-    if (adb_bus_take_activity()) {
-        adb_rx_seen = true;
+        if (adb_bus_take_activity()) {
+            adb_rx_seen = true;
+        }
     }
 
     /* Send queued binary packets from thread context (NOT IRQ). */

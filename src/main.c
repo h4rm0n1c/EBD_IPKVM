@@ -7,7 +7,6 @@
 
 #include "app_core.h"
 #include "classic_line.pio.h"
-#include "adb_bus.h"
 #include "adb_core.h"
 #include "adb_queue.h"
 #include "video_core.h"
@@ -67,10 +66,10 @@ int main(void) {
     video_core_init(&video_cfg);
     video_core_launch();
 
-    // ADB runs on Core 0: ISRs (IO_IRQ_BANK0, PIO1_IRQ_0) fire here,
-    // keeping Core 1 free for video capture.
+    // ADB stats counters can init immediately (no hardware side-effects).
+    // adb_bus_init() is deferred until tud_ready() in app_core_poll(),
+    // so ADB PIO/ISRs don't fire during USB enumeration.
     adb_core_init();
-    adb_bus_init();
 
     app_core_config_t app_cfg = {
         .pin_pixclk = PIN_PIXCLK,
