@@ -20,7 +20,17 @@
 int main(void) {
     stdio_init_all();
     tud_init(0);
-    sleep_ms(1200);
+
+    // Service USB while waiting for external hardware to settle.
+    // tud_task() MUST run during this window — the host starts
+    // enumeration as soon as tud_init() connects the D+ pull-up.
+    {
+        absolute_time_t deadline = make_timeout_time_ms(1200);
+        while (absolute_time_diff_us(get_absolute_time(), deadline) > 0) {
+            tud_task();
+            sleep_us(100);
+        }
+    }
 
     adb_queue_init();
 
@@ -52,7 +62,9 @@ int main(void) {
 
     int dma_chan = dma_claim_unused_channel(true);
     int post_dma_chan = dma_claim_unused_channel(true);
-    irq_set_priority(USBCTRL_IRQ, 1);
+    // Cortex-M0+ uses only bits [7:6] of the priority byte.
+    // 0x00 = highest, 0x40, 0x80, 0xC0 = lowest.
+    irq_set_priority(USBCTRL_IRQ, 0x00);
 
     video_core_config_t video_cfg = {
         .pio = pio,

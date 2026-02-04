@@ -634,7 +634,9 @@ void adb_bus_init(void) {
     gpio_acknowledge_irq(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE);
     gpio_set_irq_enabled(ADB_PIN_RECV, GPIO_IRQ_EDGE_RISE, false);
     irq_set_exclusive_handler(IO_IRQ_BANK0, adb_gpio_bank0_isr);
-    irq_set_priority(IO_IRQ_BANK0, 2);
+    // Cortex-M0+ priority: only bits [7:6] matter.
+    // 0xC0 = lowest level, well below USBCTRL_IRQ at 0x00.
+    irq_set_priority(IO_IRQ_BANK0, 0xC0);
     irq_set_enabled(IO_IRQ_BANK0, true);
 
     gpio_set_slew_rate(ADB_PIN_XMIT, GPIO_SLEW_RATE_SLOW);
@@ -659,7 +661,7 @@ void adb_bus_init(void) {
                                      1u << (PIO_INTR_SM0_LSB + adb_sm),
                                      true);
     irq_set_exclusive_handler(PIO1_IRQ_0, adb_pio_isr);
-    irq_set_priority(PIO1_IRQ_0, 2);
+    irq_set_priority(PIO1_IRQ_0, 0xC0);
     irq_set_enabled(PIO1_IRQ_0, true);
 
     adb_rand_idx = (uint8_t)(get_rand_32() % sizeof(adb_rand_table));
