@@ -8,6 +8,7 @@ static inline void arm_dma(video_capture_t *cap, uint32_t *dst, uint32_t word_co
     channel_config_set_read_increment(&c, false);
     channel_config_set_write_increment(&c, true);
     channel_config_set_dreq(&c, pio_get_dreq(cap->pio, cap->sm, false)); // RX
+    channel_config_set_chain_to(&c, cap->post_dma_chan); // Chain to byte-swap DMA
 
     dma_channel_configure(
         cap->dma_chan,
@@ -33,7 +34,7 @@ static inline void arm_postprocess_dma(video_capture_t *cap, uint32_t *dst, uint
         dst,
         dst,
         word_count,
-        true
+        false  // Don't start yet - will be triggered by capture DMA chain
     );
 }
 
@@ -118,6 +119,11 @@ void video_capture_start(video_capture_t *cap, bool want_frame) {
     cap->capture_enabled = true;
     pio_sm_clear_fifos(cap->pio, cap->sm);
     pio_sm_restart(cap->pio, cap->sm);
+
+    // Pre-arm post-process DMA for full buffer (will be triggered by capture DMA chain)
+    arm_postprocess_dma(cap, &cap->capture_buf[0][0], CAP_MAX_LINES * CAP_WORDS_PER_LINE);
+
+    // Start capture DMA (configured to chain to post-process DMA on completion)
     arm_dma(cap, &cap->capture_buf[0][0], CAP_MAX_LINES * CAP_WORDS_PER_LINE);
     pio_sm_set_enabled(cap->pio, cap->sm, true);
 }
@@ -132,6 +138,7 @@ bool video_capture_finalize_frame(video_capture_t *cap, uint16_t frame_id) {
         return false;
     }
 
+    // Stop PIO and read how many words were actually captured
     pio_sm_set_enabled(cap->pio, cap->sm, false);
     remaining_words = dma_channel_hw_addr(cap->dma_chan)->transfer_count;
     dma_channel_abort(cap->dma_chan);
@@ -153,8 +160,9 @@ bool video_capture_finalize_frame(video_capture_t *cap, uint16_t frame_id) {
         return false;
     }
 
+    // Post-process DMA is already running (auto-triggered by capture DMA chain)
+    // Just mark it as pending and store the actual line count
     if (lines_captured > 0) {
-        arm_postprocess_dma(cap, &cap->capture_buf[0][0], (uint32_t)lines_captured * CAP_WORDS_PER_LINE);
         cap->postprocess_pending = true;
         cap->postprocess_wanted = true;
         cap->postprocess_buf = cap->capture_buf;
@@ -162,30 +170,7 @@ bool video_capture_finalize_frame(video_capture_t *cap, uint16_t frame_id) {
         cap->postprocess_lines = lines_captured;
     }
 
-    if (!cap->postprocess_pending) {
-        return false;
-    }
-
-    if (dma_channel_is_busy(cap->post_dma_chan)) {
-        return false;
-    }
-
-    dma_hw->ints0 = 1u << cap->post_dma_chan;
-    cap->postprocess_pending = false;
-    cap->postprocess_wanted = false;
-    cap->postprocess_buf = NULL;
-    cap->postprocess_frame_id = 0;
-    cap->postprocess_lines = 0;
-
-    if (cap->frame_ready && cap->ready_buf != cap->capture_buf) {
-        cap->frame_overrun++;
-    }
-
-    cap->ready_buf = cap->capture_buf;
-    cap->frame_ready_id = frame_id;
-    cap->frame_ready_lines = lines_captured;
-    cap->frame_ready = true;
-    return true;
+    return false; // Not done yet, post-process DMA still running
 }
 
 bool video_capture_take_ready(video_capture_t *cap,
