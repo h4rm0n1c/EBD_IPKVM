@@ -35,13 +35,6 @@ static volatile bool tx_rle_enabled = true;
 static volatile uint32_t core1_busy_us = 0;
 static volatile uint32_t core1_total_us = 0;
 
-// Core1 subsystem profiling
-static volatile uint32_t core1_finalize_us = 0;
-static volatile uint32_t core1_postprocess_us = 0;
-static volatile uint32_t core1_frame_tx_us = 0;
-static volatile uint32_t core1_test_frame_us = 0;
-static volatile uint32_t core1_commands_us = 0;
-
 static uint16_t test_line = 0;
 static uint8_t test_line_buf[CAP_BYTES_PER_LINE];
 
@@ -435,53 +428,31 @@ static void core1_entry(void) {
         uint32_t loop_start = time_us_32();
         uint32_t active_us = 0;
         uint32_t cmd = 0;
-        uint32_t active_start = 0;
-        uint32_t subsystem_us = 0;
-
-        // Commands
-        active_start = time_us_32();
         while (core_bridge_try_pop(&cmd)) {
             core1_handle_command(cmd);
         }
-        subsystem_us = (uint32_t)(time_us_32() - active_start);
-        if (subsystem_us > 0) {
-            active_us += subsystem_us;
-            __atomic_fetch_add(&core1_commands_us, subsystem_us, __ATOMIC_RELAXED);
-        }
 
-        // Finalize frame (abort DMA, calculate line count)
         if (capture.capture_enabled && !dma_channel_is_busy(capture.dma_chan)) {
-            active_start = time_us_32();
+            uint32_t active_start = time_us_32();
             (void)video_capture_finalize_frame(&capture, frame_id);
             frame_id++;
-            subsystem_us = (uint32_t)(time_us_32() - active_start);
-            active_us += subsystem_us;
-            __atomic_fetch_add(&core1_finalize_us, subsystem_us, __ATOMIC_RELAXED);
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
-        // Post-process (byte-swap DMA service)
-        active_start = time_us_32();
+        uint32_t active_start = time_us_32();
         if (video_capture_service_postprocess(&capture)) {
             frames_done++;
-            subsystem_us = (uint32_t)(time_us_32() - active_start);
-            active_us += subsystem_us;
-            __atomic_fetch_add(&core1_postprocess_us, subsystem_us, __ATOMIC_RELAXED);
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
-        // Test frame generation
         active_start = time_us_32();
         if (service_test_frame()) {
-            subsystem_us = (uint32_t)(time_us_32() - active_start);
-            active_us += subsystem_us;
-            __atomic_fetch_add(&core1_test_frame_us, subsystem_us, __ATOMIC_RELAXED);
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
-        // Frame TX (RLE compression + queueing)
         active_start = time_us_32();
         if (service_frame_tx()) {
-            subsystem_us = (uint32_t)(time_us_32() - active_start);
-            active_us += subsystem_us;
-            __atomic_fetch_add(&core1_frame_tx_us, subsystem_us, __ATOMIC_RELAXED);
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
 
         tight_loop_contents();
@@ -516,11 +487,6 @@ void video_core_init(const video_core_config_t *cfg) {
     store_u32(&last_vsync_us, 0);
     store_u32(&core1_busy_us, 0);
     store_u32(&core1_total_us, 0);
-    store_u32(&core1_finalize_us, 0);
-    store_u32(&core1_postprocess_us, 0);
-    store_u32(&core1_frame_tx_us, 0);
-    store_u32(&core1_test_frame_us, 0);
-    store_u32(&core1_commands_us, 0);
     test_line = 0;
 
     configure_pio_program();
@@ -625,26 +591,6 @@ void video_core_take_core1_utilization(uint32_t *busy_us, uint32_t *total_us) {
     }
     if (total_us) {
         *total_us = __atomic_exchange_n(&core1_total_us, 0, __ATOMIC_ACQ_REL);
-    }
-}
-
-void video_core_take_core1_profile(uint32_t *finalize_us, uint32_t *postprocess_us,
-                                    uint32_t *frame_tx_us, uint32_t *test_frame_us,
-                                    uint32_t *commands_us) {
-    if (finalize_us) {
-        *finalize_us = __atomic_exchange_n(&core1_finalize_us, 0, __ATOMIC_ACQ_REL);
-    }
-    if (postprocess_us) {
-        *postprocess_us = __atomic_exchange_n(&core1_postprocess_us, 0, __ATOMIC_ACQ_REL);
-    }
-    if (frame_tx_us) {
-        *frame_tx_us = __atomic_exchange_n(&core1_frame_tx_us, 0, __ATOMIC_ACQ_REL);
-    }
-    if (test_frame_us) {
-        *test_frame_us = __atomic_exchange_n(&core1_test_frame_us, 0, __ATOMIC_ACQ_REL);
-    }
-    if (commands_us) {
-        *commands_us = __atomic_exchange_n(&core1_commands_us, 0, __ATOMIC_ACQ_REL);
     }
 }
 

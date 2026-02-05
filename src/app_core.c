@@ -34,13 +34,6 @@ static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 static uint32_t core0_busy_us = 0;
 static uint32_t core0_total_us = 0;
-
-// Core0 subsystem profiling
-static uint32_t core0_usb_bulk_us = 0;
-static uint32_t core0_cdc_cmd_us = 0;
-static uint32_t core0_probe_us = 0;
-static uint32_t core0_debug_us = 0;
-
 static volatile uint8_t ep0_cmd_queue[8];
 static volatile uint8_t ep0_cmd_r = 0;
 static volatile uint8_t ep0_cmd_w = 0;
@@ -77,26 +70,6 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
     if (total_us) {
         *total_us = core0_total_us;
         core0_total_us = 0;
-    }
-}
-
-static inline void take_core0_profile(uint32_t *usb_bulk_us, uint32_t *cdc_cmd_us,
-                                       uint32_t *probe_us, uint32_t *debug_us) {
-    if (usb_bulk_us) {
-        *usb_bulk_us = core0_usb_bulk_us;
-        core0_usb_bulk_us = 0;
-    }
-    if (cdc_cmd_us) {
-        *cdc_cmd_us = core0_cdc_cmd_us;
-        core0_cdc_cmd_us = 0;
-    }
-    if (probe_us) {
-        *probe_us = core0_probe_us;
-        core0_probe_us = 0;
-    }
-    if (debug_us) {
-        *debug_us = core0_debug_us;
-        core0_debug_us = 0;
     }
 }
 
@@ -386,29 +359,8 @@ static void service_ep0_commands(void) {
     }
 }
 
-static void emit_profiling_stats(void) {
-    uint32_t c0_busy = 0, c0_total = 0;
-    uint32_t c1_busy = 0, c1_total = 0;
-    take_core0_utilization(&c0_busy, &c0_total);
-    video_core_take_core1_utilization(&c1_busy, &c1_total);
-
-    uint32_t c0_usb = 0, c0_cdc = 0, c0_probe = 0, c0_debug = 0;
-    uint32_t c1_finalize = 0, c1_postproc = 0, c1_frametx = 0, c1_test = 0, c1_cmds = 0;
-    take_core0_profile(&c0_usb, &c0_cdc, &c0_probe, &c0_debug);
-    video_core_take_core1_profile(&c1_finalize, &c1_postproc, &c1_frametx, &c1_test, &c1_cmds);
-
-    uint32_t c0_pct = c0_total ? (c0_busy * 100u) / c0_total : 0;
-    uint32_t c1_pct = c1_total ? (c1_busy * 100u) / c1_total : 0;
-
-    // Compact single-line format to avoid CDC fragmentation
-    cdc_ctrl_printf("[EBD_IPKVM][prof] C0=%lu C1=%lu usb=%lu cdc=%lu tx=%lu fin=%lu post=%lu\n",
-                    (unsigned long)c0_pct, (unsigned long)c1_pct,
-                    (unsigned long)c0_usb, (unsigned long)c0_cdc,
-                    (unsigned long)c1_frametx, (unsigned long)c1_finalize, (unsigned long)c1_postproc);
-}
-
 static bool poll_cdc_commands(void) {
-    // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug, O=profiling
+    // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug
     bool did_work = false;
     while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
@@ -454,11 +406,6 @@ static bool poll_cdc_commands(void) {
             request_probe_packet();
         } else if (ch == 'I' || ch == 'i') {
             debug_requested = true;
-        } else if (ch == 'O' || ch == 'o') {
-            emit_profiling_stats();
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM][cmd] profiling\n");
-            }
         } else if (ch == 'E') {
             video_core_set_tx_rle_enabled(true);
             if (can_emit_text()) {
@@ -561,7 +508,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC0=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] Capture control via EP0 vendor requests (use host tool).\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset, 'R' reset counters.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state, 'O' for CPU profiling.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -570,48 +517,30 @@ void app_core_init(const app_core_config_t *cfg) {
 void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
-    uint32_t active_start = 0;
-    uint32_t subsystem_us = 0;
-
     tud_task();
     service_ep0_commands();
-
-    // CDC commands
-    active_start = time_us_32();
+    uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {
-        subsystem_us = (uint32_t)(time_us_32() - active_start);
-        active_us += subsystem_us;
-        core0_cdc_cmd_us += subsystem_us;
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    // Probe packet
     if (probe_pending) {
         active_start = time_us_32();
         if (try_send_probe_packet()) {
             probe_pending = 0;
-            subsystem_us = (uint32_t)(time_us_32() - active_start);
-            active_us += subsystem_us;
-            core0_probe_us += subsystem_us;
+            active_us += (uint32_t)(time_us_32() - active_start);
         }
     }
-
-    // Debug output
     if (debug_requested && can_emit_text()) {
         active_start = time_us_32();
         debug_requested = false;
         emit_debug_state();
-        subsystem_us = (uint32_t)(time_us_32() - active_start);
-        active_us += subsystem_us;
-        core0_debug_us += subsystem_us;
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
-
-    // USB bulk TX (video frame transmission)
     active_start = time_us_32();
     if (service_txq()) {
-        subsystem_us = (uint32_t)(time_us_32() - active_start);
-        active_us += subsystem_us;
-        core0_usb_bulk_us += subsystem_us;
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
 
     if (can_emit_text()) {
