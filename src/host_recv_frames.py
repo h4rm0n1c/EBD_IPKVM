@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select
+import os, sys, time, struct, fcntl, termios, select, signal
+
+# Graceful shutdown flag for Ctrl+C
+interrupted = False
+
+def signal_handler(signum, frame):
+    global interrupted
+    interrupted = True
+
+signal.signal(signal.SIGINT, signal_handler)
 
 SEND_RESET = True
 SEND_STOP = True
@@ -409,20 +418,19 @@ start_rx = last_rx
 
 try:
     while True:
+        if interrupted:
+            log("[host] interrupted by user (Ctrl+C)")
+            break
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
-        try:
-            if use_usb_stream:
-                chunk = read_usb_stream(usb_ep_in, 0.25)
+        if use_usb_stream:
+            chunk = read_usb_stream(usb_ep_in, 0.25)
+        else:
+            r, _, _ = select.select([stream_fd], [], [], 0.25)
+            if not r:
+                chunk = b""
             else:
-                r, _, _ = select.select([stream_fd], [], [], 0.25)
-                if not r:
-                    chunk = b""
-                else:
-                    chunk = os.read(stream_fd, 8192)
-        except KeyboardInterrupt:
-            log("[host] interrupted by user")
-            break
+                chunk = os.read(stream_fd, 8192)
 
         if not chunk:
             now = time.time()
@@ -438,6 +446,8 @@ try:
         buf.extend(chunk)
 
         while True:
+            if interrupted:
+                break
             pkt = pop_one_packet(buf)
             if pkt is None:
                 break
