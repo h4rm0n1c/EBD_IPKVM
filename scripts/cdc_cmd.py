@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import glob
 import os
 import select
 import struct
@@ -32,10 +33,27 @@ def set_raw_and_dtr(fd: int) -> None:
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
 
 
+def find_device(device_arg: str) -> str:
+    """Find the CDC control device, resolving wildcards if needed."""
+    # If user provided an explicit path that exists, use it
+    if os.path.exists(device_arg):
+        return device_arg
+
+    # Try the by-id pattern for EBD_IPKVM control interface (if01)
+    pattern = "/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_*-if01"
+    matches = glob.glob(pattern)
+    if matches:
+        # Return the first match (should only be one anyway)
+        return matches[0]
+
+    # Fall back to the provided argument (will fail later if it doesn't exist)
+    return device_arg
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send a CDC command and print ASCII response.")
-    parser.add_argument("--device", default="/dev/ttyACM1",
-                        help="CDC control device path (CDC1 by default).")
+    parser.add_argument("--device", default=None,
+                        help="CDC control device path (auto-detects by-id path by default).")
     parser.add_argument("--cmd", required=True, help="Command byte(s) to send, e.g. I or G.")
     parser.add_argument("--read-secs", type=float, default=2.0, help="Seconds to read responses.")
     parser.add_argument("--no-read", action="store_true",
@@ -47,7 +65,12 @@ def main() -> int:
     if not args.no_read and args.read_secs <= 0:
         raise SystemExit("--read-secs must be > 0")
 
-    fd = os.open(args.device, os.O_RDWR | os.O_NOCTTY)
+    # Find the device (auto-detect if not specified)
+    device_path = find_device(args.device) if args.device else find_device("")
+    if not os.path.exists(device_path):
+        raise SystemExit(f"Device not found: {device_path}")
+
+    fd = os.open(device_path, os.O_RDWR | os.O_NOCTTY)
     try:
         if not args.no_setup:
             set_raw_and_dtr(fd)
