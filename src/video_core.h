@@ -52,6 +52,9 @@ uint32_t video_core_get_frame_overrun(void);
 uint32_t video_core_get_frame_short(void);
 uint32_t video_core_take_vsync_edges(void);
 void video_core_take_core1_utilization(uint32_t *busy_us, uint32_t *total_us);
+void video_core_take_core1_profile(uint32_t *finalize_us, uint32_t *postprocess_us,
+                                    uint32_t *frame_tx_us, uint32_t *test_frame_us,
+                                    uint32_t *commands_us);
 
 bool video_core_txq_is_empty(void);
 bool video_core_txq_peek(const uint8_t **out_data, uint16_t *out_len);

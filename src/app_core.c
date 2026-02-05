@@ -34,6 +34,13 @@ static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 static uint32_t core0_busy_us = 0;
 static uint32_t core0_total_us = 0;
+
+// Core0 subsystem profiling
+static uint32_t core0_usb_bulk_us = 0;
+static uint32_t core0_cdc_cmd_us = 0;
+static uint32_t core0_probe_us = 0;
+static uint32_t core0_debug_us = 0;
+
 static volatile uint8_t ep0_cmd_queue[8];
 static volatile uint8_t ep0_cmd_r = 0;
 static volatile uint8_t ep0_cmd_w = 0;
@@ -70,6 +77,26 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
     if (total_us) {
         *total_us = core0_total_us;
         core0_total_us = 0;
+    }
+}
+
+static inline void take_core0_profile(uint32_t *usb_bulk_us, uint32_t *cdc_cmd_us,
+                                       uint32_t *probe_us, uint32_t *debug_us) {
+    if (usb_bulk_us) {
+        *usb_bulk_us = core0_usb_bulk_us;
+        core0_usb_bulk_us = 0;
+    }
+    if (cdc_cmd_us) {
+        *cdc_cmd_us = core0_cdc_cmd_us;
+        core0_cdc_cmd_us = 0;
+    }
+    if (probe_us) {
+        *probe_us = core0_probe_us;
+        core0_probe_us = 0;
+    }
+    if (debug_us) {
+        *debug_us = core0_debug_us;
+        core0_debug_us = 0;
     }
 }
 
@@ -359,8 +386,80 @@ static void service_ep0_commands(void) {
     }
 }
 
+static void emit_profiling_stats(void) {
+    uint32_t c0_busy = 0, c0_total = 0;
+    uint32_t c1_busy = 0, c1_total = 0;
+    take_core0_utilization(&c0_busy, &c0_total);
+    video_core_take_core1_utilization(&c1_busy, &c1_total);
+
+    uint32_t c0_usb = 0, c0_cdc = 0, c0_probe = 0, c0_debug = 0;
+    uint32_t c1_finalize = 0, c1_postproc = 0, c1_frametx = 0, c1_test = 0, c1_cmds = 0;
+    take_core0_profile(&c0_usb, &c0_cdc, &c0_probe, &c0_debug);
+    video_core_take_core1_profile(&c1_finalize, &c1_postproc, &c1_frametx, &c1_test, &c1_cmds);
+
+    uint32_t c0_idle = (c0_total > c0_busy) ? (c0_total - c0_busy) : 0;
+    uint32_t c1_idle = (c1_total > c1_busy) ? (c1_total - c1_busy) : 0;
+
+    uint32_t c0_pct = c0_total ? (c0_busy * 100u) / c0_total : 0;
+    uint32_t c1_pct = c1_total ? (c1_busy * 100u) / c1_total : 0;
+
+    cdc_ctrl_printf("\n[EBD_IPKVM] === CPU Profiling (1s window) ===\n");
+    cdc_ctrl_printf("[CORE0] %lu%% busy (%lu µs active, %lu µs idle)\n",
+                    (unsigned long)c0_pct, (unsigned long)c0_busy, (unsigned long)c0_idle);
+
+    if (c0_busy > 0) {
+        uint32_t usb_pct = (c0_usb * 100u) / c0_busy;
+        uint32_t cdc_pct = (c0_cdc * 100u) / c0_busy;
+        uint32_t probe_pct = (c0_probe * 100u) / c0_busy;
+        uint32_t debug_pct = (c0_debug * 100u) / c0_busy;
+        uint32_t other = c0_busy > (c0_usb + c0_cdc + c0_probe + c0_debug) ?
+                         c0_busy - (c0_usb + c0_cdc + c0_probe + c0_debug) : 0;
+        uint32_t other_pct = other ? (other * 100u) / c0_busy : 0;
+
+        cdc_ctrl_printf("  USB Bulk TX:  %6lu µs (%2lu%%)\n", (unsigned long)c0_usb, (unsigned long)usb_pct);
+        cdc_ctrl_printf("  CDC Commands: %6lu µs (%2lu%%)\n", (unsigned long)c0_cdc, (unsigned long)cdc_pct);
+        cdc_ctrl_printf("  Probe/Debug:  %6lu µs (%2lu%%)\n",
+                        (unsigned long)(c0_probe + c0_debug), (unsigned long)(probe_pct + debug_pct));
+        if (other > 0) {
+            cdc_ctrl_printf("  Other:        %6lu µs (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+        }
+    }
+
+    cdc_ctrl_printf("\n[CORE1] %lu%% busy (%lu µs active, %lu µs idle)\n",
+                    (unsigned long)c1_pct, (unsigned long)c1_busy, (unsigned long)c1_idle);
+
+    if (c1_busy > 0) {
+        uint32_t finalize_pct = (c1_finalize * 100u) / c1_busy;
+        uint32_t postproc_pct = (c1_postproc * 100u) / c1_busy;
+        uint32_t frametx_pct = (c1_frametx * 100u) / c1_busy;
+        uint32_t test_pct = (c1_test * 100u) / c1_busy;
+        uint32_t cmds_pct = (c1_cmds * 100u) / c1_busy;
+        uint32_t other = c1_busy > (c1_finalize + c1_postproc + c1_frametx + c1_test + c1_cmds) ?
+                         c1_busy - (c1_finalize + c1_postproc + c1_frametx + c1_test + c1_cmds) : 0;
+        uint32_t other_pct = other ? (other * 100u) / c1_busy : 0;
+
+        cdc_ctrl_printf("  Frame TX:     %6lu µs (%2lu%%) - RLE compression & queueing\n",
+                        (unsigned long)c1_frametx, (unsigned long)frametx_pct);
+        cdc_ctrl_printf("  DMA Finalize: %6lu µs (%2lu%%) - Abort & line count\n",
+                        (unsigned long)c1_finalize, (unsigned long)finalize_pct);
+        cdc_ctrl_printf("  Post-Process: %6lu µs (%2lu%%) - Byte-swap DMA service\n",
+                        (unsigned long)c1_postproc, (unsigned long)postproc_pct);
+        if (c1_test > 0) {
+            cdc_ctrl_printf("  Test Frame:   %6lu µs (%2lu%%)\n", (unsigned long)c1_test, (unsigned long)test_pct);
+        }
+        if (c1_cmds > 0) {
+            cdc_ctrl_printf("  Commands:     %6lu µs (%2lu%%)\n", (unsigned long)c1_cmds, (unsigned long)cmds_pct);
+        }
+        if (other > 0) {
+            cdc_ctrl_printf("  Other:        %6lu µs (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+        }
+    }
+
+    cdc_ctrl_printf("\n");
+}
+
 static bool poll_cdc_commands(void) {
-    // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug
+    // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug, O=profiling
     bool did_work = false;
     while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
@@ -406,6 +505,10 @@ static bool poll_cdc_commands(void) {
             request_probe_packet();
         } else if (ch == 'I' || ch == 'i') {
             debug_requested = true;
+        } else if (ch == 'O' || ch == 'o') {
+            if (can_emit_text()) {
+                emit_profiling_stats();
+            }
         } else if (ch == 'E') {
             video_core_set_tx_rle_enabled(true);
             if (can_emit_text()) {
@@ -508,7 +611,7 @@ void app_core_init(const app_core_config_t *cfg) {
     cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC0=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] Capture control via EP0 vendor requests (use host tool).\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset, 'R' reset counters.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state, 'O' for CPU profiling.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -517,31 +620,48 @@ void app_core_init(const app_core_config_t *cfg) {
 void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
+    uint32_t active_start = 0;
+    uint32_t subsystem_us = 0;
+
     tud_task();
     service_ep0_commands();
-    uint32_t active_start = time_us_32();
+
+    // CDC commands
+    active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {
-        active_us += (uint32_t)(time_us_32() - active_start);
+        subsystem_us = (uint32_t)(time_us_32() - active_start);
+        active_us += subsystem_us;
+        core0_cdc_cmd_us += subsystem_us;
     }
 
-    /* Send queued binary packets from thread context (NOT IRQ). */
+    // Probe packet
     if (probe_pending) {
         active_start = time_us_32();
         if (try_send_probe_packet()) {
             probe_pending = 0;
-            active_us += (uint32_t)(time_us_32() - active_start);
+            subsystem_us = (uint32_t)(time_us_32() - active_start);
+            active_us += subsystem_us;
+            core0_probe_us += subsystem_us;
         }
     }
+
+    // Debug output
     if (debug_requested && can_emit_text()) {
         active_start = time_us_32();
         debug_requested = false;
         emit_debug_state();
-        active_us += (uint32_t)(time_us_32() - active_start);
+        subsystem_us = (uint32_t)(time_us_32() - active_start);
+        active_us += subsystem_us;
+        core0_debug_us += subsystem_us;
     }
+
+    // USB bulk TX (video frame transmission)
     active_start = time_us_32();
     if (service_txq()) {
-        active_us += (uint32_t)(time_us_32() - active_start);
+        subsystem_us = (uint32_t)(time_us_32() - active_start);
+        active_us += subsystem_us;
+        core0_usb_bulk_us += subsystem_us;
     }
 
     if (can_emit_text()) {
