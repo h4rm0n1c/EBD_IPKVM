@@ -404,8 +404,10 @@ static void emit_profiling_stats(void) {
     uint32_t c1_pct = c1_total ? (c1_busy * 100u) / c1_total : 0;
 
     cdc_ctrl_printf("\n[EBD_IPKVM] === CPU Profiling (1s window) ===\n");
-    cdc_ctrl_printf("[CORE0] %lu%% busy (%lu µs active, %lu µs idle)\n",
+    tud_task();
+    cdc_ctrl_printf("[CORE0] %lu%% busy (%lu us active, %lu us idle)\n",
                     (unsigned long)c0_pct, (unsigned long)c0_busy, (unsigned long)c0_idle);
+    tud_task();
 
     if (c0_busy > 0) {
         uint32_t usb_pct = (c0_usb * 100u) / c0_busy;
@@ -416,17 +418,25 @@ static void emit_profiling_stats(void) {
                          c0_busy - (c0_usb + c0_cdc + c0_probe + c0_debug) : 0;
         uint32_t other_pct = other ? (other * 100u) / c0_busy : 0;
 
-        cdc_ctrl_printf("  USB Bulk TX:  %6lu µs (%2lu%%)\n", (unsigned long)c0_usb, (unsigned long)usb_pct);
-        cdc_ctrl_printf("  CDC Commands: %6lu µs (%2lu%%)\n", (unsigned long)c0_cdc, (unsigned long)cdc_pct);
-        cdc_ctrl_printf("  Probe/Debug:  %6lu µs (%2lu%%)\n",
+        cdc_ctrl_printf("  USB Bulk TX:  %6lu us (%2lu%%)\n", (unsigned long)c0_usb, (unsigned long)usb_pct);
+        tud_task();
+        cdc_ctrl_printf("  CDC Commands: %6lu us (%2lu%%)\n", (unsigned long)c0_cdc, (unsigned long)cdc_pct);
+        tud_task();
+        cdc_ctrl_printf("  Probe/Debug:  %6lu us (%2lu%%)\n",
                         (unsigned long)(c0_probe + c0_debug), (unsigned long)(probe_pct + debug_pct));
+        tud_task();
         if (other > 0) {
-            cdc_ctrl_printf("  Other:        %6lu µs (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+            cdc_ctrl_printf("  Other:        %6lu us (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+            tud_task();
         }
+    } else {
+        cdc_ctrl_printf("  (no activity)\n");
+        tud_task();
     }
 
-    cdc_ctrl_printf("\n[CORE1] %lu%% busy (%lu µs active, %lu µs idle)\n",
+    cdc_ctrl_printf("\n[CORE1] %lu%% busy (%lu us active, %lu us idle)\n",
                     (unsigned long)c1_pct, (unsigned long)c1_busy, (unsigned long)c1_idle);
+    tud_task();
 
     if (c1_busy > 0) {
         uint32_t finalize_pct = (c1_finalize * 100u) / c1_busy;
@@ -438,24 +448,34 @@ static void emit_profiling_stats(void) {
                          c1_busy - (c1_finalize + c1_postproc + c1_frametx + c1_test + c1_cmds) : 0;
         uint32_t other_pct = other ? (other * 100u) / c1_busy : 0;
 
-        cdc_ctrl_printf("  Frame TX:     %6lu µs (%2lu%%) - RLE compression & queueing\n",
+        cdc_ctrl_printf("  Frame TX:     %6lu us (%2lu%%) - RLE+queue\n",
                         (unsigned long)c1_frametx, (unsigned long)frametx_pct);
-        cdc_ctrl_printf("  DMA Finalize: %6lu µs (%2lu%%) - Abort & line count\n",
+        tud_task();
+        cdc_ctrl_printf("  DMA Finalize: %6lu us (%2lu%%) - Abort+count\n",
                         (unsigned long)c1_finalize, (unsigned long)finalize_pct);
-        cdc_ctrl_printf("  Post-Process: %6lu µs (%2lu%%) - Byte-swap DMA service\n",
+        tud_task();
+        cdc_ctrl_printf("  Post-Process: %6lu us (%2lu%%) - Byte-swap\n",
                         (unsigned long)c1_postproc, (unsigned long)postproc_pct);
+        tud_task();
         if (c1_test > 0) {
-            cdc_ctrl_printf("  Test Frame:   %6lu µs (%2lu%%)\n", (unsigned long)c1_test, (unsigned long)test_pct);
+            cdc_ctrl_printf("  Test Frame:   %6lu us (%2lu%%)\n", (unsigned long)c1_test, (unsigned long)test_pct);
+            tud_task();
         }
         if (c1_cmds > 0) {
-            cdc_ctrl_printf("  Commands:     %6lu µs (%2lu%%)\n", (unsigned long)c1_cmds, (unsigned long)cmds_pct);
+            cdc_ctrl_printf("  Commands:     %6lu us (%2lu%%)\n", (unsigned long)c1_cmds, (unsigned long)cmds_pct);
+            tud_task();
         }
         if (other > 0) {
-            cdc_ctrl_printf("  Other:        %6lu µs (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+            cdc_ctrl_printf("  Other:        %6lu us (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
+            tud_task();
         }
+    } else {
+        cdc_ctrl_printf("  (no activity)\n");
+        tud_task();
     }
 
     cdc_ctrl_printf("\n");
+    tud_task();
 }
 
 static bool poll_cdc_commands(void) {
