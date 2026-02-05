@@ -397,85 +397,14 @@ static void emit_profiling_stats(void) {
     take_core0_profile(&c0_usb, &c0_cdc, &c0_probe, &c0_debug);
     video_core_take_core1_profile(&c1_finalize, &c1_postproc, &c1_frametx, &c1_test, &c1_cmds);
 
-    uint32_t c0_idle = (c0_total > c0_busy) ? (c0_total - c0_busy) : 0;
-    uint32_t c1_idle = (c1_total > c1_busy) ? (c1_total - c1_busy) : 0;
-
     uint32_t c0_pct = c0_total ? (c0_busy * 100u) / c0_total : 0;
     uint32_t c1_pct = c1_total ? (c1_busy * 100u) / c1_total : 0;
 
-    cdc_ctrl_printf("\n[EBD_IPKVM] === CPU Profiling (1s window) ===\n");
-    tud_task();
-    cdc_ctrl_printf("[CORE0] %lu%% busy (%lu us active, %lu us idle)\n",
-                    (unsigned long)c0_pct, (unsigned long)c0_busy, (unsigned long)c0_idle);
-    tud_task();
-
-    if (c0_busy > 0) {
-        uint32_t usb_pct = (c0_usb * 100u) / c0_busy;
-        uint32_t cdc_pct = (c0_cdc * 100u) / c0_busy;
-        uint32_t probe_pct = (c0_probe * 100u) / c0_busy;
-        uint32_t debug_pct = (c0_debug * 100u) / c0_busy;
-        uint32_t other = c0_busy > (c0_usb + c0_cdc + c0_probe + c0_debug) ?
-                         c0_busy - (c0_usb + c0_cdc + c0_probe + c0_debug) : 0;
-        uint32_t other_pct = other ? (other * 100u) / c0_busy : 0;
-
-        cdc_ctrl_printf("  USB Bulk TX:  %6lu us (%2lu%%)\n", (unsigned long)c0_usb, (unsigned long)usb_pct);
-        tud_task();
-        cdc_ctrl_printf("  CDC Commands: %6lu us (%2lu%%)\n", (unsigned long)c0_cdc, (unsigned long)cdc_pct);
-        tud_task();
-        cdc_ctrl_printf("  Probe/Debug:  %6lu us (%2lu%%)\n",
-                        (unsigned long)(c0_probe + c0_debug), (unsigned long)(probe_pct + debug_pct));
-        tud_task();
-        if (other > 0) {
-            cdc_ctrl_printf("  Other:        %6lu us (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
-            tud_task();
-        }
-    } else {
-        cdc_ctrl_printf("  (no activity)\n");
-        tud_task();
-    }
-
-    cdc_ctrl_printf("\n[CORE1] %lu%% busy (%lu us active, %lu us idle)\n",
-                    (unsigned long)c1_pct, (unsigned long)c1_busy, (unsigned long)c1_idle);
-    tud_task();
-
-    if (c1_busy > 0) {
-        uint32_t finalize_pct = (c1_finalize * 100u) / c1_busy;
-        uint32_t postproc_pct = (c1_postproc * 100u) / c1_busy;
-        uint32_t frametx_pct = (c1_frametx * 100u) / c1_busy;
-        uint32_t test_pct = (c1_test * 100u) / c1_busy;
-        uint32_t cmds_pct = (c1_cmds * 100u) / c1_busy;
-        uint32_t other = c1_busy > (c1_finalize + c1_postproc + c1_frametx + c1_test + c1_cmds) ?
-                         c1_busy - (c1_finalize + c1_postproc + c1_frametx + c1_test + c1_cmds) : 0;
-        uint32_t other_pct = other ? (other * 100u) / c1_busy : 0;
-
-        cdc_ctrl_printf("  Frame TX:     %6lu us (%2lu%%) - RLE+queue\n",
-                        (unsigned long)c1_frametx, (unsigned long)frametx_pct);
-        tud_task();
-        cdc_ctrl_printf("  DMA Finalize: %6lu us (%2lu%%) - Abort+count\n",
-                        (unsigned long)c1_finalize, (unsigned long)finalize_pct);
-        tud_task();
-        cdc_ctrl_printf("  Post-Process: %6lu us (%2lu%%) - Byte-swap\n",
-                        (unsigned long)c1_postproc, (unsigned long)postproc_pct);
-        tud_task();
-        if (c1_test > 0) {
-            cdc_ctrl_printf("  Test Frame:   %6lu us (%2lu%%)\n", (unsigned long)c1_test, (unsigned long)test_pct);
-            tud_task();
-        }
-        if (c1_cmds > 0) {
-            cdc_ctrl_printf("  Commands:     %6lu us (%2lu%%)\n", (unsigned long)c1_cmds, (unsigned long)cmds_pct);
-            tud_task();
-        }
-        if (other > 0) {
-            cdc_ctrl_printf("  Other:        %6lu us (%2lu%%)\n", (unsigned long)other, (unsigned long)other_pct);
-            tud_task();
-        }
-    } else {
-        cdc_ctrl_printf("  (no activity)\n");
-        tud_task();
-    }
-
-    cdc_ctrl_printf("\n");
-    tud_task();
+    // Compact single-line format to avoid CDC fragmentation
+    cdc_ctrl_printf("[EBD_IPKVM][prof] C0:%lu%% C1:%lu%% | C0:usb=%lu,cdc=%lu | C1:tx=%lu,fin=%lu,post=%lu\n",
+                    (unsigned long)c0_pct, (unsigned long)c1_pct,
+                    (unsigned long)c0_usb, (unsigned long)c0_cdc,
+                    (unsigned long)c1_frametx, (unsigned long)c1_finalize, (unsigned long)c1_postproc);
 }
 
 static bool poll_cdc_commands(void) {
