@@ -401,7 +401,7 @@ static void emit_profiling_stats(void) {
     uint32_t c1_pct = c1_total ? (c1_busy * 100u) / c1_total : 0;
 
     // Compact single-line format to avoid CDC fragmentation
-    cdc_ctrl_printf("[EBD_IPKVM][prof] C0:%lu%% C1:%lu%% | C0:usb=%lu,cdc=%lu | C1:tx=%lu,fin=%lu,post=%lu\n",
+    cdc_ctrl_printf("[EBD_IPKVM][prof] C0=%lu C1=%lu usb=%lu cdc=%lu tx=%lu fin=%lu post=%lu\n",
                     (unsigned long)c0_pct, (unsigned long)c1_pct,
                     (unsigned long)c0_usb, (unsigned long)c0_cdc,
                     (unsigned long)c1_frametx, (unsigned long)c1_finalize, (unsigned long)c1_postproc);
@@ -455,8 +455,9 @@ static bool poll_cdc_commands(void) {
         } else if (ch == 'I' || ch == 'i') {
             debug_requested = true;
         } else if (ch == 'O' || ch == 'o') {
+            emit_profiling_stats();
             if (can_emit_text()) {
-                emit_profiling_stats();
+                cdc_ctrl_printf("[EBD_IPKVM][cmd] profiling\n");
             }
         } else if (ch == 'E') {
             video_core_set_tx_rle_enabled(true);
