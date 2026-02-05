@@ -17,6 +17,7 @@ typedef struct video_core_config {
     PIO pio;
     uint sm;
     int dma_chan;
+    int post_dma_chan;
     uint offset_fall_pixrise;
     uint pin_video;
     uint pin_vsync;

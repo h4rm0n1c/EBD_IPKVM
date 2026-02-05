@@ -1,173 +1,69 @@
-# ADB peripheral implementation plan (keyboard + mouse)
+# ADB peripheral implementation strategy
 
-## Goals
+## Current approach: External ADB microcontroller
 
-- Emulate ADB keyboard + mouse as on-bus peripherals for IP KVM use.
-- Follow the existing core split pattern: PIO does bit-level timing, AppleCore (core1) handles real-time bus work, core0 exposes a higher-level API for the app and CDC testing.
-- Base our low-level ADB engine on the hootswitch RP2040 implementation (PIO + DMA + state machine) and trim it down to a single-device keyboard+mouse emulation.
-- Keep the ADB implementation modular and consistent with existing firmware structure (peripheral-specific files + shared core bridge).
-- Add a CDC test channel so we can drive mouse movement via arrow keys, click via right shift, and pass through typed characters to the ADB keyboard.
+After exploring on-Pico ADB implementation, we've pivoted to using an **external dedicated ADB microcontroller** (ATtiny85 or similar) communicating with the RP2040 via SPI. This approach offers several advantages:
 
-## Reference grounding (from /opt/adb)
+### Rationale
 
-- **ADB Manager PDF:** ADB devices must implement default address + handler IDs, respond to Talk/Listen transactions, detect collisions, and assert SRQ when they have data to report. Devices expose up to four registers used by the bus manager and host driver stack.
-- **AN591B (Microchip ADB note):** Detailed timing and bus waveform reference; use to verify pulse widths, SRQ windows, and stop-bit behavior.
-- **hootswitch (RP2040 ADB switch):** Provides a working PIO + DMA bus engine. Its `bus.pio` supplies host/device TX/RX/attention programs, while `computer.c` shows device-side state tracking, command parsing, collision handling, and SRQ gating.
-- **trabular (ADB device firmware):** Implements keyboard + mouse emulation, shows default addresses (keyboard=2, mouse=3), handler IDs, SRQ accounting, and timing windows used to interpret ADB bit cells.
-- **adb-usb (ADB host firmware):** Provides a reference for bit-cell timing and signal shape assumptions in a simple ADB implementation.
+1. **Resource allocation**: The RP2040's PIO, DMA, and interrupt resources are heavily utilized for video capture, which is the primary function of this device. Adding ADB bus handling creates resource contention and timing conflicts.
 
-These sources anchor our bus timing expectations, device register behaviors, and address handling.
+2. **Timing isolation**: ADB requires precise real-time bus timing that can conflict with video capture DMA and USB servicing. A dedicated microcontroller eliminates these conflicts.
 
-- Cross-check behavior against the reference implementations in `/opt/adb` as we validate timing, register contents, and SRQ behavior.
+3. **Proven implementations**: Mature ADB firmware for AVR microcontrollers (like ATtiny85) already exists and is well-tested (e.g., trabular firmware).
 
-## Architecture overview
+4. **Simpler integration**: SPI communication between the Pico and ADB controller provides a clean interface without complex interrupt priority management or PIO resource juggling.
 
-### Hardware wiring (current board)
+### Architecture
 
-- **ADB RECV:** GPIO6, non-inverting input from the bus (buffered).
-- **ADB XMIT:** GPIO12, inverted open-collector output (GPIO high pulls the bus low).
-- PIO output polarity must be inverted to account for the transmit inversion.
+```
+┌─────────────┐  SPI   ┌──────────────┐  ADB Bus  ┌──────────┐
+│  RP2040     │◄──────►│  ATtiny85    │◄─────────►│  Mac     │
+│  (Pico)     │        │  ADB Stack   │           │  Classic │
+│             │        │              │           │          │
+│ - Video     │        │ - Keyboard   │           │          │
+│ - USB Host  │        │ - Mouse      │           │          │
+└─────────────┘        └──────────────┘           └──────────┘
+```
 
-### Hootswitch extraction scope
+### Current focus
 
-- Hootswitch uses two roles: **host** (front peripherals) on PIO1 and **computer/device** (emulated devices per computer port) on PIO0. For EBD_IPKVM we only need the **device-side** pipeline, so we can drop the host-side command queue, device scanning, and port switching logic.
-- The device-side code (`computer.c`) already implements a bus phase state machine (attention → command → listen/talk) plus collision detection and SRQ gating. We can adapt this for a single virtual keyboard and mouse while keeping the timing logic intact.
-- The PIO program swapping used on the host side can be omitted; we will keep a fixed set of device programs in PIO1 and use a single SM for our bus, with DMA for Listen data where needed.
+For now, we are focusing on:
 
-### 1) PIO layer (bit timing + open-collector control)
+1. **Improving video capture performance**: DMA postprocessing, non-blocking operations, batched frame transmission
+2. **Stable USB enumeration**: Proper tud_task() servicing, correct interrupt priorities
+3. **Reliable frame streaming**: VSYNC raw IRQ handling, optimized core1 utilization
 
-- **Purpose:** Provide deterministic ADB line sampling and drive timing using dedicated PIO programs for RX/TX, based directly on hootswitch `bus.pio`.
-- **Signal model:** ADB is open-collector. We should drive the line low via GPIO output enable and release to float high (external pull-up).
-- **PIO placement:** Use **PIO1** for ADB to avoid contention with PIO0, which already hosts classic video capture.
-- **PIO program split (from hootswitch):**
-  - `bus_tx_dev`: device-side transmit with collision detection (Talk responses).
-  - `bus_rx_dev`: device-side receive for commands/listens with SRQ gating at stop bit.
-  - `bus_atn_dev`: attention/reset detector for low-pulse qualification.
-  - `bus_reset`: optional reset pulse generator (not required for device emulation but useful for test tools).
-- **PIO responsibilities:**
-  - Detect attention, sync, and start/stop bits.
-  - Read/serialize 8-bit data payloads and stop bits into RX FIFO.
-  - Emit per-bit pulse sequences for Talk responses and SRQ assertion.
-  - Preserve hootswitch’s 125 MHz timing assumptions unless we explicitly retune the PIO clock dividers.
+### Future work: External ADB integration
 
-### 2) AppleCore (core1): ADB real-time service loop
+When we're ready to add ADB support:
 
-- **Purpose:** Interpret PIO edge/data events, handle exact bus timing, and manage device register access.
-- **Scheduling target:** ADB handling should run every ~50–70 µs to avoid missing line transitions (per trabular timing notes) and respect bit timing windows.
-- **Responsibilities:**
-  - Parse command bytes (Talk/Listen/Flush/Reset) from PIO RX FIFO.
-  - Detect address collisions and follow address resolution rules.
-  - Ignore our own transmissions on the shared ADB line during normal operation (RX/TX pins are tied together on-bus); optionally gate a loopback/echo path when validating TX timing in isolation.
-  - Latch RX activity so the CDC test channel can emit a rate-limited “ADB RX seen” line (e.g., every few seconds) when we decode valid bus traffic from the host.
-  - Assert SRQ when keyboard/mouse buffers have new data.
-  - Serialize Talk responses from per-device register state.
-  - Apply Listen writes to device registers.
-  - Use DMA for Listen data transfers (mirroring hootswitch) to reduce ISR load and stay within the video capture budget.
+1. Select appropriate AVR microcontroller (ATtiny85 or similar)
+2. Port/adapt existing ADB device firmware (trabular or similar)
+3. Design SPI protocol for keyboard/mouse events
+4. Add SPI master support to Pico firmware
+5. Design hardware interface (level shifting if needed, connector pinout)
+6. Integrate with USB HID on the Pico to translate host keyboard/mouse to ADB
 
-### 3) Core0: ADB device interface + CDC testing
+### Reference materials
 
-- **Purpose:** Provide the high-level API used by the main application and the CDC test channel.
-- **Responsibilities:**
-  - Maintain keyboard/mouse event queues (key press/release sequences, mouse deltas, button state).
-  - Translate higher-level input events into register payloads (keyboard register 0/2, mouse register 0).
-  - Manage testing input on the third CDC interface:
-    - Arrow keys -> mouse move (configurable step size).
-    - Right Shift -> mouse button click.
-    - Other printable characters -> ADB keyboard events.
-    - Periodic RX indicator: if valid ADB traffic was observed, emit a short “ADB RX seen” line no more than once every few seconds (latched/ratelimited).
-  - Forward events to core1 via `core_bridge` queues.
+Previous exploration of on-Pico ADB implementation identified these key resources:
 
-### 4) Core bridge between cores
+- **ADB Manager PDF**: Device addressing, handler IDs, register protocol
+- **AN591B (Microchip)**: Timing specifications, bus waveforms
+- **hootswitch**: RP2040 PIO + DMA ADB implementation (host + device)
+- **trabular**: AVR ADB keyboard + mouse emulation firmware
+- **adb-usb**: Simple ADB host implementation
 
-- Extend the existing core bridge with an **ADB control channel**:
-  - `core0 -> core1`: enqueue ADB events (kbd keycode, key up/down, mouse delta, button state).
-  - `core1 -> core0`: optional diagnostics (SRQ count, collision stats, reset count, last command).
+These remain valuable for the external controller approach.
 
-## Data model & register handling
+## Archived: On-Pico implementation notes
 
-### Keyboard registers
+The detailed on-Pico implementation plan has been archived. Key findings:
 
-- **Default address:** 2 (from trabular).
-- **Handler ID:** 2 (adb Extended Keyboard II is a common default in trabular; validate final ID against ADB spec references as needed).
-- **Register 0:** key event pairs (two keycodes per report, with 0xFF for empty slots).
-- **Register 2:** modifier bits + LED flags. Track LED state for Host Listen writes.
-- **SRQ:** asserted whenever a new key event is queued (until Talk drains it).
+- **Hardware wiring**: GPIO6 (ADB RECV), GPIO12 (ADB XMIT, inverted)
+- **PIO placement**: PIO1 was selected to avoid PIO0 video capture conflicts
+- **Timing requirements**: ~100µs attention pulse, 65-85µs bit cells
+- **Integration challenges**: IRQ priority conflicts with USB, PIO resource pressure, DMA channel contention
 
-### Mouse registers
-
-- **Default address:** 3 (from trabular).
-- **Handler ID:** use the initialized handler ID from the ADB spec (trabular keeps an init handler, so follow that pattern).
-- **Register 0:** button + X/Y deltas (signed 7-bit or 8-bit based on device flavor; validate before final implementation).
-- **SRQ:** asserted whenever a new mouse report is available.
-
-### Address resolution + collision detection
-
-- Use the ADB Manager’s address resolution flow: if multiple devices share an address, respond per the bus collision rules and allow host reassign via Listen.
-- Track collision flags per device like trabular does, clearing once a new address is assigned.
-
-## CDC test interface (third CDC channel)
-
-- Add **CDC2** in `usb_descriptors.c` and update TUSB configuration.
-- In `app_core`, add a small terminal parser:
-  - Arrow keys (escape sequences): update mouse X/Y deltas.
-  - Right Shift: click press/release toggle (press on keydown, release on keyup).
-  - Other characters: map to ADB keyboard keycodes and enqueue a press/release.
-- Keep this in a separate `adb_test_cdc.c/.h` module for cleanliness.
-
-## File/module breakdown
-
-**New modules (proposed):**
-
-- `src/adb_pio.pio` / `src/adb_pio.c/.h`
-  - PIO program definition, loader, and helper APIs derived from hootswitch `bus.pio`.
-- `src/adb_bus.c/.h`
-  - Core1-facing ADB bus logic (command parse, timing state, SRQ control).
-- `src/adb_kbd.c/.h`
-  - Keyboard register model + event queue.
-- `src/adb_mouse.c/.h`
-  - Mouse register model + event queue.
-- `src/adb_core.c/.h`
-  - Core1 dispatch loop wrapper that integrates with AppleCore and PIO ISR.
-- `src/adb_test_cdc.c/.h`
-  - CDC test channel parser and ADB event injection for development.
-
-**Existing modules to update:**
-
-- `src/usb_descriptors.c` + `src/tusb_config.h`: third CDC interface.
-- `src/app_core.c`: add CDC2 handling and high-level ADB queue submission.
-- `src/core_bridge.c/.h`: new ADB event queue.
-- `src/main.c`: initialize ADB core components.
-- Documentation updates: `README.md` + `docs/protocol/` (if new CDC channel or command specs are added).
-
-## Coexistence with video capture
-
-- Use PIO1 for ADB to avoid interfering with PIO0 video capture.
-- Keep ADB service time in AppleCore (core1) to a tight budget and avoid blocking operations.
-- Use lightweight queues to minimize lock contention and avoid interfering with the existing frame TX queue.
-- Instrument core1 utilization around ADB work so we can confirm we stay well within the remaining budget (AppleCore reports ~12% usage currently).
-
-## Implementation steps
-
-1. **PIO prototype**: draft `adb_pio.pio` for line sampling + bit emission; validate timing in isolation.
-2. **Core1 ADB engine**: implement bus state machine (`adb_bus`) with command parsing and SRQ emission.
-3. **Keyboard/mouse models**: implement register logic and event queues, including default addresses/handler IDs and Listen/Flush behaviors.
-4. **Core bridge**: add ADB event queues and event injection APIs on core0.
-5. **CDC test channel**: add CDC2 descriptors, parse arrow keys and Right Shift, map to ADB events.
-6. **Integrate with main**: init ADB modules alongside AppleCore; ensure idle states do not affect capture.
-7. **Instrumentation + docs**: add optional diagnostics for SRQ/traffic and update docs (protocol + ADB plan/log/notes).
-
-## Test plan
-
-- **Basic bus health**: scope the ADB line for attention/sync, Talk responses, and SRQ pulses.
-- **Terminal-driven test**: open CDC2 from Linux and verify:
-  - Arrow keys move the Mac cursor.
-  - Right Shift clicks.
-  - Typed characters appear on the Mac.
-- **Collision/address resolution**: connect a real ADB keyboard or mouse and ensure our device reassigns or coexists properly.
-- **Performance**: check core0/core1 utilization counters while exercising ADB input + full-rate video capture.
-
-## Open questions / follow-ups
-
-- Confirm exact mouse report format (classic vs extended mouse) before final register definitions.
-- Confirm keyboard handler ID and LED behavior match expected Mac OS defaults.
-- Validate SRQ timing windows against the ADB spec once the Apple spec PDF is available.
+These findings informed the decision to move ADB handling to an external controller.
