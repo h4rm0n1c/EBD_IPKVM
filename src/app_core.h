@@ -14,3 +14,4 @@ typedef struct app_core_config {
 
 void app_core_init(const app_core_config_t *cfg);
 void app_core_poll(void);
+bool app_core_enqueue_ep0_command(uint8_t cmd);

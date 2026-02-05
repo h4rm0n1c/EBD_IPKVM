@@ -13,6 +13,7 @@ add_executable(EBD_IPKVM
     src/app_core.c
     src/core_bridge.c
     src/main.c
+    src/usb_control.c
     src/usb_descriptors.c
     src/video_capture.c
     src/video_core.c
