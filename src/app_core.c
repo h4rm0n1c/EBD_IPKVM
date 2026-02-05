@@ -12,6 +12,7 @@
 
 #include "core_bridge.h"
 #include "stream_protocol.h"
+#include "usb_control.h"
 #include "video_capture.h"
 #include "video_core.h"
 
@@ -19,8 +20,7 @@
 #define APP_PKT_MAX_BYTES (STREAM_HEADER_BYTES + APP_PKT_MAX_PAYLOAD)
 #define APP_PKT_RAW_BYTES (STREAM_HEADER_BYTES + CAP_BYTES_PER_LINE)
 
-#define CDC_STREAM 0
-#define CDC_CTRL 1
+#define CDC_CTRL 0
 
 static app_core_config_t app_cfg;
 
@@ -34,6 +34,9 @@ static uint16_t probe_offset = 0;
 static volatile bool debug_requested = false;
 static uint32_t core0_busy_us = 0;
 static uint32_t core0_total_us = 0;
+static volatile uint8_t ep0_cmd_queue[8];
+static volatile uint8_t ep0_cmd_r = 0;
+static volatile uint8_t ep0_cmd_w = 0;
 
 static volatile uint32_t diag_pixclk_edges = 0;
 static volatile uint32_t diag_hsync_edges = 0;
@@ -68,6 +71,34 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
         *total_us = core0_total_us;
         core0_total_us = 0;
     }
+}
+
+bool app_core_enqueue_ep0_command(uint8_t cmd) {
+    uint8_t w = __atomic_load_n(&ep0_cmd_w, __ATOMIC_ACQUIRE);
+    uint8_t r = __atomic_load_n(&ep0_cmd_r, __ATOMIC_ACQUIRE);
+    uint8_t next = (uint8_t)((w + 1u) % (uint8_t)sizeof(ep0_cmd_queue));
+    if (next == r) {
+        return false;
+    }
+    ep0_cmd_queue[w] = cmd;
+    __atomic_store_n(&ep0_cmd_w, next, __ATOMIC_RELEASE);
+    return true;
+}
+
+static inline bool stream_ready(void) {
+    return tud_ready();
+}
+
+static inline int stream_write_available(void) {
+    return tud_vendor_write_available();
+}
+
+static inline uint32_t stream_write(const void *buf, uint32_t len) {
+    return tud_vendor_write(buf, len);
+}
+
+static inline void stream_flush(void) {
+    tud_vendor_flush();
 }
 
 static void cdc_ctrl_write(const char *buf, size_t len) {
@@ -178,7 +209,7 @@ static void run_gpio_diag(void) {
 }
 
 static bool try_send_probe_packet(void) {
-    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
+    if (!stream_ready()) return false;
 
     if (probe_offset == 0) {
         stream_write_header(probe_buf, 0x55AAu, 0x1234u, CAP_BYTES_PER_LINE);
@@ -186,19 +217,19 @@ static bool try_send_probe_packet(void) {
     }
 
     while (probe_offset < APP_PKT_RAW_BYTES) {
-        int avail = tud_cdc_n_write_available(CDC_STREAM);
+        int avail = stream_write_available();
         if (avail <= 0) return false;
         uint32_t to_write = (uint32_t)avail;
         uint32_t remain = (uint32_t)(APP_PKT_RAW_BYTES - probe_offset);
         if (to_write > remain) {
             to_write = remain;
         }
-        uint32_t wrote = tud_cdc_n_write(CDC_STREAM, &probe_buf[probe_offset], to_write);
+        uint32_t wrote = stream_write(&probe_buf[probe_offset], to_write);
         if (wrote == 0) return false;
         probe_offset = (uint16_t)(probe_offset + wrote);
     }
 
-    tud_cdc_n_write_flush(CDC_STREAM);
+    stream_flush();
     return true;
 }
 
@@ -223,7 +254,7 @@ static void emit_debug_state(void) {
     cdc_ctrl_printf("[EBD_IPKVM] dbg txq=%u/%u av=%d fr=%lu ln=%lu dr=%lu ov=%lu sh=%lu\n",
                     (unsigned)txq_r,
                     (unsigned)txq_w,
-                    tud_cdc_n_write_available(CDC_STREAM),
+                    stream_write_available(),
                     (unsigned long)video_core_get_frames_done(),
                     (unsigned long)video_core_get_lines_ok(),
                     (unsigned long)video_core_get_lines_drop(),
@@ -231,44 +262,113 @@ static void emit_debug_state(void) {
                     (unsigned long)video_core_get_frame_short());
 }
 
+static void handle_capture_start(void) {
+    video_core_set_armed(true);
+}
+
+static void handle_capture_stop(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM][cmd] armed=0 (stop)\n");
+    }
+}
+
+static void handle_capture_park(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM][cmd] parked\n");
+    }
+    while (true) { tud_task(); sleep_ms(50); }
+}
+
+static void handle_reset_counters(void) {
+    usb_drops = 0;
+    video_core_set_take_toggle(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    core_bridge_send(CORE_BRIDGE_CMD_RESET_COUNTERS, 0);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM][cmd] reset counters\n");
+    }
+}
+
+static void handle_probe_packet(void) {
+    request_probe_packet();
+}
+
+static void handle_rle_on(void) {
+    video_core_set_tx_rle_enabled(true);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM][cmd] rle=on\n");
+    }
+}
+
+static void handle_rle_off(void) {
+    video_core_set_tx_rle_enabled(false);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM][cmd] rle=off\n");
+    }
+}
+
+static void handle_ep0_command(uint8_t cmd) {
+    switch (cmd) {
+    case USB_CTRL_REQ_CAPTURE_START:
+        handle_capture_start();
+        break;
+    case USB_CTRL_REQ_CAPTURE_STOP:
+        handle_capture_stop();
+        break;
+    case USB_CTRL_REQ_CAPTURE_PARK:
+        handle_capture_park();
+        break;
+    case USB_CTRL_REQ_RESET_COUNTERS:
+        handle_reset_counters();
+        break;
+    case USB_CTRL_REQ_PROBE_PACKET:
+        handle_probe_packet();
+        break;
+    case USB_CTRL_REQ_RLE_ON:
+        handle_rle_on();
+        break;
+    case USB_CTRL_REQ_RLE_OFF:
+        handle_rle_off();
+        break;
+    default:
+        break;
+    }
+}
+
+static void service_ep0_commands(void) {
+    while (true) {
+        uint8_t r = __atomic_load_n(&ep0_cmd_r, __ATOMIC_ACQUIRE);
+        uint8_t w = __atomic_load_n(&ep0_cmd_w, __ATOMIC_ACQUIRE);
+        if (r == w) {
+            break;
+        }
+        uint8_t cmd = ep0_cmd_queue[r];
+        uint8_t next = (uint8_t)((r + 1u) % (uint8_t)sizeof(ep0_cmd_queue));
+        __atomic_store_n(&ep0_cmd_r, next, __ATOMIC_RELEASE);
+        handle_ep0_command(cmd);
+    }
+}
+
 static bool poll_cdc_commands(void) {
-    // Reads single-byte commands: S=start, X=stop, R=reset counters, Q=park
+    // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug
     bool did_work = false;
     while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
         if (tud_cdc_n_read(CDC_CTRL, &ch, 1) != 1) break;
         did_work = true;
 
-        if (ch == 'S' || ch == 's') {
-            video_core_set_armed(true);
-            /* IMPORTANT: do NOT printf here; keep binary stream clean once armed */
-        } else if (ch == 'X' || ch == 'x') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] armed=0 (host stop)\n");
-            }
-        } else if (ch == 'R' || ch == 'r') {
-            usb_drops = 0;
-            video_core_set_take_toggle(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            core_bridge_send(CORE_BRIDGE_CMD_RESET_COUNTERS, 0);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] reset counters\n");
-            }
-        } else if (ch == 'Q' || ch == 'q') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] parked\n");
-            }
-            while (true) { tud_task(); sleep_ms(50); }
+        if (ch == 'R' || ch == 'r') {
+            handle_reset_counters();
         } else if (ch == 'P') {
             set_ps_on(true);
             if (can_emit_text()) {
@@ -354,7 +454,7 @@ static bool poll_cdc_commands(void) {
 }
 
 static inline bool service_txq(void) {
-    if (!tud_cdc_n_connected(CDC_STREAM)) return false;
+    if (!stream_ready()) return false;
 
     bool wrote_any = false;
 
@@ -371,7 +471,7 @@ static inline bool service_txq(void) {
             continue;
         }
 
-        int avail = tud_cdc_n_write_available(CDC_STREAM);
+        int avail = stream_write_available();
         if (avail <= 0) break;
 
         uint32_t remain = (uint32_t)(pkt_len - txq_offset);
@@ -380,7 +480,7 @@ static inline bool service_txq(void) {
             to_write = remain;
         }
 
-        uint32_t n = tud_cdc_n_write(CDC_STREAM, &data[txq_offset], to_write);
+        uint32_t n = stream_write(&data[txq_offset], to_write);
         if (n == 0) {
             usb_drops++;
             break;
@@ -396,7 +496,7 @@ static inline bool service_txq(void) {
     }
 
     if (wrote_any) {
-        tud_cdc_n_write_flush(CDC_STREAM);
+        stream_flush();
     }
     return wrote_any;
 }
@@ -405,11 +505,10 @@ void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
-    cdc_ctrl_printf("[EBD_IPKVM] CDC0=video stream, CDC1=control/status\n");
-    cdc_ctrl_printf("[EBD_IPKVM] WAITING for host. Send 'S' to start, 'X' stop, 'R' reset.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] GPIO diag: send 'G' for pin states + edge counts.\n");
-    cdc_ctrl_printf("[EBD_IPKVM] Edge toggles: 'V' VSYNC edge. Mode toggle: 'M' 30fps↔60fps.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC0=control/status\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Capture control via EP0 vendor requests (use host tool).\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset, 'R' reset counters.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state.\n");
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
@@ -419,6 +518,7 @@ void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
     tud_task();
+    service_ep0_commands();
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
     if (did_work) {

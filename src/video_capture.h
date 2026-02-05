@@ -16,6 +16,7 @@ typedef struct video_capture {
     PIO pio;
     uint sm;
     int dma_chan;
+    int post_dma_chan;
 
     volatile bool capture_enabled;
     volatile bool capture_want_frame;
@@ -26,6 +27,12 @@ typedef struct video_capture {
     uint32_t (*capture_buf)[CAP_WORDS_PER_LINE];
     uint32_t (*ready_buf)[CAP_WORDS_PER_LINE];
     uint32_t (*inflight_buf)[CAP_WORDS_PER_LINE];
+
+    volatile bool postprocess_pending;
+    volatile bool postprocess_wanted;
+    uint32_t (*postprocess_buf)[CAP_WORDS_PER_LINE];
+    uint16_t postprocess_frame_id;
+    uint16_t postprocess_lines;
 
     volatile bool frame_ready;
     uint16_t frame_ready_id;
@@ -38,6 +45,7 @@ void video_capture_init(video_capture_t *cap,
                         PIO pio,
                         uint sm,
                         int dma_chan,
+                        int post_dma_chan,
                         uint32_t framebuf_a[CAP_MAX_LINES][CAP_WORDS_PER_LINE],
                         uint32_t framebuf_b[CAP_MAX_LINES][CAP_WORDS_PER_LINE]);
 void video_capture_start(video_capture_t *cap, bool want_frame);
@@ -48,3 +56,4 @@ bool video_capture_take_ready(video_capture_t *cap,
                               uint16_t *out_frame_id,
                               uint16_t *out_lines);
 void video_capture_set_inflight(video_capture_t *cap, uint32_t (*buf)[CAP_WORDS_PER_LINE]);
+bool video_capture_service_postprocess(video_capture_t *cap);
