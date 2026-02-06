@@ -525,7 +525,6 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    /* Send queued binary packets from thread context (NOT IRQ). */
     if (probe_pending) {
         active_start = time_us_32();
         if (try_send_probe_packet()) {
