@@ -264,7 +264,6 @@ bool diag_hid_active(void) {
 }
 
 void diag_hid_enter(void) {
-    adb_spi_init();   /* lazy — brings up SPI0 and flushes trabular buffers */
     active = true;
     esc = ESC_NONE;
     esc_param = 0;
@@ -280,7 +279,6 @@ void diag_hid_exit(void) {
     }
     active = false;
     esc = ESC_NONE;
-    adb_spi_deinit();  /* release SPI0, return pins to hi-Z */
 }
 
 void diag_hid_feed(uint8_t ch) {

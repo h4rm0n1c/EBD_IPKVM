@@ -46,14 +46,37 @@ static void park_pins(void) {
 void adb_spi_init(void) {
     if (spi_active) return;
 
+    /*
+     * Glitch-free pin handoff: drive SCK and MOSI to their SPI mode 0
+     * idle levels as GPIO outputs BEFORE switching the mux to the SPI
+     * peripheral.  This guarantees no spurious edge on SCK that the
+     * ATtiny85 USI could interpret as a clock tick.
+     *
+     *   CPOL=0 → SCK idles LOW
+     *   MOSI   → LOW (no data)
+     *   MISO   → input (no pre-conditioning needed)
+     */
+    gpio_init(ADB_PIN_SCK);
+    gpio_set_dir(ADB_PIN_SCK, GPIO_OUT);
+    gpio_put(ADB_PIN_SCK, 0);
+
+    gpio_init(ADB_PIN_MOSI);
+    gpio_set_dir(ADB_PIN_MOSI, GPIO_OUT);
+    gpio_put(ADB_PIN_MOSI, 0);
+
+    gpio_init(ADB_PIN_MISO);
+    gpio_set_dir(ADB_PIN_MISO, GPIO_IN);
+
+    /* Now init the SPI peripheral (doesn't touch pins yet). */
     spi_init(ADB_SPI_INST, ADB_SPI_BAUD);
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire. */
     spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
-    gpio_set_function(ADB_PIN_MISO, GPIO_FUNC_SPI);
+    /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
     gpio_set_function(ADB_PIN_MOSI, GPIO_FUNC_SPI);
+    gpio_set_function(ADB_PIN_MISO, GPIO_FUNC_SPI);
 
     /* Pull MISO weakly to avoid floating when ATtiny isn't driving. */
     gpio_pull_up(ADB_PIN_MISO);
@@ -61,9 +84,8 @@ void adb_spi_init(void) {
     spi_active = true;
 
     /*
-     * The GPIO function switch may have glitched SCK, causing the
-     * ATtiny85 USI to shift in garbage.  Flush every trabular buffer
-     * so stale data doesn't leak onto the ADB bus.
+     * Belt-and-suspenders: flush every trabular buffer in case anything
+     * slipped through.
      *
      * Trabular clear commands:
      *   0x05 = clear keyboard ring buffer
