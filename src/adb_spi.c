@@ -214,5 +214,12 @@ void adb_spi_move_mouse(int8_t dx, int8_t dy) {
 }
 
 uint8_t adb_spi_status(void) {
-    return adb_spi_xfer(0x01);
+    /*
+     * SPI is full-duplex: the response to a command is loaded into
+     * USIDR *after* the byte finishes, and clocked out during the
+     * NEXT transfer.  So: send the status query (0x01), then send
+     * a NOP (0x00) to clock out the actual response.
+     */
+    adb_spi_xfer(0x01);          /* request status         */
+    return adb_spi_xfer(0x00);   /* clock out the response */
 }

@@ -441,7 +441,15 @@ static bool poll_cdc_commands(void) {
         if (ch == 'A' || ch == 'a') {
             diag_hid_enter();
             if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode ON (double-ESC to exit, Ctrl-X for boot macro)\n");
+                /* Probe trabular: status query should return 0x80|flags.
+                 * 0x00/0xFF = ATtiny85 not responding or USI misaligned.
+                 * Do it twice: first clears any stale USIDR, second is real. */
+                uint8_t st1 = adb_spi_status();
+                uint8_t st2 = adb_spi_status();
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  spi_status=0x%02X,0x%02X %s\n",
+                                st1, st2,
+                                (st2 & 0x80) ? "(ok)" : "(BAD: expect 0x8x)");
+                cdc_ctrl_printf("[EBD_IPKVM] IJKL=mouse H=click U=hold Ctrl-X=boot ESC-ESC=exit\n");
             }
         } else if (ch == 'R' || ch == 'r') {
             handle_reset_counters();
