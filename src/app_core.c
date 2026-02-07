@@ -428,11 +428,6 @@ static bool poll_cdc_commands(void) {
         }
 
         if (ch == 'A' || ch == 'a') {
-            /* Stop capture & video output, enter ADB diagnostic mode */
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             diag_hid_enter();
             if (can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode ON (double-ESC to exit, Ctrl-X for boot macro)\n");
