@@ -10,8 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_executable(EBD_IPKVM
+    src/adb_spi.c
     src/app_core.c
     src/core_bridge.c
+    src/diag_hid.c
     src/main.c
     src/usb_control.c
     src/usb_descriptors.c
@@ -33,6 +35,7 @@ target_link_libraries(EBD_IPKVM
     hardware_pio
     hardware_dma
     hardware_irq
+    hardware_spi
     tinyusb_device
     tinyusb_board
 )

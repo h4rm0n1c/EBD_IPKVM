@@ -10,7 +10,9 @@
 #include "hardware/watchdog.h"
 #include "tusb.h"
 
+#include "adb_spi.h"
 #include "core_bridge.h"
+#include "diag_hid.h"
 #include "stream_protocol.h"
 #include "usb_control.h"
 #include "video_capture.h"
@@ -410,13 +412,32 @@ static void service_ep0_commands(void) {
 
 static bool poll_cdc_commands(void) {
     // Reads single-byte commands: R=reset, P/p=power, B/Z=boot/reset, I=debug
+    // 'A' toggles ADB diagnostic HID mode (all further input → trabular SPI).
+    // Double-ESC exits diag mode back to normal command parsing.
     bool did_work = false;
     while (tud_cdc_n_available(CDC_CTRL)) {
         uint8_t ch;
         if (tud_cdc_n_read(CDC_CTRL, &ch, 1) != 1) break;
         did_work = true;
 
-        if (ch == 'R' || ch == 'r') {
+        /* When ADB diag mode is active, feed all input to the HID layer.
+         * diag_hid_feed() handles double-ESC to exit internally. */
+        if (diag_hid_active()) {
+            diag_hid_feed(ch);
+            continue;
+        }
+
+        if (ch == 'A' || ch == 'a') {
+            /* Stop capture & video output, enter ADB diagnostic mode */
+            video_core_set_armed(false);
+            video_core_set_want_frame(false);
+            txq_offset = 0;
+            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+            diag_hid_enter();
+            if (can_emit_text()) {
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode ON (double-ESC to exit, Ctrl-X for boot macro)\n");
+            }
+        } else if (ch == 'R' || ch == 'r') {
             handle_reset_counters();
         } else if (ch == 'P') {
             set_ps_on(true);
@@ -553,10 +574,15 @@ static inline bool service_txq(void) {
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
+    /* Initialise ATtiny85/trabular SPI link and diagnostic HID layer. */
+    adb_spi_init();
+    diag_hid_init();
+
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC0=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] Capture control via EP0 vendor requests (use host tool).\n");
     cdc_ctrl_printf("[EBD_IPKVM] Power/control: 'P' on, 'p' off, 'B' BOOTSEL, 'Z' reset, 'R' reset counters.\n");
+    cdc_ctrl_printf("[EBD_IPKVM] ADB diag: send 'A' to enter (keys→ADB kbd, arrows→mouse).\n");
     cdc_ctrl_printf("[EBD_IPKVM] Debug: send 'I' for internal state.\n");
 
     status_next = make_timeout_time_ms(1000);
@@ -573,6 +599,9 @@ void app_core_poll(void) {
     if (did_work) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
+
+    /* Service ADB diag mode timed actions (click release, boot macro). */
+    diag_hid_poll();
 
     if (probe_pending) {
         active_start = time_us_32();
@@ -598,7 +627,7 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    if (can_emit_text()) {
+    if (can_emit_text() && !diag_hid_active()) {
         if (absolute_time_diff_us(get_absolute_time(), status_next) <= 0) {
             status_next = delayed_by_ms(status_next, 1000);
 
