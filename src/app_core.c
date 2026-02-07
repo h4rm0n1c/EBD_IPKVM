@@ -422,14 +422,20 @@ static bool poll_cdc_commands(void) {
         did_work = true;
 
         /* When ADB diag mode is active, feed all input to the HID layer.
-         * diag_hid_feed() handles double-ESC to exit internally. */
+         * diag_hid_feed() handles double-ESC to exit internally.
+         *
+         * IMPORTANT: break (don't continue) after each diag byte so
+         * the main loop calls tud_task() between SPI-heavy keystrokes.
+         * Each keystroke can generate 2–4 SPI xfers at ~280 µs each;
+         * processing many without yielding starves USB and crashes
+         * the video pipeline. */
         if (diag_hid_active()) {
             diag_hid_feed(ch);
             /* Check if feed just exited diag mode (double-ESC) */
             if (!diag_hid_active() && can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF (SPI released)\n");
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF\n");
             }
-            continue;
+            break;  /* yield to tud_task() after each diag keystroke */
         }
 
         if (ch == 'A' || ch == 'a') {

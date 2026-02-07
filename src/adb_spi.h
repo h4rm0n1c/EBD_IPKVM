@@ -25,7 +25,13 @@
  * first adb_spi_flush() call so boot-time init never does SPI traffic.
  */
 
-/* Bring up SPI0 and claim pins (glitch-free, zero SPI traffic).
+/* Hold ATtiny85 in reset (GP17 LOW) and pre-drive SCK LOW.
+ * Call this as early as possible in main(), before stdio/USB init,
+ * so the ATtiny85 USI never sees spurious clock edges. */
+void adb_spi_hold_reset(void);
+
+/* Bring up SPI0, claim pins, then release ATtiny85 from reset.
+ * SCK is stable LOW before the ATtiny85 USI starts counting.
  * Safe to call multiple times (idempotent). */
 void adb_spi_init(void);
 

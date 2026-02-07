@@ -5,6 +5,7 @@
 #include "hardware/irq.h"
 #include "hardware/pio.h"
 
+#include "adb_spi.h"
 #include "app_core.h"
 #include "classic_line.pio.h"
 #include "video_core.h"
@@ -16,6 +17,10 @@
 #define PIN_PS_ON  9   // via ULN2803, GPIO high asserts ATX PS_ON
 
 int main(void) {
+    // Hold ATtiny85 in reset ASAP so its USI doesn't count noise
+    // on the floating SCK line.  Also pre-drives SCK LOW.
+    adb_spi_hold_reset();
+
     stdio_init_all();
     tud_init(0);
 
