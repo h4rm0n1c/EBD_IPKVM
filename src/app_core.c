@@ -424,6 +424,10 @@ static bool poll_cdc_commands(void) {
          * diag_hid_feed() handles double-ESC to exit internally. */
         if (diag_hid_active()) {
             diag_hid_feed(ch);
+            /* Check if feed just exited diag mode (double-ESC) */
+            if (!diag_hid_active() && can_emit_text()) {
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF (SPI released)\n");
+            }
             continue;
         }
 
@@ -569,8 +573,6 @@ static inline bool service_txq(void) {
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
-    /* Initialise ATtiny85/trabular SPI link and diagnostic HID layer. */
-    adb_spi_init();
     diag_hid_init();
 
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");

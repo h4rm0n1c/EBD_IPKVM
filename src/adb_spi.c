@@ -24,7 +24,28 @@
  */
 #define ADB_SPI_GAP_US  200
 
+static bool spi_active = false;
+
+/*
+ * Park all three SPI pins as plain GPIO inputs with no pulls.
+ * This is the safe "off" state — no output drivers to glitch the
+ * ATtiny85 USI lines.
+ */
+static void park_pins(void) {
+    gpio_set_function(ADB_PIN_MISO, GPIO_FUNC_SIO);
+    gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SIO);
+    gpio_set_function(ADB_PIN_MOSI, GPIO_FUNC_SIO);
+    gpio_set_dir(ADB_PIN_MISO, GPIO_IN);
+    gpio_set_dir(ADB_PIN_SCK,  GPIO_IN);
+    gpio_set_dir(ADB_PIN_MOSI, GPIO_IN);
+    gpio_disable_pulls(ADB_PIN_MISO);
+    gpio_disable_pulls(ADB_PIN_SCK);
+    gpio_disable_pulls(ADB_PIN_MOSI);
+}
+
 void adb_spi_init(void) {
+    if (spi_active) return;
+
     spi_init(ADB_SPI_INST, ADB_SPI_BAUD);
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire. */
@@ -36,9 +57,42 @@ void adb_spi_init(void) {
 
     /* Pull MISO weakly to avoid floating when ATtiny isn't driving. */
     gpio_pull_up(ADB_PIN_MISO);
+
+    spi_active = true;
+
+    /*
+     * The GPIO function switch may have glitched SCK, causing the
+     * ATtiny85 USI to shift in garbage.  Flush every trabular buffer
+     * so stale data doesn't leak onto the ADB bus.
+     *
+     * Trabular clear commands:
+     *   0x05 = clear keyboard ring buffer
+     *   0x06 = clear mouse button state
+     *   0x07 = clear mouse X accumulator
+     *   0x08 = clear mouse Y accumulator
+     *   0x03 = clear arbitrary device reg 0
+     */
+    adb_spi_xfer(0x05);
+    adb_spi_xfer(0x06);
+    adb_spi_xfer(0x07);
+    adb_spi_xfer(0x08);
+    adb_spi_xfer(0x03);
+}
+
+void adb_spi_deinit(void) {
+    if (!spi_active) return;
+    spi_active = false;
+
+    spi_deinit(ADB_SPI_INST);
+    park_pins();
+}
+
+bool adb_spi_is_active(void) {
+    return spi_active;
 }
 
 uint8_t adb_spi_xfer(uint8_t cmd) {
+    if (!spi_active) return 0;
     uint8_t rx = 0;
     spi_write_read_blocking(ADB_SPI_INST, &cmd, &rx, 1);
     sleep_us(ADB_SPI_GAP_US);
