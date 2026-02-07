@@ -138,7 +138,7 @@ enum esc_state {
 static bool          active;
 static enum esc_state esc;
 static uint8_t       esc_param;         /* numeric param accumulator   */
-static bool          mouse_btn_held;    /* PgUp toggle state           */
+static bool          mouse_btn_held;    /* U-key toggle state          */
 static bool          click_pending;     /* momentary click in progress */
 static absolute_time_t click_release_at;
 
@@ -184,25 +184,51 @@ static void handle_special_ascii(uint8_t ch) {
     }
 }
 
-/* ── Arrow / PgUp / PgDn handlers ────────────────────────────────── */
+/* ── Mouse control keys (intercepted before type_ascii) ──────────── */
+/*   I/i = up, K/k = down, J/j = left, L/l = right
+ *   H/h = momentary click, U/u = toggle click-hold              */
 
+static bool is_mouse_key(uint8_t ch) {
+    switch (ch) {
+    case 'i': case 'I':
+    case 'j': case 'J':
+    case 'k': case 'K':
+    case 'l': case 'L':
+    case 'h': case 'H':
+    case 'u': case 'U':
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void handle_mouse_key(uint8_t ch) {
+    switch (ch) {
+    case 'i': case 'I': adb_spi_move_mouse(0, -MOUSE_STEP); break;
+    case 'k': case 'K': adb_spi_move_mouse(0,  MOUSE_STEP); break;
+    case 'j': case 'J': adb_spi_move_mouse(-MOUSE_STEP, 0); break;
+    case 'l': case 'L': adb_spi_move_mouse( MOUSE_STEP, 0); break;
+    case 'h': case 'H':
+        /* Momentary click: press now, release after 100 ms via poll. */
+        adb_spi_set_buttons(true, false);
+        click_pending = true;
+        click_release_at = make_timeout_time_ms(100);
+        break;
+    case 'u': case 'U':
+        /* Toggle click: first press = hold down, second = release. */
+        mouse_btn_held = !mouse_btn_held;
+        adb_spi_set_buttons(mouse_btn_held, false);
+        break;
+    default:
+        break;
+    }
+}
+
+/* Legacy ANSI escape sequence handlers (arrow keys, PgUp/PgDn) */
 static void handle_arrow_up(void)    { adb_spi_move_mouse(0, -MOUSE_STEP); }
 static void handle_arrow_down(void)  { adb_spi_move_mouse(0,  MOUSE_STEP); }
 static void handle_arrow_right(void) { adb_spi_move_mouse( MOUSE_STEP, 0); }
 static void handle_arrow_left(void)  { adb_spi_move_mouse(-MOUSE_STEP, 0); }
-
-static void handle_pgup(void) {
-    /* Toggle click: first press = hold down, second = release. */
-    mouse_btn_held = !mouse_btn_held;
-    adb_spi_set_buttons(mouse_btn_held, false);
-}
-
-static void handle_pgdn(void) {
-    /* Momentary click: press now, release after 100 ms via poll. */
-    adb_spi_set_buttons(true, false);
-    click_pending = true;
-    click_release_at = make_timeout_time_ms(100);
-}
 
 /* ── Boot macro: Cmd-Opt-X-O held ~30 s ──────────────────────────── */
 
@@ -237,11 +263,7 @@ static void finish_csi(uint8_t final_ch) {
     case 'C': handle_arrow_right(); break;
     case 'D': handle_arrow_left();  break;
     case '~':
-        switch (esc_param) {
-        case 5:  handle_pgup(); break;   /* ESC [ 5 ~ = PgUp */
-        case 6:  handle_pgdn(); break;   /* ESC [ 6 ~ = PgDn */
-        default: break;
-        }
+        /* PgUp/PgDn no longer used — mouse click is on H/U keys now */
         break;
     default:
         break;
@@ -292,6 +314,8 @@ void diag_hid_feed(uint8_t ch) {
         } else if (ch == 0x18) {
             /* Ctrl-X → boot macro */
             start_boot_macro();
+        } else if (is_mouse_key(ch)) {
+            handle_mouse_key(ch);
         } else if (ch >= 0x20 && ch <= 0x7E) {
             type_ascii(ch);
         } else {
@@ -332,7 +356,7 @@ void diag_hid_feed(uint8_t ch) {
 void diag_hid_poll(void) {
     if (!active) return;
 
-    /* Service momentary click release (PgDn) */
+    /* Service momentary click release (H key) */
     if (click_pending) {
         if (absolute_time_diff_us(get_absolute_time(), click_release_at) <= 0) {
             click_pending = false;

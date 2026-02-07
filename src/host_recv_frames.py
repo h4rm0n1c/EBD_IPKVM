@@ -540,6 +540,7 @@ finally:
             pass
     try:
         os.write(ctrl_fd, b"p")
+        time.sleep(0.3)  # let CDC flush before closing fd drops DTR
     except OSError:
         pass
     if stream_fd is not None:
