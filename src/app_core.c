@@ -22,11 +22,18 @@
 
 #define CDC_CTRL 0
 
+#define CDC1_RING_SIZE 1024
+#define CDC1_RING_MASK (CDC1_RING_SIZE - 1)
+
 static app_core_config_t app_cfg;
 
 static volatile bool ps_on_state = false;
 static uint32_t usb_drops = 0;
 static uint16_t txq_offset = 0;
+
+static uint8_t cdc1_ring[CDC1_RING_SIZE];
+static uint16_t cdc1_ring_w = 0;
+static uint16_t cdc1_ring_r = 0;
 
 static uint8_t probe_buf[APP_PKT_MAX_BYTES];
 static volatile uint8_t probe_pending = 0;
@@ -101,20 +108,62 @@ static inline void stream_flush(void) {
     tud_vendor_flush();
 }
 
+static inline uint16_t cdc1_ring_used(void) {
+    return (uint16_t)((cdc1_ring_w - cdc1_ring_r) & CDC1_RING_MASK);
+}
+
+static inline uint16_t cdc1_ring_free(void) {
+    return (uint16_t)(CDC1_RING_MASK - cdc1_ring_used());
+}
+
 static void cdc_ctrl_write(const char *buf, size_t len) {
-    if (!tud_cdc_n_connected(CDC_CTRL) || len == 0) {
+    if (len == 0) {
         return;
     }
 
-    int avail = tud_cdc_n_write_available(CDC_CTRL);
-    if (avail < (int)len) {
-        return;
+    uint16_t free = cdc1_ring_free();
+    if (free < (uint16_t)len) {
+        return;  /* ring full — drop entire message to avoid partial lines */
     }
 
-    uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf, len);
-    if (wrote == len) {
+    for (size_t i = 0; i < len; i++) {
+        cdc1_ring[cdc1_ring_w] = (uint8_t)buf[i];
+        cdc1_ring_w = (uint16_t)((cdc1_ring_w + 1) & CDC1_RING_MASK);
+    }
+}
+
+static bool service_cdc1_tx(void) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        /* Host not listening — discard buffered text so it doesn't go stale */
+        cdc1_ring_r = cdc1_ring_w;
+        return false;
+    }
+
+    bool did_work = false;
+    while (cdc1_ring_r != cdc1_ring_w) {
+        int avail = tud_cdc_n_write_available(CDC_CTRL);
+        if (avail <= 0) break;
+
+        /* Build a contiguous chunk to write (up to avail bytes or wrap) */
+        uint16_t used = cdc1_ring_used();
+        uint16_t chunk = (uint16_t)avail;
+        if (chunk > used) chunk = used;
+
+        /* Don't wrap past end of backing array */
+        uint16_t to_end = (uint16_t)(CDC1_RING_SIZE - cdc1_ring_r);
+        if (chunk > to_end) chunk = to_end;
+
+        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &cdc1_ring[cdc1_ring_r], chunk);
+        if (wrote == 0) break;
+
+        cdc1_ring_r = (uint16_t)((cdc1_ring_r + wrote) & CDC1_RING_MASK);
+        did_work = true;
+    }
+
+    if (did_work) {
         tud_cdc_n_write_flush(CDC_CTRL);
     }
+    return did_work;
 }
 
 static void cdc_ctrl_printf(const char *fmt, ...) {
@@ -536,6 +585,12 @@ void app_core_poll(void) {
         active_start = time_us_32();
         debug_requested = false;
         emit_debug_state();
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+    /* Drain CDC1 ring buffer before video TX so status/control text
+     * gets priority over bulk video data. */
+    active_start = time_us_32();
+    if (service_cdc1_tx()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
     active_start = time_us_32();
