@@ -447,8 +447,8 @@ static bool poll_cdc_commands(void) {
                  * Valid range: 0x80-0x8F. */
                 uint8_t st1 = adb_spi_status();
                 uint8_t st2 = adb_spi_status();
-                const char *verdict = "(??)";
-                if (st2 == 0xFF)       verdict = "(BAD: MISO floating — check DI/DO wiring)";
+                const char *verdict = "(unknown)";
+                if (st2 == 0xFF)       verdict = "(BAD: MISO floating -- check DI/DO wiring)";
                 else if (st2 == 0x00)  verdict = "(BAD: no response — ATtiny85 not running?)";
                 else if ((st2 & 0xF0) == 0x80) verdict = "(ok)";
                 else                   verdict = "(BAD: unexpected — USI misaligned?)";
