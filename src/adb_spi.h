@@ -20,14 +20,19 @@
  * Mouse Y:   0xCN = Y+=N, 0xDN = Y-=N, 0xEN = Y+=N<<4, 0xFN = Y-=N<<4
  * Status:    0x01 = query status
  *
- * IMPORTANT: init/deinit are lazy — SPI is only active while diag mode
- * is running.  Pins are returned to safe hi-Z inputs on deinit so the
- * ATtiny85 USI isn't fed garbage at boot.
+ * Init is glitch-free (SCK/MOSI pre-conditioned to idle levels before
+ * mux switch) and zero-blocking.  The buffer flush is deferred to the
+ * first adb_spi_flush() call so boot-time init never does SPI traffic.
  */
 
-/* Bring up SPI0, claim pins, and flush trabular's buffers.
+/* Bring up SPI0 and claim pins (glitch-free, zero SPI traffic).
  * Safe to call multiple times (idempotent). */
 void adb_spi_init(void);
+
+/* Flush all trabular buffers (keyboard, mouse, arb device).
+ * Idempotent — only sends the clear commands once.
+ * Call this before the first real SPI traffic (e.g. on diag enter). */
+void adb_spi_flush(void);
 
 /* Release SPI0 and return pins to hi-Z inputs.
  * Safe to call when already deinited. */

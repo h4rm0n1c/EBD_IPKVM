@@ -25,6 +25,7 @@
 #define ADB_SPI_GAP_US  200
 
 static bool spi_active = false;
+static bool spi_flushed = false;
 
 /*
  * Park all three SPI pins as plain GPIO inputs with no pulls.
@@ -82,10 +83,17 @@ void adb_spi_init(void) {
     gpio_pull_up(ADB_PIN_MISO);
 
     spi_active = true;
+    /* No SPI traffic here — flush is deferred to adb_spi_flush()
+     * so that boot-time init is zero-blocking. */
+}
+
+void adb_spi_flush(void) {
+    if (!spi_active || spi_flushed) return;
+    spi_flushed = true;
 
     /*
-     * Belt-and-suspenders: flush every trabular buffer in case anything
-     * slipped through.
+     * Clear every trabular buffer so stale data (if any) doesn't
+     * leak onto the ADB bus.
      *
      * Trabular clear commands:
      *   0x05 = clear keyboard ring buffer

@@ -264,6 +264,7 @@ bool diag_hid_active(void) {
 }
 
 void diag_hid_enter(void) {
+    adb_spi_flush();  /* one-shot: clear any stale trabular buffers */
     active = true;
     esc = ESC_NONE;
     esc_param = 0;
