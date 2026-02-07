@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-07: Added 1KB application ring buffer for CDC1 outbound text with backpressure; bumped TinyUSB CDC TX buffer from 64 to 256 bytes. CDC1 drain runs before video TX in the core0 poll loop for priority.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
