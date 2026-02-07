@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "pico/bootrom.h"
+#include "pico/multicore.h"
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
@@ -469,6 +470,7 @@ static bool poll_cdc_commands(void) {
             txq_offset = 0;
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             sleep_ms(10);
+            multicore_reset_core1();   /* kill Core1 so bootrom USB works */
             reset_usb_boot(0, 0);
         } else if (ch == 'Z' || ch == 'z') {
             video_core_set_armed(false);
@@ -476,6 +478,7 @@ static bool poll_cdc_commands(void) {
             txq_offset = 0;
             core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
             sleep_ms(10);
+            multicore_reset_core1();   /* kill Core1 before watchdog reset */
             watchdog_reboot(0, 0, 0);
             while (true) { tight_loop_contents(); }
         } else if (ch == 'F' || ch == 'f') {
