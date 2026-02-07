@@ -442,14 +442,18 @@ static bool poll_cdc_commands(void) {
         if (ch == 'A' || ch == 'a') {
             diag_hid_enter();
             if (can_emit_text()) {
-                /* Probe trabular: status query should return 0x80|flags.
-                 * 0x00/0xFF = ATtiny85 not responding or USI misaligned.
-                 * Do it twice: first clears any stale USIDR, second is real. */
+                /* Probe trabular: status should return 0x8N (bit7 set, upper nibble only).
+                 * 0x00 = not responding.  0xFF = MISO floating (DO not connected).
+                 * Valid range: 0x80-0x8F. */
                 uint8_t st1 = adb_spi_status();
                 uint8_t st2 = adb_spi_status();
+                const char *verdict = "(??)";
+                if (st2 == 0xFF)       verdict = "(BAD: MISO floating — check DI/DO wiring)";
+                else if (st2 == 0x00)  verdict = "(BAD: no response — ATtiny85 not running?)";
+                else if ((st2 & 0xF0) == 0x80) verdict = "(ok)";
+                else                   verdict = "(BAD: unexpected — USI misaligned?)";
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  spi_status=0x%02X,0x%02X %s\n",
-                                st1, st2,
-                                (st2 & 0x80) ? "(ok)" : "(BAD: expect 0x8x)");
+                                st1, st2, verdict);
                 cdc_ctrl_printf("[EBD_IPKVM] IJKL=mouse H=click U=hold Ctrl-X=boot ESC-ESC=exit\n");
             }
         } else if (ch == 'R' || ch == 'r') {

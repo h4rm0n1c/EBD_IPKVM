@@ -7,9 +7,9 @@
  * SPI master driver for talking to an ATtiny85 running saybur/trabular firmware.
  *
  * Pico SPI0 pins:
- *   GP19 = MOSI (TX) → ATtiny85 PB1 (DI)
- *   GP16 = MISO (RX) ← ATtiny85 PB0 (DO)
- *   GP18 = SCK        → ATtiny85 PB2 (USCK)
+ *   GP19 = MOSI (TX) → ATtiny85 PB0 (DI, pin 5)
+ *   GP16 = MISO (RX) ← ATtiny85 PB1 (DO, pin 6)
+ *   GP18 = SCK        → ATtiny85 PB2 (USCK, pin 7)
  *
  * Trabular protocol: single-byte SPI transactions.
  *   Upper nibble = command, lower nibble = 4-bit payload.

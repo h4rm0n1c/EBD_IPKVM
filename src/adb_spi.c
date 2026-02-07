@@ -4,12 +4,18 @@
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
 
-/* SPI0 pin assignments — match the physical wiring to ATtiny85 USI. */
+/* SPI0 pin assignments — match the physical wiring to ATtiny85 USI.
+ *
+ * ATtiny85 USI three-wire pin roles:
+ *   PB0 (pin 5) = DI  — Data In  (slave receives from master MOSI)
+ *   PB1 (pin 6) = DO  — Data Out (slave sends to master MISO)
+ *   PB2 (pin 7) = USCK — Clock   (from master SCK)
+ */
 #define ADB_SPI_INST  spi0
-#define ADB_PIN_MISO  16   /* GP16 ← ATtiny85 PB0 (DO)   */
+#define ADB_PIN_MISO  16   /* GP16 ← ATtiny85 PB1 (DO)   */
 #define ADB_PIN_RESET 17   /* GP17 → ATtiny85 RESET (active low) */
 #define ADB_PIN_SCK   18   /* GP18 → ATtiny85 PB2 (USCK)  */
-#define ADB_PIN_MOSI  19   /* GP19 → ATtiny85 PB1 (DI)    */
+#define ADB_PIN_MOSI  19   /* GP19 → ATtiny85 PB0 (DI)    */
 
 /*
  * Clock speed.  The ATtiny85 USI is polled from trabular's main loop
