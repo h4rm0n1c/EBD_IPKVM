@@ -54,6 +54,7 @@ static volatile uint32_t diag_video_edges = 0;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
+static absolute_time_t spi_flush_at;  /* deferred trabular buffer flush */
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -585,6 +586,7 @@ void app_core_init(const app_core_config_t *cfg) {
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
+    spi_flush_at = make_timeout_time_ms(2000);  /* flush trabular 2 s after boot */
 }
 
 void app_core_poll(void) {
@@ -600,6 +602,14 @@ void app_core_poll(void) {
 
     /* Service ADB diag mode timed actions (click release, boot macro). */
     diag_hid_poll();
+
+    /* Deferred SPI flush: clear trabular buffers once, 2 s after boot.
+     * This can't run during init (blocks tud_task → USB crash), but must
+     * complete before the user enters diag mode so no garbage leaks. */
+    if (absolute_time_diff_us(get_absolute_time(), spi_flush_at) <= 0) {
+        spi_flush_at = at_the_end_of_time;  /* don't re-trigger */
+        adb_spi_flush();
+    }
 
     if (probe_pending) {
         active_start = time_us_32();
