@@ -4,7 +4,7 @@
 Macintosh Classic KVM:
 - Capture raw TTL video signals: PIXCLK + HSYNC + VSYNC + 1bpp VIDEO
 - RP2040 PIO+DMA capture → stream to a host/web UI
-- Future: External ADB keyboard+mouse (ATtiny85 via SPI), ATX soft power, reset/NMI
+- Future: External ADB keyboard+mouse (ATmega328p via UART1), ATX soft power, reset/NMI
 
 ## Current behavior (firmware)
 - GPIO pin mapping:
@@ -13,7 +13,8 @@ Macintosh Classic KVM:
   - `GPIO2` HSYNC (PIO input, active-low)
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
-  - `GPIO6`, `GPIO12` Reserved for future SPI communication with external ADB controller
+  - `GPIO20` UART1 TX to external ADB controller (ATmega328p)
+  - `GPIO21` UART1 RX from external ADB controller (ATmega328p, via resistor divider)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.

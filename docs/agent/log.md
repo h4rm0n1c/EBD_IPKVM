@@ -1,6 +1,7 @@
 # Log (running)
 
 - 2026-02-03: Reimplemented CDC1 ring-buffered control/status output with priority drain, bumped CDC TX buffer, and updated host tooling for CDC auto-detect + interactive relay.
+- 2026-02-04: Updated ADB documentation to use the MacFriends Arduino core on an ATmega328p over UART1 (GPIO20/21) and captured the wiring/level-shifting notes.
 - 2026-02-03: Fixed host receiver CDC auto-detect initialization order to avoid NameError on startup.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
