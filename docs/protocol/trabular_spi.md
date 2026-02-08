@@ -45,6 +45,23 @@ Example (status query):
 2. Wait at least one polling interval (≈50–150 µs).
 3. Send dummy byte `0x00` to clock out the status response.
 
+### Timing diagram (byte + dummy response)
+
+```
+MOSI:  [ CMD ] --------- [ 0x00 ]
+MISO:  [ prev ] -------- [ RESP ]
+SCK :  ||||||||         ||||||||
+         ^ 8 clocks        ^ 8 clocks
+         command in        response out
+         (gap ≈50–150 µs between transfers)
+```
+
+### Firmware alignment check (Pico)
+
+- `adb_spi_xfer()` performs an 8-bit SPI transfer, then waits the polling
+  gap (`ADB_SPI_GAP_US`) before the next transfer.
+- `adb_spi_status()` sends `0x01`, then sends `0x00` to clock out the response.
+
 ## Timing guidance
 
 - Use a conservative inter-byte gap (≈150 µs) to ensure the ATtiny85’s polling
