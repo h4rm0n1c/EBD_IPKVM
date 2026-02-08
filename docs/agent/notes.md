@@ -9,8 +9,8 @@
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
 - Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
-- Host scripts default to `/dev/ttyACM0` for the CDC0 stream and `/dev/ttyACM1` for CDC1 control unless overridden.
-- Linux udev symlinks include `if00` (CDC0 stream) and `if02` (CDC1 control); use `/dev/serial/by-id` for stable naming.
+- `host_recv_frames.py` auto-detects the CDC control port via `/dev/serial/by-id/*if01*`; pass `--ctrl-device` if udev naming is unavailable or ambiguous.
+- Linux udev symlinks include `if00` (CDC0 stream) and `if01` (CDC1 control); use `/dev/serial/by-id` for stable naming.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).

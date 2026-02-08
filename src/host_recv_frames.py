@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select, signal
+import os, sys, time, struct, fcntl, termios, select, signal, glob
 
 # Graceful shutdown flag for Ctrl+C
 interrupted = False
@@ -23,7 +23,7 @@ STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
 STREAM_DEV = "usb"
-CTRL_DEV = "/dev/ttyACM0"
+CTRL_DEV = None
 CTRL_MODE = "ep0"
 ARGS = []
 for arg in sys.argv[1:]:
@@ -82,11 +82,6 @@ for arg in sys.argv[1:]:
     else:
         ARGS.append(arg)
 
-if len(ARGS) > 0:
-    STREAM_DEV = ARGS[0]
-OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = None if STREAM_RAW else 100
-
 W = 512
 H = 342
 LINE_BYTES = 64
@@ -116,6 +111,29 @@ def log(message: str) -> None:
         return
     print(message, file=log_out)
 
+def auto_detect_ctrl_device():
+    by_id_dir = "/dev/serial/by-id"
+    if not os.path.isdir(by_id_dir):
+        return None, f"[host] {by_id_dir} is missing; CDC auto-detect is unavailable."
+    entries = sorted(glob.glob(os.path.join(by_id_dir, "*")))
+    matches = [e for e in entries if "if01" in os.path.basename(e)]
+    if not matches:
+        return None, "[host] CDC control port not found (expected /dev/serial/by-id/*if01*)."
+    if len(matches) > 1:
+        joined = "\n  ".join(matches)
+        return None, f"[host] multiple CDC control ports found:\n  {joined}"
+    return matches[0], None
+
+def set_cbreak(fd: int):
+    attr = termios.tcgetattr(fd)
+    new_attr = list(attr)
+    new_attr[3] &= ~(termios.ECHO | termios.ECHONL | termios.ICANON)
+    new_attr[3] |= termios.ISIG
+    new_attr[6][termios.VMIN] = 0
+    new_attr[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, new_attr)
+    return attr
+
 def set_raw_and_dtr(fd: int) -> None:
     # Raw mode (no translations, no line discipline surprises)
     attr = termios.tcgetattr(fd)
@@ -140,6 +158,19 @@ def set_raw_and_dtr(fd: int) -> None:
     status = struct.unpack("I", fcntl.ioctl(fd, TIOCMGET, struct.pack("I", 0)))[0]
     status |= (TIOCM_DTR | TIOCM_RTS)
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
+
+if len(ARGS) > 0:
+    STREAM_DEV = ARGS[0]
+OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
+MAX_FRAMES = None if STREAM_RAW else 100
+
+if CTRL_DEV is None:
+    CTRL_DEV, err = auto_detect_ctrl_device()
+    if err:
+        print(err, file=sys.stderr)
+        print("[host] supply a control device with --ctrl-device=/dev/ttyACM1.", file=sys.stderr)
+        sys.exit(2)
+    log(f"[host] auto-detected control CDC device: {CTRL_DEV}")
 
 def bytes_to_row64(b: bytes) -> bytes:
     # Expand 64 packed bytes to 512 bytes of 0/255
@@ -296,11 +327,31 @@ def read_usb_stream(ep_in, timeout_s: float) -> bytes:
     except Exception:
         return b""
 
+def service_cdc_relay(ready_fds, ctrl_fd, stdin_fd, relay_active):
+    if ctrl_fd in ready_fds:
+        try:
+            chunk = os.read(ctrl_fd, 1024)
+        except OSError:
+            chunk = b""
+        if chunk:
+            sys.stderr.buffer.write(chunk)
+            sys.stderr.buffer.flush()
+    if relay_active and stdin_fd in ready_fds:
+        try:
+            data = os.read(stdin_fd, 1024)
+        except OSError:
+            data = b""
+        if data:
+            os.write(ctrl_fd, data)
+
 use_usb_stream = STREAM_DEV == "usb" or STREAM_DEV.startswith("usb:")
 stream_fd = None
 usb_dev = None
 usb_intf = None
 usb_ep_in = None
+stdin_fd = None
+stdin_attr = None
+relay_active = False
 if use_usb_stream:
     usb_dev, usb_intf, usb_ep_in = open_usb_stream()
     ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
@@ -312,6 +363,11 @@ else:
     set_raw_and_dtr(ctrl_fd)
     if CTRL_MODE == "ep0":
         usb_dev = open_usb_device_for_control()
+
+if sys.stdin.isatty():
+    stdin_fd = sys.stdin.fileno()
+    stdin_attr = set_cbreak(stdin_fd)
+    relay_active = True
 
 if CTRL_MODE == "ep0" and usb_dev is None:
     print("[host] EP0 control selected but USB device is unavailable.", file=sys.stderr)
@@ -405,6 +461,10 @@ if STREAM_RAW:
     log(f"[host] reading {STREAM_DEV}, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 else:
     log(f"[host] reading {STREAM_DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+if relay_active:
+    log("[host] CDC relay enabled (stdin -> control, stderr <- CDC; cbreak mode).")
+    if STREAM_RAW:
+        log("[host] tip: keep ffplay -loglevel quiet so stderr stays readable.")
 
 buf = bytearray()
 frames = {}  # frame_id -> dict(line->row)
@@ -415,6 +475,7 @@ last_print = time.time()
 # Optional: If nothing arrives for a while, say so.
 last_rx = time.time()
 start_rx = last_rx
+stream_timeout = 0.05 if relay_active else 0.25
 
 try:
     while True:
@@ -424,13 +485,24 @@ try:
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
         if use_usb_stream:
-            chunk = read_usb_stream(usb_ep_in, 0.25)
+            relay_fds = [ctrl_fd]
+            if relay_active:
+                relay_fds.append(stdin_fd)
+            ready, _, _ = select.select(relay_fds, [], [], 0)
+            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
+            chunk = read_usb_stream(usb_ep_in, stream_timeout)
+            ready, _, _ = select.select(relay_fds, [], [], 0)
+            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
         else:
-            r, _, _ = select.select([stream_fd], [], [], 0.25)
-            if not r:
-                chunk = b""
-            else:
+            fds = [stream_fd, ctrl_fd]
+            if relay_active:
+                fds.append(stdin_fd)
+            ready, _, _ = select.select(fds, [], [], 0.25)
+            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
+            if stream_fd in ready:
                 chunk = os.read(stream_fd, 8192)
+            else:
+                chunk = b""
 
         if not chunk:
             now = time.time()
@@ -530,6 +602,8 @@ try:
             else:
                 log(f"[host] done={done_count}/100 (waiting for packets)")
 finally:
+    if relay_active and stdin_attr is not None:
+        termios.tcsetattr(stdin_fd, termios.TCSANOW, stdin_attr)
     if SEND_STOP:
         try:
             if CTRL_MODE == "ep0":
