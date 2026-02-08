@@ -90,3 +90,4 @@
 - 2026-02-03: Reduced ADB diag mouse-key step size to 5 px for movement testing.
 - 2026-02-03: Reordered SPI mouse motion nibbles to send low then high, matching trabatar’s serial ordering.
 - 2026-02-03: Defaulted ADB SPI command placement to low byte to match USI’s 16-clock capture of the last 8 bits.
+- 2026-02-03: Documented trabular mouse Talk reg0 byte format (Y then X with inverted button bits) for debugging ADB motion payloads.
