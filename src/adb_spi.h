@@ -24,10 +24,10 @@ typedef struct {
  *
  * Per-byte protocol:
  *   1. Assert CS low
- *   2. Clock 16 bits (MOSI out, MISO in; command byte placement is configurable)
- *   3. Wait >=150 µs with CS still low (ATtiny handle_data() gates on CS)
- *   4. Deassert CS high (resets USI 4-bit counter for clean next byte)
- *   5. Next MISO byte carries the response to the previous command
+ *   2. Clock 8-bit command byte
+ *   3. Clock 8-bit dummy byte to read the response (one-byte delayed)
+ *   4. Wait >=150 µs with CS still low (ATtiny handle_data() gates on CS)
+ *   5. Deassert CS high (resets USI counter for clean next byte)
  *
  * Trabular command encoding: upper nibble = command, lower = 4-bit payload.
  *   Keyboard:  0x4N low, 0x5N high → queues ADB keycode

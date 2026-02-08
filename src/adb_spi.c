@@ -38,16 +38,6 @@
  */
 #define ADB_SPI_GAP_US  150
 
-/*
- * Byte packing: 16-bit transfers can place the command byte in either
- * the high or low byte depending on the ATtiny85 USI handling.
- * Default to low-byte command (matches USI capture of the last 8 clocks),
- * but keep a compile-time switch for troubleshooting.
- */
-#ifndef ADB_SPI_CMD_IN_HIGH_BYTE
-#define ADB_SPI_CMD_IN_HIGH_BYTE 0
-#endif
-
 static bool spi_active = false;
 static bool spi_flushed = false;
 static uint8_t flush_step = 0;   /* 0 = not started, 1-5 = in progress, 6 = done */
@@ -133,17 +123,11 @@ void adb_spi_init(void) {
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire.
      *
-     * 16-bit frame: the ATtiny85 USI 4-bit counter resets to 0 when
-     * CS goes high (USISR = 0).  With positive-edge counting
-     * (USICS1=1, USICS0=0), 16 rising edges overflow the counter
-     * (0→15→overflow).  So we need 16-bit SPI frames.
-     *
-     * Byte packing (MSB-first):
-     *   TX: command in high or low byte (see ADB_SPI_CMD_IN_HIGH_BYTE)
-     *   RX: response to the prior command is read from the opposite byte
-     *       (low byte when command is high byte, or high byte when command
-     *       is low byte). */
-    spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+     * Trabular expects 8-bit command bytes. Responses are one byte delayed,
+     * so we transmit a command byte followed by a dummy byte to clock out
+     * the response to the command. CS should go high between commands to
+     * reset the USI counter. */
+    spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
@@ -211,35 +195,19 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
 
     /*
-     * 16-bit SPI frame, one command per CS cycle.
-     *
-     * TX word: command in high byte or low byte, 0x00 padding in the other.
-     * The ATtiny85 USI counter starts at 0 after CS reset.
-     * 16 rising edges cause overflow → handle_data() reads USIBR
-     * (= high byte = our command) and loads response into USIDR.
-     *
-     * RX word: response byte is the opposite of where we place the command;
-     * padding echo is the remaining byte (should be 0x00).
+     * 8-bit SPI command followed by a dummy byte to clock out the response.
+     * Response to cmd is shifted out during the dummy byte.
      */
-#if ADB_SPI_CMD_IN_HIGH_BYTE
-    uint16_t tx16 = (uint16_t)cmd << 8;   /* high = cmd, low = 0x00   */
-#else
-    uint16_t tx16 = (uint16_t)cmd;        /* high = 0x00, low = cmd   */
-#endif
-    uint16_t rx16 = 0;
+    uint8_t tx[2] = { cmd, 0x00 };
+    uint8_t rx[2] = { 0, 0 };
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
-    spi_write16_read16_blocking(ADB_SPI_INST, &tx16, &rx16, 1);
+    spi_write_read_blocking(ADB_SPI_INST, tx, rx, 2);
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
 
-#if ADB_SPI_CMD_IN_HIGH_BYTE
-    uint8_t response = (uint8_t)(rx16 & 0xFF); /* old USIDR            */
-    uint8_t echo     = (uint8_t)(rx16 >> 8);   /* padding echo         */
-#else
-    uint8_t response = (uint8_t)(rx16 >> 8);   /* old USIDR            */
-    uint8_t echo     = (uint8_t)(rx16 & 0xFF); /* padding echo         */
-#endif
+    uint8_t response = rx[1];
+    uint8_t echo     = rx[0];
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {

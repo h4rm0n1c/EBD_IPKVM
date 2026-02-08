@@ -95,3 +95,4 @@
 - 2026-02-03: Initialized the ATtiny85 SPI link before USB enumeration to have ADB ready earlier after power-up.
 - 2026-02-03: Delayed ATtiny85 SPI init until 500 ms after PS_ON so ADB comes up after Mac power-on.
 - 2026-02-03: Added a local trabular SPI interface guide documenting USI framing and command semantics.
+- 2026-02-03: Switched SPI transfers to 8-bit command + dummy byte to match trabular’s one-byte-delayed USI responses.
