@@ -146,8 +146,10 @@ static absolute_time_t click_release_at;
 static bool          boot_macro_active;
 static absolute_time_t boot_macro_end;
 
-/* Mouse movement step size per arrow-key press */
-#define MOUSE_STEP  8
+/* Mouse movement step size per key press.
+ * 48 gives clearly visible movement on 512x342 Mac screen.
+ * Increase if needed for faster traversal. */
+#define MOUSE_STEP  48
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 

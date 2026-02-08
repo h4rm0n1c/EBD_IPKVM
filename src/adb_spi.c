@@ -27,10 +27,10 @@
 #define ADB_SPI_BAUD  100000
 
 /*
- * Inter-byte gap.  CS must stay LOW during this delay so that
- * handle_data() sees CS=active and processes the byte.  If CS is
- * high when handle_data() checks, it discards the byte and resets
- * the USI counter (CS gate).
+ * Inter-byte gap.  After the 16-bit frame completes, keep CS LOW
+ * long enough for handle_data() to poll and process the overflow.
+ * handle_data() processes completed bytes regardless of CS state,
+ * then uses CS-high to reset the counter for the next frame.
  *
  * The ATtiny85 runs at 8 MHz (fuses confirmed), handle_data()
  * polling gap is ~50-100 µs during active ADB traffic.  150 µs
@@ -123,11 +123,19 @@ void adb_spi_init(void) {
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire.
      *
-     * 8-bit frame: the ATtiny85 CS gate (h4rm0n1c fork) presets the
-     * USI 4-bit counter to 8 via USISR = _BV(USIOIF) | 8.  So 8
-     * rising edges cause overflow (8→15→0).  Standard 8-bit SPI
-     * is exactly right — one overflow per byte, one byte per CS. */
-    spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+     * 16-bit frame: the ATtiny85 USI 4-bit counter resets to 0 when
+     * CS goes high (USISR = 0).  With positive-edge counting
+     * (USICS1=1, USICS0=0), 16 rising edges overflow the counter
+     * (0→15→overflow).  So we need 16-bit SPI frames.
+     *
+     * Byte packing (MSB-first):
+     *   TX: high byte = 0x00 padding, low byte = command
+     *     → first 8 clocks shift in padding (overwritten by cmd)
+     *     → last 8 clocks shift in command → USIDR after overflow
+     *   RX: high byte = old USIDR (response to prior cmd)
+     *     → first 8 clocks shift out old USIDR on MISO
+     *     → low byte = echo of padding (0x00) */
+    spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
@@ -195,31 +203,36 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
 
     /*
-     * 8-bit SPI frame, one byte per CS cycle.
+     * 16-bit SPI frame, one command per CS cycle.
      *
-     * The ATtiny85 CS gate presets USI counter to 8, so 8 rising
-     * edges cause overflow → handle_data() processes the byte.
+     * TX word: 0x00 (padding) in high byte, command in low byte.
+     * The ATtiny85 USI counter starts at 0 after CS reset.
+     * 16 rising edges cause overflow → handle_data() reads USIBR
+     * (= low byte = our command) and loads response into USIDR.
      *
-     * Full-duplex: MISO simultaneously clocks out the previous
-     * USIDR value (response to the prior command).
+     * RX word: high byte = old USIDR (response to prior command),
+     * low byte = echo of padding (should be 0x00).
      */
-    uint8_t tx = cmd;
-    uint8_t rx = 0;
+    uint16_t tx16 = (uint16_t)cmd;        /* high = 0x00, low = cmd   */
+    uint16_t rx16 = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
-    spi_write_read_blocking(ADB_SPI_INST, &tx, &rx, 1);
+    spi_write16_read16_blocking(ADB_SPI_INST, &tx16, &rx16, 1);
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
+
+    uint8_t response = (uint8_t)(rx16 >> 8);   /* old USIDR            */
+    uint8_t echo     = (uint8_t)(rx16 & 0xFF); /* padding echo         */
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {
         trace_buf[trace_count].tx   = cmd;
-        trace_buf[trace_count].rx   = rx;
-        trace_buf[trace_count].echo = 0;
+        trace_buf[trace_count].rx   = response;
+        trace_buf[trace_count].echo = echo;
         trace_count++;
     }
 
-    return rx;
+    return response;
 }
 
 void adb_spi_send_key(uint8_t adb_code, bool key_down) {

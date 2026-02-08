@@ -9,7 +9,7 @@
 typedef struct {
     uint8_t tx;     /* command sent                                  */
     uint8_t rx;     /* MISO byte (old USIDR = response to prior cmd) */
-    uint8_t echo;   /* reserved (0) — was used for 16-bit diag       */
+    uint8_t echo;   /* low byte of 16-bit RX (padding echo, expect 0) */
 } adb_spi_trace_entry_t;
 
 /*

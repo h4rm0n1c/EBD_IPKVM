@@ -437,14 +437,14 @@ static bool poll_cdc_commands(void) {
             if (!diag_hid_active() && can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF\n");
             }
-            /* Dump SPI trace: TX>RX for each xfer */
+            /* Dump SPI trace: TX>RX.EE for each xfer (EE=echo byte) */
             if (can_emit_text()) {
                 uint8_t tc = adb_spi_trace_count();
                 if (tc > 0) {
                     cdc_ctrl_printf("[spi]");
                     for (uint8_t ti = 0; ti < tc; ti++) {
                         adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
-                        cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                        cdc_ctrl_printf(" %02X>%02X.%02X", e.tx, e.rx, e.echo);
                     }
                     cdc_ctrl_printf("\n");
                 }
@@ -479,7 +479,7 @@ static bool poll_cdc_commands(void) {
                         cdc_ctrl_printf("[spi]");
                         for (uint8_t ti = 0; ti < tc; ti++) {
                             adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
-                            cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                            cdc_ctrl_printf(" %02X>%02X.%02X", e.tx, e.rx, e.echo);
                         }
                         cdc_ctrl_printf("\n");
                     }
