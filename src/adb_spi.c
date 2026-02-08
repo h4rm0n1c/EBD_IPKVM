@@ -13,7 +13,6 @@
  */
 #define ADB_SPI_INST  spi0
 #define ADB_PIN_MISO  16   /* GP16 ← ATtiny85 PB1 (DO, pin 6)   */
-#define ADB_PIN_RESET 17   /* GP17 → ATtiny85 RESET (active low) */
 #define ADB_PIN_SCK   18   /* GP18 → ATtiny85 PB2 (USCK, pin 7) */
 #define ADB_PIN_MOSI  19   /* GP19 → ATtiny85 PB0 (DI, pin 5)   */
 
@@ -60,30 +59,12 @@ static void park_pins(void) {
     gpio_disable_pulls(ADB_PIN_MOSI);
 }
 
-void adb_spi_hold_reset(void) {
-    /*
-     * Drive RESET low as early as possible to hold the ATtiny85 in
-     * reset while the Pico boots.  This prevents the USI from counting
-     * spurious clock edges on the still-floating SCK line.
-     *
-     * Call this BEFORE stdio_init_all() / tud_init() in main().
-     */
-    gpio_init(ADB_PIN_RESET);
-    gpio_set_dir(ADB_PIN_RESET, GPIO_OUT);
-    gpio_put(ADB_PIN_RESET, 0);           /* hold ATtiny85 in reset */
-
-    gpio_init(ADB_PIN_SCK);
-    gpio_set_dir(ADB_PIN_SCK, GPIO_OUT);
-    gpio_put(ADB_PIN_SCK, 0);             /* SCK low before USI starts */
-}
-
 void adb_spi_init(void) {
     if (spi_active) return;
 
     /*
-     * Glitch-free pin handoff: SCK was already driven LOW by
-     * adb_spi_hold_reset() at the top of main().  Ensure MOSI is
-     * also at its idle level before switching the mux.
+     * Glitch-free pin handoff: ensure SCK/MOSI are driven LOW
+     * before switching the mux.
      *
      *   CPOL=0 → SCK idles LOW  (already set)
      *   MOSI   → LOW (no data)
@@ -124,12 +105,6 @@ void adb_spi_init(void) {
     gpio_pull_down(ADB_PIN_MISO);
 
     spi_active = true;
-
-    /*
-     * Release ATtiny85 from reset.  SCK is now driven LOW by the SPI
-     * peripheral, so the ATtiny85 USI counter starts clean at 0.
-     */
-    gpio_put(ADB_PIN_RESET, 1);
 
     /* No SPI traffic here — flush is deferred to adb_spi_flush()
      * so that boot-time init is zero-blocking. */

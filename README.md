@@ -18,7 +18,6 @@ Above output is current project output as of PR #19.
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
 - `GPIO16` — SPI0 MISO from ATtiny85 (trabular DO)
-- `GPIO17` — ATtiny85 RESET (active low)
 - `GPIO18` — SPI0 SCK to ATtiny85
 - `GPIO19` — SPI0 MOSI to ATtiny85 (trabular DI)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)

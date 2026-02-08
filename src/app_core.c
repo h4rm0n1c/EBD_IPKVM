@@ -457,7 +457,6 @@ static bool poll_cdc_commands(void) {
             if (can_emit_text()) {
                 /* Probe trabular: status should return 0x8N (bit7 set).
                  * 0x00 = not responding.  0xFF = MISO floating. */
-                bool rst_pin = gpio_get(17);  /* GP17 = ATtiny85 RESET */
                 adb_spi_trace_reset();
                 uint8_t st1 = adb_spi_status();
                 uint8_t st2 = adb_spi_status();
@@ -470,8 +469,8 @@ static bool poll_cdc_commands(void) {
                     verdict = "(ok)";
                 else
                     verdict = "(unexpected -- USI misaligned?)";
-                cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  rst=%d spi=0x%02X,0x%02X %s\n",
-                                rst_pin ? 1 : 0, st1, st2, verdict);
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  spi=0x%02X,0x%02X %s\n",
+                                st1, st2, verdict);
                 /* Dump raw SPI trace from status queries */
                 {
                     uint8_t tc = adb_spi_trace_count();

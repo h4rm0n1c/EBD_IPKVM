@@ -14,7 +14,6 @@ Macintosh Classic KVM:
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
   - `GPIO16` SPI0 MISO from ATtiny85 (trabular DO)
-  - `GPIO17` ATtiny85 RESET (active low)
   - `GPIO18` SPI0 SCK to ATtiny85
   - `GPIO19` SPI0 MOSI to ATtiny85 (trabular DI)
 - Capture window:

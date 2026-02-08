@@ -16,7 +16,6 @@ typedef struct {
  *
  * Pico SPI0 pins:
  *   GP16 = MISO (RX) ← ATtiny85 PB1 (DO, pin 6)
- *   GP17 = RESET      → ATtiny85 /RESET (pin 1, active low)
  *   GP18 = SCK        → ATtiny85 PB2 (USCK, pin 7)
  *   GP19 = MOSI (TX)  → ATtiny85 PB0 (DI, pin 5)
  *
@@ -36,12 +35,7 @@ typedef struct {
  * and zero-blocking.  Flush is deferred to adb_spi_flush().
  */
 
-/* Hold ATtiny85 in reset (GP17 LOW), drive SCK LOW.
- * Call this as early as possible in main(), before stdio/USB init,
- * so the ATtiny85 USI never sees spurious clock edges. */
-void adb_spi_hold_reset(void);
-
-/* Bring up SPI0, claim pins, then release ATtiny85 from reset.
+/* Bring up SPI0 and claim pins.
  * SCK is stable LOW before the ATtiny85 USI starts counting.
  * Safe to call multiple times (idempotent). */
 void adb_spi_init(void);
