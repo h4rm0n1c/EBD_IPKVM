@@ -24,7 +24,7 @@ typedef struct {
  *
  * Per-byte protocol:
  *   1. Assert CS low
- *   2. Clock 8 bits (MOSI out, MISO in)
+ *   2. Clock 16 bits (MOSI out, MISO in; command in high byte)
  *   3. Wait >=150 µs with CS still low (ATtiny handle_data() gates on CS)
  *   4. Deassert CS high (resets USI 4-bit counter for clean next byte)
  *   5. Next MISO byte carries the response to the previous command

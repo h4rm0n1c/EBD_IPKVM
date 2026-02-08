@@ -41,3 +41,4 @@
 - 2026-01-25: Add runtime CDC toggle for PIXCLK edge selection to diagnose sampling phase.
 
 - 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
+- 2026-02-03: Align ATtiny85/trabular SPI framing to send command bytes in the high byte of 16-bit transfers and read responses from the low byte, matching observed bus captures.

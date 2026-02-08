@@ -129,12 +129,12 @@ void adb_spi_init(void) {
      * (0→15→overflow).  So we need 16-bit SPI frames.
      *
      * Byte packing (MSB-first):
-     *   TX: high byte = 0x00 padding, low byte = command
-     *     → first 8 clocks shift in padding (overwritten by cmd)
-     *     → last 8 clocks shift in command → USIDR after overflow
-     *   RX: high byte = old USIDR (response to prior cmd)
-     *     → first 8 clocks shift out old USIDR on MISO
-     *     → low byte = echo of padding (0x00) */
+     *   TX: high byte = command, low byte = 0x00 padding
+     *     → first 8 clocks shift in command → USIDR after overflow
+     *     → last 8 clocks shift in padding
+     *   RX: low byte = response to prior cmd
+     *     → last 8 clocks shift out old USIDR on MISO
+     *     → high byte = padding echo (0x00) */
     spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
@@ -205,15 +205,15 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     /*
      * 16-bit SPI frame, one command per CS cycle.
      *
-     * TX word: 0x00 (padding) in high byte, command in low byte.
+     * TX word: command in high byte, 0x00 padding in low byte.
      * The ATtiny85 USI counter starts at 0 after CS reset.
      * 16 rising edges cause overflow → handle_data() reads USIBR
-     * (= low byte = our command) and loads response into USIDR.
+     * (= high byte = our command) and loads response into USIDR.
      *
-     * RX word: high byte = old USIDR (response to prior command),
-     * low byte = echo of padding (should be 0x00).
+     * RX word: low byte = old USIDR (response to prior command),
+     * high byte = echo of padding (should be 0x00).
      */
-    uint16_t tx16 = (uint16_t)cmd;        /* high = 0x00, low = cmd   */
+    uint16_t tx16 = (uint16_t)cmd << 8;   /* high = cmd, low = 0x00   */
     uint16_t rx16 = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
@@ -221,8 +221,8 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
 
-    uint8_t response = (uint8_t)(rx16 >> 8);   /* old USIDR            */
-    uint8_t echo     = (uint8_t)(rx16 & 0xFF); /* padding echo         */
+    uint8_t response = (uint8_t)(rx16 & 0xFF); /* old USIDR            */
+    uint8_t echo     = (uint8_t)(rx16 >> 8);   /* padding echo         */
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {

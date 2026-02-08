@@ -83,3 +83,4 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+- 2026-02-03: Adjusted ATtiny85/trabular SPI framing to send commands in the high byte and read responses from the low byte.
