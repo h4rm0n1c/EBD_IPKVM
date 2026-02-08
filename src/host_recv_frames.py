@@ -82,19 +82,6 @@ for arg in sys.argv[1:]:
     else:
         ARGS.append(arg)
 
-if len(ARGS) > 0:
-    STREAM_DEV = ARGS[0]
-OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = None if STREAM_RAW else 100
-
-if CTRL_DEV is None:
-    CTRL_DEV, err = auto_detect_ctrl_device()
-    if err:
-        print(err, file=sys.stderr)
-        print("[host] supply a control device with --ctrl-device=/dev/ttyACM1.", file=sys.stderr)
-        sys.exit(2)
-    log(f"[host] auto-detected control CDC device: {CTRL_DEV}")
-
 W = 512
 H = 342
 LINE_BYTES = 64
@@ -171,6 +158,19 @@ def set_raw_and_dtr(fd: int) -> None:
     status = struct.unpack("I", fcntl.ioctl(fd, TIOCMGET, struct.pack("I", 0)))[0]
     status |= (TIOCM_DTR | TIOCM_RTS)
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
+
+if len(ARGS) > 0:
+    STREAM_DEV = ARGS[0]
+OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
+MAX_FRAMES = None if STREAM_RAW else 100
+
+if CTRL_DEV is None:
+    CTRL_DEV, err = auto_detect_ctrl_device()
+    if err:
+        print(err, file=sys.stderr)
+        print("[host] supply a control device with --ctrl-device=/dev/ttyACM1.", file=sys.stderr)
+        sys.exit(2)
+    log(f"[host] auto-detected control CDC device: {CTRL_DEV}")
 
 def bytes_to_row64(b: bytes) -> bytes:
     # Expand 64 packed bytes to 512 bytes of 0/255
