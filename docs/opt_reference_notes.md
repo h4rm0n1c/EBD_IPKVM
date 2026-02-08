@@ -26,13 +26,17 @@ This repo includes a Pico-based logic analyzer with an optimized USB CDC protoco
 
 PicoVGA demonstrates a stable pattern for running video timing generation on the RP2040’s second core while leaving core0 for application logic. The README explicitly calls out “uses only 2nd core,” and the library’s `StartVgaCore()`/`VgaInitReq()` APIs in `src/vga.h` show how it hands off the video pipeline to core1. This is relevant if we decide to move video capture or stream packaging into a dedicated core while keeping USB/network orchestration on core0.
 
-## /opt/adb/hootswitch (ADB switch firmware)
+## /opt/adb/trabular (AVR ADB firmware)
 
-Hootswitch is an RP2040-based ADB multiplexer that already implements ADB bus timing in PIO with a CPU-side state machine. The `bus.pio` file provides both host and device implementations (TX, RX, attention detect, reset), and the `computer.c` logic handles device-side state transitions, collision detection, SRQ gating, and register handling. We can use this as the canonical reference for our ADB device emulation on EBD_IPKVM, trimming it down to a single keyboard + mouse device and mapping it onto PIO1 to avoid the video capture PIO.
+Trabular is the ATtiny85-targeted ADB keyboard/mouse firmware we run on the external ADB controller. Use this as the canonical reference for the SPI command format, status responses, and ADB timing expectations.
+
+## /opt/adb/trabatar (trabular serial driver)
+
+Trabatar is a reference host-side driver that exercises trabular over a serial link. It is useful for confirming framing expectations and response timing without changing the underlying trabular command set.
 
 ## /opt/adb/miscdocs (ADB PDFs + technotes)
 
-This folder includes the Apple ADB Manager PDF, the hardware technote (HW01), and Microchip AN591B. Together these provide the ADB protocol overview, register semantics, and low-level timing references we can cross-check against hootswitch and our own PIO programs.
+This folder includes the Apple ADB Manager PDF, the hardware technote (HW01), and Microchip AN591B. Together these provide the ADB protocol overview, register semantics, and low-level timing references we can cross-check against trabular and our own ADB link.
 
 ## Relationship to existing docs
 

@@ -2,7 +2,7 @@
 
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
-- 2026-02-03: Base ADB device emulation on hootswitch’s PIO+DMA bus engine and device-side state machine, trimmed to a single keyboard+mouse.
+- 2026-02-03: Base ADB device emulation on external ATtiny85 firmware (trabular) with the Pico speaking the SPI command protocol.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.
 - 2026-02-01: Define core utilization metrics as active USB/capture/TX queue work time (not full loop occupancy) to better reflect pipeline load.
@@ -42,3 +42,4 @@
 
 - 2026-02-02: Plan ADB emulation with a PIO-based bus engine serviced on core1 and a core0-facing API plus a third CDC test channel.
 - 2026-02-03: Align ATtiny85/trabular SPI framing to send command bytes in the high byte of 16-bit transfers and read responses from the low byte, matching observed bus captures.
+- 2026-02-03: Adopt `/opt/adb/trabular` and `/opt/adb/trabatar` as primary ADB reference sources; remove hootswitch from the reference set.

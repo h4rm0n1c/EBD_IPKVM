@@ -51,8 +51,8 @@ Previous exploration of on-Pico ADB implementation identified these key resource
 
 - **ADB Manager PDF**: Device addressing, handler IDs, register protocol
 - **AN591B (Microchip)**: Timing specifications, bus waveforms
-- **hootswitch**: RP2040 PIO + DMA ADB implementation (host + device)
-- **trabular**: AVR ADB keyboard + mouse emulation firmware
+- **trabular**: AVR ADB keyboard + mouse emulation firmware (`/opt/adb/trabular`)
+- **trabatar**: Example of driving trabular over a serial link (`/opt/adb/trabatar`)
 - **adb-usb**: Simple ADB host implementation
 
 These remain valuable for the external controller approach.

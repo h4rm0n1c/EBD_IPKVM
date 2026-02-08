@@ -1,8 +1,8 @@
 # Log (running)
 
 - 2026-02-07: Added 1KB application ring buffer for CDC1 outbound text with backpressure; bumped TinyUSB CDC TX buffer from 64 to 256 bytes. CDC1 drain runs before video TX in the core0 poll loop for priority.
-- 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
-- 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
+- 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including trabular, trabatar, and ADB miscdocs.
+- 2026-02-03: Updated ADB documentation to reflect external ATtiny85/trabular planning, AppleCore naming, and GPIO6/12 wiring.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
 - 2026-02-02: Added flash/build and serial console helper scripts under scripts/ for Pico workflows.
 - 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.
@@ -85,3 +85,4 @@
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
 - 2026-02-03: Adjusted ATtiny85/trabular SPI framing to send commands in the high byte and read responses from the low byte.
 - 2026-02-03: Added a compile-time switch to flip SPI command byte placement for ATtiny85 USI troubleshooting.
+- 2026-02-03: Updated ADB reference notes to point at /opt/adb/trabular and /opt/adb/trabatar (hootswitch removed).
