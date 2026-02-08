@@ -651,12 +651,13 @@ void app_core_poll(void) {
     /* Service ADB diag mode timed actions (click release, boot macro). */
     diag_hid_poll();
 
-    /* Deferred SPI flush: clear trabular buffers once, 2 s after boot.
-     * This can't run during init (blocks tud_task → USB crash), but must
-     * complete before the user enters diag mode so no garbage leaks. */
+    /* Deferred SPI flush: clear trabular buffers, one byte per poll
+     * iteration (500 µs each).  Starts 2 s after boot.  Each call to
+     * adb_spi_flush() sends one command and returns false until done. */
     if (absolute_time_diff_us(get_absolute_time(), spi_flush_at) <= 0) {
-        spi_flush_at = at_the_end_of_time;  /* don't re-trigger */
-        adb_spi_flush();
+        if (adb_spi_flush()) {
+            spi_flush_at = at_the_end_of_time;  /* all done, stop */
+        }
     }
 
     if (probe_pending) {

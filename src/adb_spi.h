@@ -44,9 +44,10 @@ void adb_spi_hold_reset(void);
 void adb_spi_init(void);
 
 /* Flush all trabular buffers (keyboard, mouse, arb device).
- * Idempotent — only sends the clear commands once.
- * Call this before the first real SPI traffic (e.g. on diag enter). */
-void adb_spi_flush(void);
+ * Sends ONE clear command per call so the caller can yield to
+ * tud_task() between bytes.  Returns true when flush is complete.
+ * Idempotent — subsequent calls after completion return true immediately. */
+bool adb_spi_flush(void);
 
 /* Release SPI0 and return pins to hi-Z inputs.
  * Safe to call when already deinited. */

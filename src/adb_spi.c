@@ -36,10 +36,15 @@
 
 static bool spi_active = false;
 static bool spi_flushed = false;
+static uint8_t flush_step = 0;   /* 0 = not started, 1-5 = in progress, 6 = done */
 
 /* ── SPI trace ring buffer ─────────────────────────────────────────── */
 static adb_spi_trace_entry_t trace_buf[ADB_SPI_TRACE_LEN];
 static uint8_t trace_count = 0;
+
+/* Trabular clear commands sent during flush (one per poll iteration). */
+static const uint8_t flush_cmds[] = { 0x05, 0x06, 0x07, 0x08, 0x03 };
+#define FLUSH_CMD_COUNT (sizeof(flush_cmds) / sizeof(flush_cmds[0]))
 
 /*
  * Park all three SPI pins as plain GPIO inputs with no pulls.
@@ -131,13 +136,13 @@ void adb_spi_init(void) {
      * so that boot-time init is zero-blocking. */
 }
 
-void adb_spi_flush(void) {
-    if (!spi_active || spi_flushed) return;
-    spi_flushed = true;
+bool adb_spi_flush(void) {
+    if (!spi_active) return true;
+    if (spi_flushed) return true;
 
     /*
-     * Clear every trabular buffer so stale data (if any) doesn't
-     * leak onto the ADB bus.
+     * Send ONE clear command per call so the caller can service
+     * tud_task() between bytes.  Returns true when all done.
      *
      * Trabular clear commands:
      *   0x05 = clear keyboard ring buffer
@@ -146,11 +151,14 @@ void adb_spi_flush(void) {
      *   0x08 = clear mouse Y accumulator
      *   0x03 = clear arbitrary device reg 0
      */
-    adb_spi_xfer(0x05);
-    adb_spi_xfer(0x06);
-    adb_spi_xfer(0x07);
-    adb_spi_xfer(0x08);
-    adb_spi_xfer(0x03);
+    if (flush_step < FLUSH_CMD_COUNT) {
+        adb_spi_xfer(flush_cmds[flush_step]);
+        flush_step++;
+        return false;  /* more to do */
+    }
+
+    spi_flushed = true;
+    return true;  /* done */
 }
 
 void adb_spi_deinit(void) {

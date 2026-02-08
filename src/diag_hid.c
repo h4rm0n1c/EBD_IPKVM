@@ -286,7 +286,9 @@ bool diag_hid_active(void) {
 }
 
 void diag_hid_enter(void) {
-    adb_spi_flush();  /* one-shot: clear any stale trabular buffers */
+    /* Finish any remaining flush steps (usually already done by the
+     * deferred flush in app_core_poll, but be safe). */
+    while (!adb_spi_flush()) {};
     active = true;
     esc = ESC_NONE;
     esc_param = 0;
