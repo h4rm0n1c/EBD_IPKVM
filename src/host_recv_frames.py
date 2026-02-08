@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select, signal, tty
+import glob, os, sys, time, struct, fcntl, termios, select, signal, tty
 
 # Graceful shutdown flag for Ctrl+C
 interrupted = False
@@ -23,7 +23,7 @@ STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
 STREAM_DEV = "usb"
-CTRL_DEV = "/dev/ttyACM0"
+CTRL_DEV = None  # auto-detect via /dev/serial/by-id
 CTRL_MODE = "ep0"
 ARGS = []
 for arg in sys.argv[1:]:
@@ -202,6 +202,21 @@ def pop_one_packet(buf: bytearray):
     pkt = bytes(buf[:total_len])
     del buf[:total_len]
     return pkt
+
+def find_ctrl_device():
+    """Auto-detect the EBD_IPKVM CDC control port via /dev/serial/by-id."""
+    matches = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_EBD_IPKVM_*-if01")
+    if matches:
+        return matches[0]
+    return None
+
+if CTRL_DEV is None:
+    CTRL_DEV = find_ctrl_device()
+    if CTRL_DEV is None:
+        print("[host] EBD_IPKVM CDC port not found in /dev/serial/by-id/", file=sys.stderr)
+        print("[host] use --ctrl-device=/dev/ttyACMx to specify manually", file=sys.stderr)
+        sys.exit(2)
+    print(f"[host] ctrl: {CTRL_DEV}", file=sys.stderr)
 
 USB_VID = 0x2E8A
 USB_PID = 0x000A

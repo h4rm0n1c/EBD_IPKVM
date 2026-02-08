@@ -315,6 +315,6 @@ uint8_t adb_spi_trace_count(void) {
 
 adb_spi_trace_entry_t adb_spi_trace_entry(uint8_t idx) {
     if (idx < trace_count) return trace_buf[idx];
-    adb_spi_trace_entry_t empty = {0, 0};
+    adb_spi_trace_entry_t empty = {0, 0, 0};
     return empty;
 }
