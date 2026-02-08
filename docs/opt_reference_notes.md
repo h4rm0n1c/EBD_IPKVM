@@ -29,6 +29,7 @@ PicoVGA demonstrates a stable pattern for running video timing generation on the
 ## /opt/adb/trabular (AVR ADB firmware)
 
 Trabular is the ATtiny85-targeted ADB keyboard/mouse firmware we run on the external ADB controller. Use this as the canonical reference for the SPI command format, status responses, and ADB timing expectations.
+See `docs/trabular_spi_interface_guide.md` for the command/framing summary we use internally.
 
 ## /opt/adb/trabatar (trabular serial driver)
 
