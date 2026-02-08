@@ -27,12 +27,19 @@
 /*
  * Inter-byte gap.  After each SPI byte the ATtiny85 needs time to
  * process the command via handle_serial_data() and load the reply
- * into USIDR before the next transfer starts.  200 µs is safe.
+ * into USIDR before the next transfer starts.
+ *
+ * 500 µs to be safe in case CKDIV8 fuse is still programmed (1 MHz
+ * instead of 8 MHz → main-loop poll interval ~400-1200 µs).
  */
-#define ADB_SPI_GAP_US  200
+#define ADB_SPI_GAP_US  500
 
 static bool spi_active = false;
 static bool spi_flushed = false;
+
+/* ── SPI trace ring buffer ─────────────────────────────────────────── */
+static adb_spi_trace_entry_t trace_buf[ADB_SPI_TRACE_LEN];
+static uint8_t trace_count = 0;
 
 /*
  * Park all three SPI pins as plain GPIO inputs with no pulls.
@@ -163,6 +170,14 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     uint8_t rx = 0;
     spi_write_read_blocking(ADB_SPI_INST, &cmd, &rx, 1);
     sleep_us(ADB_SPI_GAP_US);
+
+    /* Record in trace buffer */
+    if (trace_count < ADB_SPI_TRACE_LEN) {
+        trace_buf[trace_count].tx = cmd;
+        trace_buf[trace_count].rx = rx;
+        trace_count++;
+    }
+
     return rx;
 }
 
@@ -233,4 +248,20 @@ uint8_t adb_spi_status(void) {
      */
     adb_spi_xfer(0x01);          /* request status         */
     return adb_spi_xfer(0x00);   /* clock out the response */
+}
+
+/* ── Trace API ─────────────────────────────────────────────────────── */
+
+void adb_spi_trace_reset(void) {
+    trace_count = 0;
+}
+
+uint8_t adb_spi_trace_count(void) {
+    return trace_count;
+}
+
+adb_spi_trace_entry_t adb_spi_trace_entry(uint8_t idx) {
+    if (idx < trace_count) return trace_buf[idx];
+    adb_spi_trace_entry_t empty = {0, 0};
+    return empty;
 }

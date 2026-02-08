@@ -431,10 +431,23 @@ static bool poll_cdc_commands(void) {
          * processing many without yielding starves USB and crashes
          * the video pipeline. */
         if (diag_hid_active()) {
+            adb_spi_trace_reset();
             diag_hid_feed(ch);
             /* Check if feed just exited diag mode (double-ESC) */
             if (!diag_hid_active() && can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF\n");
+            }
+            /* Dump SPI trace so we can see what bytes went to ATtiny85 */
+            if (can_emit_text()) {
+                uint8_t tc = adb_spi_trace_count();
+                if (tc > 0) {
+                    cdc_ctrl_printf("[spi]");
+                    for (uint8_t ti = 0; ti < tc; ti++) {
+                        adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
+                        cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                    }
+                    cdc_ctrl_printf("\n");
+                }
             }
             break;  /* yield to tud_task() after each diag keystroke */
         }
@@ -446,6 +459,7 @@ static bool poll_cdc_commands(void) {
                  * 0x00 = not responding.  0xFF = MISO floating (DO not connected).
                  * Valid range: 0x80-0x8F. */
                 bool rst_pin = gpio_get(17);  /* GP17 = ATtiny85 RESET */
+                adb_spi_trace_reset();
                 uint8_t st1 = adb_spi_status();
                 uint8_t st2 = adb_spi_status();
                 const char *verdict = "(unknown)";
@@ -455,6 +469,18 @@ static bool poll_cdc_commands(void) {
                 else                   verdict = "(unexpected -- USI misaligned?)";
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  rst=%d spi=0x%02X,0x%02X %s\n",
                                 rst_pin ? 1 : 0, st1, st2, verdict);
+                /* Dump raw SPI trace from status queries */
+                {
+                    uint8_t tc = adb_spi_trace_count();
+                    if (tc > 0) {
+                        cdc_ctrl_printf("[spi]");
+                        for (uint8_t ti = 0; ti < tc; ti++) {
+                            adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
+                            cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                        }
+                        cdc_ctrl_printf("\n");
+                    }
+                }
                 cdc_ctrl_printf("[EBD_IPKVM] IJKL=mouse H=click U=hold Ctrl-X=boot ESC-ESC=exit\n");
             }
         } else if (ch == 'R' || ch == 'r') {

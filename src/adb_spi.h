@@ -3,6 +3,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* ── SPI trace buffer (diagnostic) ────────────────────────────────── */
+#define ADB_SPI_TRACE_LEN 16
+
+typedef struct {
+    uint8_t tx;
+    uint8_t rx;
+} adb_spi_trace_entry_t;
+
 /*
  * SPI master driver for talking to an ATtiny85 running saybur/trabular firmware.
  *
@@ -63,3 +71,12 @@ void adb_spi_move_mouse(int8_t dx, int8_t dy);
 
 /* Query trabular status byte. */
 uint8_t adb_spi_status(void);
+
+/* Reset the trace buffer (call before the operation you want to trace). */
+void adb_spi_trace_reset(void);
+
+/* Number of entries currently in the trace buffer. */
+uint8_t adb_spi_trace_count(void);
+
+/* Get a trace entry by index (0..count-1).  Returns {0,0} if out of range. */
+adb_spi_trace_entry_t adb_spi_trace_entry(uint8_t idx);
