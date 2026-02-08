@@ -32,6 +32,12 @@ Trabular provides the AVR ADB keyboard/mouse/arb-device implementation we run
 on the external ATtiny85. Its `serial.c` and `serial.h` define the SPI/USART
 command protocol and polling cadence that the Pico must follow.
 
+## /opt/adb/trabatar (Java UART host)
+
+Trabatar is a Java desktop app that talks to trabular over UART to forward
+keyboard/mouse input to a classic Mac. It is a useful reference for the host
+command set and transaction cadence when using the UART transport.
+
 ## /opt/adb/miscdocs (ADB PDFs + technotes)
 
 This folder includes the Apple ADB Manager PDF, the hardware technote (HW01),

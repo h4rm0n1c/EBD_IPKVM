@@ -18,3 +18,4 @@
 - Trabular SPI cadence: the serial handler must run roughly every 50–70 µs, so SPI bytes should be paced to give the ATtiny85 polling loop time to service USIOIF.
 - Trabular SPI responses are returned on the next transfer; hosts must clock a dummy byte after command bytes that expect replies (e.g., status).
 - Trabular SPI host flow must follow: command byte → wait/poll window → dummy byte (0x00) to clock out the response; responses are always one transfer late due to USIDR being loaded after handle_data() runs.
+- `/opt/adb/trabatar` is a Java UART host for trabular that forwards keyboard/mouse input; use it as a reference for UART-side command sequencing and response handling.

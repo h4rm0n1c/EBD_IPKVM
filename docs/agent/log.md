@@ -1,6 +1,7 @@
 # Log (running)
 
 - 2026-02-07: Added 1KB application ring buffer for CDC1 outbound text with backpressure; bumped TinyUSB CDC TX buffer from 64 to 256 bytes. CDC1 drain runs before video TX in the core0 poll loop for priority.
+- 2026-02-07: Added /opt/adb/trabatar as a UART host reference for trabular command sequencing.
 - 2026-02-07: Documented trabular SPI learnings: command→wait→dummy transfer to clock responses and one-byte-late USIDR behavior.
 - 2026-02-07: Reverted trabular SPI framing to 8-bit transfers with a follow-up 0x00 dummy byte to clock responses.
 - 2026-02-07: Dropped the ATtiny85 reset pin from the trabular SPI wiring and diagnostics to match the minimal 3-wire link.
