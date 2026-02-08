@@ -41,7 +41,8 @@ register 2). The response is returned on the **next** SPI transfer.
 Example (status query):
 
 1. Send `0x01` (TALK STATUS).
-2. Send dummy byte `0x00` to clock out the status response.
+2. Wait at least one polling interval (≈50–150 µs).
+3. Send dummy byte `0x00` to clock out the status response.
 
 ## Timing guidance
 

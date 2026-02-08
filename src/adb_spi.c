@@ -258,8 +258,8 @@ uint8_t adb_spi_status(void) {
     /*
      * Full-duplex one-behind timing: the RX byte of each transfer
      * is the USIDR that handle_data() wrote *after the previous*
-     * transfer.  So: send 0x01 (query), then 0x00 (NOP) to clock
-     * out the actual status response.
+     * transfer.  So: send 0x01 (query), wait for the poll gap,
+     * then 0x00 (NOP) to clock out the actual status response.
      */
     adb_spi_xfer(0x01);          /* request status         */
     return adb_spi_xfer(0x00);   /* clock out the response */
