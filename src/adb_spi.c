@@ -10,12 +10,14 @@
  *   PB0 (pin 5) = DI  — Data In  (slave receives from master MOSI)
  *   PB1 (pin 6) = DO  — Data Out (slave sends to master MISO)
  *   PB2 (pin 7) = USCK — Clock   (from master SCK)
+ *   PB4 (pin 3) = CS  — Chip Select (active low, resets USI counter)
  */
 #define ADB_SPI_INST  spi0
-#define ADB_PIN_MISO  16   /* GP16 ← ATtiny85 PB1 (DO)   */
+#define ADB_PIN_MISO  16   /* GP16 ← ATtiny85 PB1 (DO, pin 6)   */
 #define ADB_PIN_RESET 17   /* GP17 → ATtiny85 RESET (active low) */
-#define ADB_PIN_SCK   18   /* GP18 → ATtiny85 PB2 (USCK)  */
-#define ADB_PIN_MOSI  19   /* GP19 → ATtiny85 PB0 (DI)    */
+#define ADB_PIN_SCK   18   /* GP18 → ATtiny85 PB2 (USCK, pin 7) */
+#define ADB_PIN_MOSI  19   /* GP19 → ATtiny85 PB0 (DI, pin 5)   */
+#define ADB_PIN_CS    20   /* GP20 → ATtiny85 PB4 (CS, pin 3)   */
 
 /*
  * Clock speed.  The ATtiny85 USI is polled from trabular's main loop
@@ -25,14 +27,13 @@
 #define ADB_SPI_BAUD  100000
 
 /*
- * Inter-byte gap.  After each SPI byte the ATtiny85 needs time to
+ * Inter-byte gap.  After CS deassert the ATtiny85 needs time to
  * process the command via handle_serial_data() and load the reply
- * into USIDR before the next transfer starts.
- *
- * 500 µs to be safe in case CKDIV8 fuse is still programmed (1 MHz
- * instead of 8 MHz → main-loop poll interval ~400-1200 µs).
+ * into USIDR before the next transfer.  The ATtiny85 runs at 8 MHz
+ * (fuses confirmed), handle_data() polling gap is ~50-100 µs during
+ * active ADB traffic.  150 µs gives comfortable margin.
  */
-#define ADB_SPI_GAP_US  500
+#define ADB_SPI_GAP_US  150
 
 static bool spi_active = false;
 static bool spi_flushed = false;
@@ -47,7 +48,7 @@ static const uint8_t flush_cmds[] = { 0x05, 0x06, 0x07, 0x08, 0x03 };
 #define FLUSH_CMD_COUNT (sizeof(flush_cmds) / sizeof(flush_cmds[0]))
 
 /*
- * Park all three SPI pins as plain GPIO inputs with no pulls.
+ * Park SPI + CS pins as plain GPIO inputs with no pulls.
  * This is the safe "off" state — no output drivers to glitch the
  * ATtiny85 USI lines.
  */
@@ -58,9 +59,11 @@ static void park_pins(void) {
     gpio_set_dir(ADB_PIN_MISO, GPIO_IN);
     gpio_set_dir(ADB_PIN_SCK,  GPIO_IN);
     gpio_set_dir(ADB_PIN_MOSI, GPIO_IN);
+    gpio_set_dir(ADB_PIN_CS,   GPIO_IN);
     gpio_disable_pulls(ADB_PIN_MISO);
     gpio_disable_pulls(ADB_PIN_SCK);
     gpio_disable_pulls(ADB_PIN_MOSI);
+    gpio_disable_pulls(ADB_PIN_CS);
 }
 
 void adb_spi_hold_reset(void) {
@@ -69,13 +72,20 @@ void adb_spi_hold_reset(void) {
      * reset while the Pico boots.  This prevents the USI from counting
      * spurious clock edges on the still-floating SCK line.
      *
+     * Also drive CS high (inactive) and SCK low immediately so
+     * both lines are stable before the ATtiny85 is released.
+     * CS high keeps the ATtiny85 USI idle (PB4 has internal pull-up
+     * on the ATtiny side too, but we drive it explicitly for safety).
+     *
      * Call this BEFORE stdio_init_all() / tud_init() in main().
-     * Also drive SCK low immediately so the line is stable before
-     * the ATtiny85 is released.
      */
     gpio_init(ADB_PIN_RESET);
     gpio_set_dir(ADB_PIN_RESET, GPIO_OUT);
     gpio_put(ADB_PIN_RESET, 0);           /* hold ATtiny85 in reset */
+
+    gpio_init(ADB_PIN_CS);
+    gpio_set_dir(ADB_PIN_CS, GPIO_OUT);
+    gpio_put(ADB_PIN_CS, 1);              /* CS inactive (high) */
 
     gpio_init(ADB_PIN_SCK);
     gpio_set_dir(ADB_PIN_SCK, GPIO_OUT);
@@ -176,8 +186,11 @@ bool adb_spi_is_active(void) {
 uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
     uint8_t rx = 0;
+
+    gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)  */
     spi_write_read_blocking(ADB_SPI_INST, &cmd, &rx, 1);
-    sleep_us(ADB_SPI_GAP_US);
+    gpio_put(ADB_PIN_CS, 1);              /* CS deassert             */
+    sleep_us(ADB_SPI_GAP_US);             /* let ATtiny process+load */
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {

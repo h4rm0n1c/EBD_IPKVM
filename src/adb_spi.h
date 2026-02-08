@@ -15,25 +15,31 @@ typedef struct {
  * SPI master driver for talking to an ATtiny85 running saybur/trabular firmware.
  *
  * Pico SPI0 pins:
- *   GP19 = MOSI (TX) → ATtiny85 PB0 (DI, pin 5)
  *   GP16 = MISO (RX) ← ATtiny85 PB1 (DO, pin 6)
+ *   GP17 = RESET      → ATtiny85 /RESET (pin 1, active low)
  *   GP18 = SCK        → ATtiny85 PB2 (USCK, pin 7)
+ *   GP19 = MOSI (TX)  → ATtiny85 PB0 (DI, pin 5)
+ *   GP20 = CS         → ATtiny85 PB4 (pin 3, active low)
  *
- * Trabular protocol: single-byte SPI transactions.
- *   Upper nibble = command, lower nibble = 4-bit payload.
+ * Per-byte protocol:
+ *   1. Assert CS low
+ *   2. Clock 8 bits (MOSI out, MISO in)
+ *   3. Deassert CS high (ATtiny resets USI counter on CS rise)
+ *   4. Wait >=150 µs for ATtiny to process & load response into USIDR
+ *   5. Next MISO byte carries the response to the previous command
  *
- * Keyboard:  0x4N = key low nibble, 0x5N = key high nibble (pushes ADB keycode)
- * Mouse btn: 0x6N = btn low nibble,  0x7N = btn high nibble
- * Mouse X:   0x8N = X+=N, 0x9N = X-=N, 0xAN = X+=N<<4, 0xBN = X-=N<<4
- * Mouse Y:   0xCN = Y+=N, 0xDN = Y-=N, 0xEN = Y+=N<<4, 0xFN = Y-=N<<4
- * Status:    0x01 = query status
+ * Trabular command encoding: upper nibble = command, lower = 4-bit payload.
+ *   Keyboard:  0x4N low, 0x5N high → queues ADB keycode
+ *   Mouse btn: 0x6N low, 0x7N high
+ *   Mouse X:   0x8N += N, 0x9N -= N, 0xAN += N<<4, 0xBN -= N<<4
+ *   Mouse Y:   0xCN += N, 0xDN -= N, 0xEN += N<<4, 0xFN -= N<<4
+ *   Status:    0x01 query, 0x00 NOP (clock out previous response)
  *
- * Init is glitch-free (SCK/MOSI pre-conditioned to idle levels before
- * mux switch) and zero-blocking.  The buffer flush is deferred to the
- * first adb_spi_flush() call so boot-time init never does SPI traffic.
+ * Init is glitch-free (CS/SCK/MOSI pre-conditioned before mux switch)
+ * and zero-blocking.  Flush is deferred to adb_spi_flush().
  */
 
-/* Hold ATtiny85 in reset (GP17 LOW) and pre-drive SCK LOW.
+/* Hold ATtiny85 in reset (GP17 LOW), drive CS high (inactive), SCK LOW.
  * Call this as early as possible in main(), before stdio/USB init,
  * so the ATtiny85 USI never sees spurious clock edges. */
 void adb_spi_hold_reset(void);
@@ -56,7 +62,8 @@ void adb_spi_deinit(void);
 /* True if SPI0 is currently initialised. */
 bool adb_spi_is_active(void);
 
-/* Send a raw trabular command byte. Returns the response byte.
+/* Send a raw trabular command byte with CS assert/deassert.
+ * Returns the MISO byte clocked in (response to PREVIOUS command).
  * No-op (returns 0) if SPI is not active. */
 uint8_t adb_spi_xfer(uint8_t cmd);
 
