@@ -38,6 +38,16 @@
  */
 #define ADB_SPI_GAP_US  150
 
+/*
+ * Byte packing: 16-bit transfers can place the command byte in either
+ * the high or low byte depending on the ATtiny85 USI handling.
+ * Default to high-byte command (matches observed "B3 00" captures),
+ * but keep a compile-time switch for troubleshooting.
+ */
+#ifndef ADB_SPI_CMD_IN_HIGH_BYTE
+#define ADB_SPI_CMD_IN_HIGH_BYTE 1
+#endif
+
 static bool spi_active = false;
 static bool spi_flushed = false;
 static uint8_t flush_step = 0;   /* 0 = not started, 1-5 = in progress, 6 = done */
@@ -129,12 +139,10 @@ void adb_spi_init(void) {
      * (0→15→overflow).  So we need 16-bit SPI frames.
      *
      * Byte packing (MSB-first):
-     *   TX: high byte = command, low byte = 0x00 padding
-     *     → first 8 clocks shift in command → USIDR after overflow
-     *     → last 8 clocks shift in padding
-     *   RX: low byte = response to prior cmd
-     *     → last 8 clocks shift out old USIDR on MISO
-     *     → high byte = padding echo (0x00) */
+     *   TX: command in high or low byte (see ADB_SPI_CMD_IN_HIGH_BYTE)
+     *   RX: response to the prior command is read from the opposite byte
+     *       (low byte when command is high byte, or high byte when command
+     *       is low byte). */
     spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
@@ -205,15 +213,19 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     /*
      * 16-bit SPI frame, one command per CS cycle.
      *
-     * TX word: command in high byte, 0x00 padding in low byte.
+     * TX word: command in high byte or low byte, 0x00 padding in the other.
      * The ATtiny85 USI counter starts at 0 after CS reset.
      * 16 rising edges cause overflow → handle_data() reads USIBR
      * (= high byte = our command) and loads response into USIDR.
      *
-     * RX word: low byte = old USIDR (response to prior command),
-     * high byte = echo of padding (should be 0x00).
+     * RX word: response byte is the opposite of where we place the command;
+     * padding echo is the remaining byte (should be 0x00).
      */
+#if ADB_SPI_CMD_IN_HIGH_BYTE
     uint16_t tx16 = (uint16_t)cmd << 8;   /* high = cmd, low = 0x00   */
+#else
+    uint16_t tx16 = (uint16_t)cmd;        /* high = 0x00, low = cmd   */
+#endif
     uint16_t rx16 = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
@@ -221,8 +233,13 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
 
+#if ADB_SPI_CMD_IN_HIGH_BYTE
     uint8_t response = (uint8_t)(rx16 & 0xFF); /* old USIDR            */
     uint8_t echo     = (uint8_t)(rx16 >> 8);   /* padding echo         */
+#else
+    uint8_t response = (uint8_t)(rx16 >> 8);   /* old USIDR            */
+    uint8_t echo     = (uint8_t)(rx16 & 0xFF); /* padding echo         */
+#endif
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {

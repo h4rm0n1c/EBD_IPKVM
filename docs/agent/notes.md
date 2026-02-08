@@ -18,7 +18,8 @@
   - Hootswitch `bus.pio` includes host+device TX/RX/attention programs; device-side logic lives in `computer.c` and shows collision detection + SRQ gating suitable for us to adapt.
 
 - ADB timing reference: trabular notes that the serial handler must run roughly every 50–70 µs and defines timing windows for attention/sync/bit pulses in its ADB bus implementation.
-- ATtiny85/trabular SPI framing uses 16-bit transfers with the command byte in the high byte and the response returned in the low byte of the next transfer; CS high resets the USI counter between bytes.
+- ATtiny85/trabular SPI framing defaults to 16-bit transfers with the command byte in the high byte and the response returned in the low byte of the next transfer; CS high resets the USI counter between bytes.
+- SPI command byte placement can be flipped at build time via `ADB_SPI_CMD_IN_HIGH_BYTE` to accommodate alternate USI framing expectations.
 - ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - Current board wiring: GPIO6 is ADB RECV (non-inverting) and GPIO12 is ADB XMIT (inverted open-collector), so PIO output polarity must account for the inversion.
