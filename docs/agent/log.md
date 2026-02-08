@@ -87,3 +87,4 @@
 - 2026-02-03: Added a compile-time switch to flip SPI command byte placement for ATtiny85 USI troubleshooting.
 - 2026-02-03: Updated ADB reference notes to point at /opt/adb/trabular and /opt/adb/trabatar (hootswitch removed).
 - 2026-02-03: Reviewed trabular/trabatar serial command ordering (keyboard/mouse nibble order, button codes, deceleration) for SPI parity.
+- 2026-02-03: Reduced ADB diag mouse-key step size to 5 px for movement testing.
