@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, struct, fcntl, termios, select, signal
+import os, sys, time, struct, fcntl, termios, select, signal, tty
 
 # Graceful shutdown flag for Ctrl+C
 interrupted = False
@@ -317,6 +317,39 @@ if CTRL_MODE == "ep0" and usb_dev is None:
     print("[host] EP0 control selected but USB device is unavailable.", file=sys.stderr)
     sys.exit(2)
 
+# Set up interactive stdin → CDC relay (cbreak mode so Ctrl-C still works)
+stdin_fd = sys.stdin.fileno()
+stdin_is_tty = os.isatty(stdin_fd)
+old_term_settings = None
+if stdin_is_tty:
+    old_term_settings = termios.tcgetattr(stdin_fd)
+    tty.setcbreak(stdin_fd)
+
+def relay_stdin_cdc():
+    """Forward any pending stdin bytes to the CDC control port."""
+    if not stdin_is_tty:
+        return
+    r, _, _ = select.select([stdin_fd], [], [], 0)
+    if r:
+        inp = os.read(stdin_fd, 64)
+        if inp:
+            os.write(ctrl_fd, inp)
+
+def drain_cdc():
+    """Read and display any pending CDC output."""
+    r, _, _ = select.select([ctrl_fd], [], [], 0)
+    while r:
+        try:
+            chunk = os.read(ctrl_fd, 1024)
+        except OSError:
+            break
+        if not chunk:
+            break
+        text = chunk.decode("utf-8", errors="replace")
+        log_out.write(text)
+        log_out.flush()
+        r, _, _ = select.select([ctrl_fd], [], [], 0)
+
 if SEND_BOOT:
     os.write(ctrl_fd, b"P")
 
@@ -332,6 +365,7 @@ if DIAG_SECS > 0:
     log(f"[host] diag: passively reading ASCII for {DIAG_SECS:.2f}s (no start)")
     diag_buf = bytearray()
     while time.time() < end_diag:
+        relay_stdin_cdc()
         r, _, _ = select.select([ctrl_fd], [], [], 0.25)
         if not r:
             continue
@@ -432,14 +466,15 @@ try:
             else:
                 chunk = os.read(stream_fd, 8192)
 
+        # Relay interactive keystrokes and display CDC responses
+        relay_stdin_cdc()
+        drain_cdc()
+
         if not chunk:
             now = time.time()
             if now - last_rx > 2.0:
                 log("[host] no data yet (is Pico armed + Mac running?)")
                 last_rx = now
-            continue
-        if not chunk:
-            time.sleep(0.01)
             continue
 
         last_rx = time.time()
@@ -530,6 +565,12 @@ try:
             else:
                 log(f"[host] done={done_count}/100 (waiting for packets)")
 finally:
+    # Restore terminal before cleanup so error messages render properly
+    if old_term_settings is not None:
+        try:
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_term_settings)
+        except Exception:
+            pass
     if SEND_STOP:
         try:
             if CTRL_MODE == "ep0":
