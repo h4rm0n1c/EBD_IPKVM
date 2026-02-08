@@ -86,10 +86,11 @@ void adb_spi_init(void) {
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire.
      *
-     * 8-bit frame: trabular polls USIOIF after the 4-bit USI counter
-     * overflows (16 USCK edges). An 8-bit SPI transfer provides 16
-     * edges (rising + falling), so one transfer equals one byte. */
-    spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+     * 16-bit frame: trabular polls USIOIF after the 4-bit USI counter
+     * overflows (16 USCK rising edges). We send 16 SCK pulses per
+     * trabular byte by using a 16-bit SPI frame (MSB-first) and
+     * packing the command into the low byte. */
+    spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
@@ -151,24 +152,25 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
 
     /*
-     * 8-bit SPI frame. The MISO byte returned is the response to
-     * the previous command; callers should send a dummy byte to
-     * clock out responses.
+     * 16-bit SPI frame. The ATtiny85 USI overflows after 16 rising
+     * edges; we pack the command into the low byte so the byte that
+     * reaches USIBR is the payload. The response to the previous
+     * command is clocked out in the high byte.
      */
-    uint8_t tx8 = cmd;
-    uint8_t rx8 = 0;
+    uint16_t tx16 = (uint16_t)cmd;
+    uint16_t rx16 = 0;
 
-    spi_write_read_blocking(ADB_SPI_INST, &tx8, &rx8, 1);
+    spi_write16_read16_blocking(ADB_SPI_INST, &tx16, &rx16, 1);
     sleep_us(ADB_SPI_GAP_US);             /* allow handle_data() */
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {
         trace_buf[trace_count].tx   = cmd;
-        trace_buf[trace_count].rx   = rx8;
+        trace_buf[trace_count].rx   = (uint8_t)(rx16 >> 8);
         trace_count++;
     }
 
-    return rx8;
+    return (uint8_t)(rx16 >> 8);
 }
 
 void adb_spi_send_key(uint8_t adb_code, bool key_down) {
