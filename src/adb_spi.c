@@ -137,13 +137,14 @@ void adb_spi_init(void) {
     gpio_set_function(ADB_PIN_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(ADB_PIN_MISO, GPIO_FUNC_SPI);
 
-    /* Pull resistors on all SPI lines:
+    /* Pull resistors:
      *   SCK  — pull-down (CPOL=0, idle LOW)
      *   MOSI — pull-down (idle LOW when not transmitting)
-     *   MISO — pull-down so an undriven line reads 0x00, not 0xFF */
+     *   MISO — pull-UP so a floating line reads 0xFF (diagnostic:
+     *          if RX=0xFF, ATtiny DO pin is not driving) */
     gpio_pull_down(ADB_PIN_SCK);
     gpio_pull_down(ADB_PIN_MOSI);
-    gpio_pull_down(ADB_PIN_MISO);
+    gpio_pull_up(ADB_PIN_MISO);
 
     spi_active = true;
 
