@@ -17,3 +17,4 @@
 - ADB implementation references: trabular (`/opt/adb/trabular`, https://github.com/saybur/trabular) plus the Apple ADB Manager PDF and AN591B in `/opt/adb/miscdocs`.
 - Trabular SPI cadence: the serial handler must run roughly every 50–70 µs, so SPI bytes should be paced to give the ATtiny85 polling loop time to service USIOIF.
 - Trabular SPI responses are returned on the next transfer; hosts must clock a dummy byte after command bytes that expect replies (e.g., status).
+- Trabular SPI host flow must follow: command byte → wait/poll window → dummy byte (0x00) to clock out the response; responses are always one transfer late due to USIDR being loaded after handle_data() runs.
