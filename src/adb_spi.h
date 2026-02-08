@@ -7,8 +7,11 @@
 #define ADB_SPI_TRACE_LEN 16
 
 typedef struct {
-    uint8_t tx;
-    uint8_t rx;
+    uint8_t tx;     /* command sent                                  */
+    uint8_t rx;     /* response (high byte of 16-bit RX = old USIDR) */
+    uint8_t echo;   /* low byte of 16-bit RX — should be 0xFF if USI
+                     * is active (shifts our 0xFF padding back out).
+                     * 0x00 means USI output is disabled (USIWM=00). */
 } adb_spi_trace_entry_t;
 
 /*

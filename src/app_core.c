@@ -437,14 +437,16 @@ static bool poll_cdc_commands(void) {
             if (!diag_hid_active() && can_emit_text()) {
                 cdc_ctrl_printf("[EBD_IPKVM] ADB diag mode OFF\n");
             }
-            /* Dump SPI trace so we can see what bytes went to ATtiny85 */
+            /* Dump SPI trace so we can see what bytes went to ATtiny85.
+             * Format: TX>RX(echo)  where echo=low byte of 16-bit rx.
+             * echo should be 0xFF if USI is shifting our padding back. */
             if (can_emit_text()) {
                 uint8_t tc = adb_spi_trace_count();
                 if (tc > 0) {
                     cdc_ctrl_printf("[spi]");
                     for (uint8_t ti = 0; ti < tc; ti++) {
                         adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
-                        cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                        cdc_ctrl_printf(" %02X>%02X(%02X)", e.tx, e.rx, e.echo);
                     }
                     cdc_ctrl_printf("\n");
                 }
@@ -455,28 +457,42 @@ static bool poll_cdc_commands(void) {
         if (ch == 'A' || ch == 'a') {
             diag_hid_enter();
             if (can_emit_text()) {
-                /* Probe trabular: status should return 0x8N (bit7 set, upper nibble only).
-                 * 0x00 = not responding.  0xFF = MISO floating (DO not connected).
-                 * Valid range: 0x80-0x8F. */
+                /* Probe trabular: status should return 0x8N (bit7 set).
+                 * Also check echo byte from trace: 0xFF = USI shifting
+                 * (healthy), 0x00 = USI disabled (USIWM not set). */
                 bool rst_pin = gpio_get(17);  /* GP17 = ATtiny85 RESET */
                 adb_spi_trace_reset();
                 uint8_t st1 = adb_spi_status();
                 uint8_t st2 = adb_spi_status();
+                /* Check echo byte from the last transfer */
+                uint8_t tc_tmp = adb_spi_trace_count();
+                uint8_t last_echo = 0;
+                if (tc_tmp > 0) {
+                    adb_spi_trace_entry_t last = adb_spi_trace_entry(tc_tmp - 1);
+                    last_echo = last.echo;
+                }
                 const char *verdict = "(unknown)";
-                if (st2 == 0xFF)       verdict = "(MISO floating -- DO not connected)";
-                else if (st2 == 0x00)  verdict = "(no response -- ATtiny85 not running?)";
-                else if ((st2 & 0xF0) == 0x80) verdict = "(ok)";
-                else                   verdict = "(unexpected -- USI misaligned?)";
-                cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  rst=%d spi=0x%02X,0x%02X %s\n",
-                                rst_pin ? 1 : 0, st1, st2, verdict);
-                /* Dump raw SPI trace from status queries */
+                if (last_echo == 0x00 && st2 == 0x00)
+                    verdict = "(USI not shifting -- USIWM=00? reflash trabular)";
+                else if (st2 == 0xFF)
+                    verdict = "(MISO floating -- DO not connected)";
+                else if (st2 == 0x00)
+                    verdict = "(no response -- ATtiny85 not running?)";
+                else if ((st2 & 0xF0) == 0x80)
+                    verdict = "(ok)";
+                else
+                    verdict = "(unexpected -- USI misaligned?)";
+                cdc_ctrl_printf("[EBD_IPKVM] ADB diag ON  rst=%d spi=0x%02X,0x%02X echo=0x%02X %s\n",
+                                rst_pin ? 1 : 0, st1, st2, last_echo, verdict);
+                /* Dump raw SPI trace from status queries.
+                 * Format: TX>RX(echo).  echo=0xFF means USI active. */
                 {
                     uint8_t tc = adb_spi_trace_count();
                     if (tc > 0) {
                         cdc_ctrl_printf("[spi]");
                         for (uint8_t ti = 0; ti < tc; ti++) {
                             adb_spi_trace_entry_t e = adb_spi_trace_entry(ti);
-                            cdc_ctrl_printf(" %02X>%02X", e.tx, e.rx);
+                            cdc_ctrl_printf(" %02X>%02X(%02X)", e.tx, e.rx, e.echo);
                         }
                         cdc_ctrl_printf("\n");
                     }

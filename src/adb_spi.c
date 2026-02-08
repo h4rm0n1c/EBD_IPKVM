@@ -200,14 +200,18 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
 
     /*
      * 16-bit frame packing (MSB-first):
-     *   TX word = 0x00CC — high byte (0x00) is padding, low byte is cmd.
-     *     MOSI sends: [00000000] [CCCCCCCC]
+     *   TX word = 0xFFCC — high byte (0xFF) is diagnostic padding,
+     *     low byte is cmd.
+     *     MOSI sends: [11111111] [CCCCCCCC]
      *     ATtiny USI shifts 16 bits, USIDR ends up with last 8 = cmd.
      *
-     *   RX word = 0xRR00 — high byte is the previous USIDR (response),
-     *     low byte is garbage (our padding shifted back).
+     *   RX word high byte = previous USIDR (response to prior cmd).
+     *   RX word low byte  = USIDR contents after first 8 shifts
+     *     (our 0xFF padding echoed back).  This is the USI-active
+     *     diagnostic: 0xFF means USI is shifting (USIWM=01, healthy),
+     *     0x00 means DO is just GPIO-LOW (USIWM=00, USI disabled).
      */
-    uint16_t tx16 = (uint16_t)cmd;       /* cmd in low byte          */
+    uint16_t tx16 = 0xFF00u | (uint16_t)cmd;  /* 0xFF padding + cmd   */
     uint16_t rx16 = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
@@ -216,11 +220,13 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
 
     uint8_t response = (uint8_t)(rx16 >> 8);
+    uint8_t echo     = (uint8_t)(rx16 & 0xFF);
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {
-        trace_buf[trace_count].tx = cmd;
-        trace_buf[trace_count].rx = response;
+        trace_buf[trace_count].tx   = cmd;
+        trace_buf[trace_count].rx   = response;
+        trace_buf[trace_count].echo = echo;
         trace_count++;
     }
 
