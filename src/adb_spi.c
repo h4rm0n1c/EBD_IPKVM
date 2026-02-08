@@ -123,14 +123,11 @@ void adb_spi_init(void) {
 
     /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire.
      *
-     * 16-bit frame: the ATtiny85 USI 4-bit counter is configured for
-     * positive-edge-only counting (USICS1:0 = 10).  The CS gate resets
-     * the counter to 0.  With 8-bit frames (8 rising edges), the counter
-     * only reaches 8 — never overflows (15→0).  With 16-bit frames
-     * (16 rising edges), counter goes 0→16→overflow.  Command is in the
-     * low byte (shifted in last = USIDR value), response is in the high
-     * byte (shifted out first from previous USIDR contents). */
-    spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+     * 8-bit frame: the ATtiny85 CS gate (h4rm0n1c fork) presets the
+     * USI 4-bit counter to 8 via USISR = _BV(USIOIF) | 8.  So 8
+     * rising edges cause overflow (8→15→0).  Standard 8-bit SPI
+     * is exactly right — one overflow per byte, one byte per CS. */
+    spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
@@ -140,11 +137,10 @@ void adb_spi_init(void) {
     /* Pull resistors:
      *   SCK  — pull-down (CPOL=0, idle LOW)
      *   MOSI — pull-down (idle LOW when not transmitting)
-     *   MISO — pull-UP so a floating line reads 0xFF (diagnostic:
-     *          if RX=0xFF, ATtiny DO pin is not driving) */
+     *   MISO — pull-down (ATtiny85 PB1 drives this line) */
     gpio_pull_down(ADB_PIN_SCK);
     gpio_pull_down(ADB_PIN_MOSI);
-    gpio_pull_up(ADB_PIN_MISO);
+    gpio_pull_down(ADB_PIN_MISO);
 
     spi_active = true;
 
@@ -199,38 +195,31 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
 
     /*
-     * 16-bit frame packing (MSB-first):
-     *   TX word = 0xFFCC — high byte (0xFF) is diagnostic padding,
-     *     low byte is cmd.
-     *     MOSI sends: [11111111] [CCCCCCCC]
-     *     ATtiny USI shifts 16 bits, USIDR ends up with last 8 = cmd.
+     * 8-bit SPI frame, one byte per CS cycle.
      *
-     *   RX word high byte = previous USIDR (response to prior cmd).
-     *   RX word low byte  = USIDR contents after first 8 shifts
-     *     (our 0xFF padding echoed back).  This is the USI-active
-     *     diagnostic: 0xFF means USI is shifting (USIWM=01, healthy),
-     *     0x00 means DO is just GPIO-LOW (USIWM=00, USI disabled).
+     * The ATtiny85 CS gate presets USI counter to 8, so 8 rising
+     * edges cause overflow → handle_data() processes the byte.
+     *
+     * Full-duplex: MISO simultaneously clocks out the previous
+     * USIDR value (response to the prior command).
      */
-    uint16_t tx16 = 0xFF00u | (uint16_t)cmd;  /* 0xFF padding + cmd   */
-    uint16_t rx16 = 0;
+    uint8_t tx = cmd;
+    uint8_t rx = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
-    spi_write16_read16_blocking(ADB_SPI_INST, &tx16, &rx16, 1);
+    spi_write_read_blocking(ADB_SPI_INST, &tx, &rx, 1);
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
-
-    uint8_t response = (uint8_t)(rx16 >> 8);
-    uint8_t echo     = (uint8_t)(rx16 & 0xFF);
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {
         trace_buf[trace_count].tx   = cmd;
-        trace_buf[trace_count].rx   = response;
-        trace_buf[trace_count].echo = echo;
+        trace_buf[trace_count].rx   = rx;
+        trace_buf[trace_count].echo = 0;
         trace_count++;
     }
 
-    return response;
+    return rx;
 }
 
 void adb_spi_send_key(uint8_t adb_code, bool key_down) {
@@ -293,11 +282,10 @@ void adb_spi_move_mouse(int8_t dx, int8_t dy) {
 
 uint8_t adb_spi_status(void) {
     /*
-     * Response timing is still one-behind with 16-bit frames: the
-     * high byte of each RX word is the USIDR from *before* that
-     * transfer.  handle_data() writes the response *after* the
-     * transfer completes.  So: send 0x01 (query), then 0x00 (NOP)
-     * to clock out the actual status byte.
+     * Full-duplex one-behind timing: the RX byte of each transfer
+     * is the USIDR that handle_data() wrote *after the previous*
+     * transfer.  So: send 0x01 (query), then 0x00 (NOP) to clock
+     * out the actual status response.
      */
     adb_spi_xfer(0x01);          /* request status         */
     return adb_spi_xfer(0x00);   /* clock out the response */
