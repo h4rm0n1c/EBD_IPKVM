@@ -20,7 +20,7 @@ typedef struct {
  *   GP19 = MOSI (TX)  → ATtiny85 PB0 (DI, pin 5)
  *
  * Per-byte protocol:
- *   1. Clock 16 SCK edges (16-bit frame; command in low byte)
+ *   1. Clock 8 bits (command byte)
  *   2. Wait >=150 µs to let the ATtiny85 poll and handle the byte
  *   3. Next MISO byte carries the response to the previous command
  *

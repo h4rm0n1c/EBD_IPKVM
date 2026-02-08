@@ -2,7 +2,7 @@
 
 - 2026-02-07: Standardize ADB integration on an external ATtiny85 running trabular, with SPI byte pacing and one-byte-late responses aligned to the upstream firmware.
 - 2026-02-07: Remove the ATtiny85 reset line from the SPI wiring/firmware and rely on the 3-wire USI link plus pacing.
-- 2026-02-07: Use 16-bit SPI frames (16 SCK edges) per trabular byte so USI overflows and MISO responses clock out reliably.
+- 2026-02-07: Use 8-bit SPI transfers for trabular and clock responses with a follow-up dummy byte.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture and peripheral service.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
 - 2026-02-01: Split USB CDC into separate stream (CDC0) and control/status (CDC1) interfaces so binary video traffic never interleaves with ASCII commands.

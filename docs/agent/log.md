@@ -1,7 +1,7 @@
 # Log (running)
 
 - 2026-02-07: Added 1KB application ring buffer for CDC1 outbound text with backpressure; bumped TinyUSB CDC TX buffer from 64 to 256 bytes. CDC1 drain runs before video TX in the core0 poll loop for priority.
-- 2026-02-07: Restored 16-clock SPI framing for trabular (16-bit transfers) so the ATtiny85 USI overflows and returns MISO data.
+- 2026-02-07: Reverted trabular SPI framing to 8-bit transfers with a follow-up 0x00 dummy byte to clock responses.
 - 2026-02-07: Dropped the ATtiny85 reset pin from the trabular SPI wiring and diagnostics to match the minimal 3-wire link.
 - 2026-02-07: Aligned trabular SPI integration with upstream (8-bit transfers, no CS) and cleaned ADB documentation to match `/opt/adb/trabular`.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.

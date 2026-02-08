@@ -8,10 +8,10 @@ Upstream reference: `/opt/adb/trabular` (`serial.c`, `serial.h`, `data.h`).
 
 ## Transport characteristics
 
-- **Byte-oriented SPI**: Each trabular byte requires **16 SCK rising edges**
-  (USI overflow). Use 16-bit SPI frames with the command in the low byte so
-  the ATtiny85 sees a full byte per transfer. The host must pace bytes so the
-  polling loop can keep up (≈50 µs or slower between bytes).
+- **Byte-oriented SPI**: Each transfer is one byte. The host sends the
+  command byte, waits for the polling window, then sends a dummy byte to
+  clock out responses. The host must pace bytes so the polling loop can keep
+  up (≈50 µs or slower between bytes).
 - **One-byte-late responses**: Any response byte is written into `USIDR`
   after the current byte is processed. The host must send a *dummy* byte
   to clock the response out on the next transfer.
