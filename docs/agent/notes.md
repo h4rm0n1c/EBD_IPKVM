@@ -22,6 +22,7 @@
 - Trabatar’s serial driver sends keyboard low nibble (0x4N) then high nibble (0x5N for press, 0x58+hi for release) and mouse movement sends low nibble first with optional high nibble (0x80/0x90/0xA0/0xB0 for X, 0xC0/0xD0/0xE0/0xF0 for Y) with a 0.5 deceleration factor; mouse button codes use 0x60–0x63 (SPI should mirror this ordering).
 - ADB diag mouse-keys mode uses a 5 px step per keypress for fine-grained pointer testing.
 - Trabular mouse Talk reg0 returns two bytes: first byte = Y delta (7-bit, clamped to ±64) with bit7 = ~button1; second byte = X delta (7-bit, clamped to ±64) with bit6 = ~button2. After a successful talk, trabular drains the reported deltas from its accumulators.
+- Enabling `USE_ARBITRARY` in trabular adds extra serial command cases (0x02/0x03 for register 0, 0x0C–0x0F for register 2 reads) and additional status bits for the arbitrary device; it should not change mouse/keyboard motion encoding unless the host is issuing those arbitrary-device commands or polling its address.
 - ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
 - ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
 - Current board wiring: GPIO6 is ADB RECV (non-inverting) and GPIO12 is ADB XMIT (inverted open-collector), so PIO output polarity must account for the inversion.
