@@ -27,11 +27,14 @@
 #define ADB_SPI_BAUD  100000
 
 /*
- * Inter-byte gap.  After CS deassert the ATtiny85 needs time to
- * process the command via handle_serial_data() and load the reply
- * into USIDR before the next transfer.  The ATtiny85 runs at 8 MHz
- * (fuses confirmed), handle_data() polling gap is ~50-100 µs during
- * active ADB traffic.  150 µs gives comfortable margin.
+ * Inter-byte gap.  CS must stay LOW during this delay so that
+ * handle_data() sees CS=active and processes the byte.  If CS is
+ * high when handle_data() checks, it discards the byte and resets
+ * the USI counter (CS gate).
+ *
+ * The ATtiny85 runs at 8 MHz (fuses confirmed), handle_data()
+ * polling gap is ~50-100 µs during active ADB traffic.  150 µs
+ * gives comfortable margin.
  */
 #define ADB_SPI_GAP_US  150
 
@@ -187,10 +190,10 @@ uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
     uint8_t rx = 0;
 
-    gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)  */
+    gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
     spi_write_read_blocking(ADB_SPI_INST, &cmd, &rx, 1);
-    gpio_put(ADB_PIN_CS, 1);              /* CS deassert             */
-    sleep_us(ADB_SPI_GAP_US);             /* let ATtiny process+load */
+    sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
+    gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {

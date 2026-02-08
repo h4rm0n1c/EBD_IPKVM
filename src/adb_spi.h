@@ -24,8 +24,8 @@ typedef struct {
  * Per-byte protocol:
  *   1. Assert CS low
  *   2. Clock 8 bits (MOSI out, MISO in)
- *   3. Deassert CS high (ATtiny resets USI counter on CS rise)
- *   4. Wait >=150 µs for ATtiny to process & load response into USIDR
+ *   3. Wait >=150 µs with CS still low (ATtiny handle_data() gates on CS)
+ *   4. Deassert CS high (resets USI 4-bit counter for clean next byte)
  *   5. Next MISO byte carries the response to the previous command
  *
  * Trabular command encoding: upper nibble = command, lower = 4-bit payload.
