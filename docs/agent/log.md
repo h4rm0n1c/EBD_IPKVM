@@ -86,3 +86,4 @@
 - 2026-02-03: Adjusted ATtiny85/trabular SPI framing to send commands in the high byte and read responses from the low byte.
 - 2026-02-03: Added a compile-time switch to flip SPI command byte placement for ATtiny85 USI troubleshooting.
 - 2026-02-03: Updated ADB reference notes to point at /opt/adb/trabular and /opt/adb/trabatar (hootswitch removed).
+- 2026-02-03: Reviewed trabular/trabatar serial command ordering (keyboard/mouse nibble order, button codes, deceleration) for SPI parity.
