@@ -93,3 +93,4 @@
 - 2026-02-03: Documented trabular mouse Talk reg0 byte format (Y then X with inverted button bits) for debugging ADB motion payloads.
 - 2026-02-03: Noted the effects of enabling USE_ARBITRARY in trabular (extra command cases + status bits).
 - 2026-02-03: Initialized the ATtiny85 SPI link before USB enumeration to have ADB ready earlier after power-up.
+- 2026-02-03: Delayed ATtiny85 SPI init until 500 ms after PS_ON so ADB comes up after Mac power-on.

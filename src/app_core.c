@@ -56,10 +56,22 @@ static volatile uint32_t diag_video_edges = 0;
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 static absolute_time_t spi_flush_at;  /* deferred trabular buffer flush */
+static absolute_time_t adb_spi_start_at = {0};
+static bool adb_spi_pending = false;
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
     gpio_put(app_cfg.pin_ps_on, on ? 1 : 0);
+    if (on) {
+        adb_spi_start_at = make_timeout_time_ms(500);
+        adb_spi_pending = true;
+    } else {
+        adb_spi_pending = false;
+        if (adb_spi_is_active()) {
+            adb_spi_deinit();
+        }
+        adb_spi_hold_reset();
+    }
 }
 
 static inline bool can_emit_text(void) {
@@ -625,9 +637,6 @@ static inline bool service_txq(void) {
 void app_core_init(const app_core_config_t *cfg) {
     app_cfg = *cfg;
 
-    adb_spi_init();
-    diag_hid_init();
-
     cdc_ctrl_printf("\n[EBD_IPKVM] USB packet stream @ ~60fps (continuous mode)\n");
     cdc_ctrl_printf("[EBD_IPKVM] BULK0=video stream, CDC0=control/status\n");
     cdc_ctrl_printf("[EBD_IPKVM] Capture control via EP0 vendor requests (use host tool).\n");
@@ -637,7 +646,7 @@ void app_core_init(const app_core_config_t *cfg) {
 
     status_next = make_timeout_time_ms(1000);
     status_last_lines = 0;
-    spi_flush_at = make_timeout_time_ms(2000);  /* flush trabular 2 s after boot */
+    spi_flush_at = at_the_end_of_time;
 }
 
 void app_core_poll(void) {
@@ -654,8 +663,16 @@ void app_core_poll(void) {
     /* Service ADB diag mode timed actions (click release, boot macro). */
     diag_hid_poll();
 
+    if (adb_spi_pending &&
+        absolute_time_diff_us(get_absolute_time(), adb_spi_start_at) <= 0) {
+        adb_spi_init();
+        diag_hid_init();
+        adb_spi_pending = false;
+        spi_flush_at = make_timeout_time_ms(2000);
+    }
+
     /* Deferred SPI flush: clear trabular buffers, one byte per poll
-     * iteration (500 µs each).  Starts 2 s after boot.  Each call to
+     * iteration (500 µs each).  Starts 2 s after SPI init.  Each call to
      * adb_spi_flush() sends one command and returns false until done. */
     if (absolute_time_diff_us(get_absolute_time(), spi_flush_at) <= 0) {
         if (adb_spi_flush()) {
