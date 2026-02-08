@@ -1,24 +1,17 @@
 # Log (running)
 
 - 2026-02-07: Added 1KB application ring buffer for CDC1 outbound text with backpressure; bumped TinyUSB CDC TX buffer from 64 to 256 bytes. CDC1 drain runs before video TX in the core0 poll loop for priority.
-- 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
-- 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
+- 2026-02-07: Aligned trabular SPI integration with upstream (8-bit transfers, no CS) and cleaned ADB documentation to match `/opt/adb/trabular`.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.
 - 2026-02-02: Added flash/build and serial console helper scripts under scripts/ for Pico workflows.
-- 2026-02-02: Updated the ADB implementation plan to split RX/TX into separate PIO programs and to ignore local TX on the shared ADB line except during loopback validation.
-- 2026-02-02: Updated the ADB plan to refer to core1 as KVMCore and to include a rate-limited ADB RX indicator on the CDC test channel.
-- 2026-02-02: Noted that ADB validation should cross-check the reference implementations available under /opt/adb.
-
-- 2026-02-02: Updated README with ADB pins, corrected capture geometry, and clarified CDC stream/control interfaces plus host helper defaults.
+- 2026-02-02: Updated README with corrected capture geometry, and clarified CDC stream/control interfaces plus host helper defaults.
 - 2026-02-01: Added core0/core1 utilization counters to the firmware status output to support time-budgeting work on the video core.
 - 2026-02-01: Refined core0/core1 utilization counters to track active USB/capture/TX queue work time instead of full loop occupancy.
 - 2026-02-01: Count utilization only when USB/capture/TX routines perform work, avoiding idle-loop inflation.
 - 2026-02-01: Split USB CDC into stream (CDC0) and control/status (CDC1) interfaces so status traffic no longer shares the video stream.
 - 2026-02-01: Updated host Python tooling to target CDC0 for the stream and CDC1 for control commands by default.
 - 2026-02-01: Documented how to identify CDC0/CDC1 in Linux via interface strings and /dev/serial/by-id symlinks.
-- 2026-02-02: Documented /opt/adb reference locations in agents.md for local ADB research sources.
 - 2026-02-01: Avoid partial CDC1 status writes so log lines don't interleave when control FIFO is tight.
-- 2026-02-02: Captured external ADB implementation references and Apple docs links in notes for future input-device emulation work.
 - 2026-02-01: Split CDC1 debug/status output into shorter lines so the control interface can emit updates reliably.
 - 2026-02-01: Emit CRLF on CDC1 output to keep terminal line breaks aligned across host serial tools.
 - 2026-02-01: Disabled frame file writes when streaming raw host data so raw capture no longer fills disks with PGM/PBM output.
@@ -81,5 +74,3 @@
 - 2026-01-25: Fix missing gpio_irq forward declaration after adding runtime edge toggles.
 - 2026-01-25: Add a runtime CDC toggle for PIXCLK edge selection.
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
-
-- 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.

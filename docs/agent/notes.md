@@ -14,12 +14,6 @@
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).
-- ADB implementation references: hootswitch (`/opt/adb/hootswitch`, PIO + DMA bus engine), trabular (https://github.com/saybur/trabular), tashtrio (https://github.com/lampmerchant/tashtrio), adb-test-device (https://github.com/lampmerchant/adb-test-device), QuokkADB firmware (https://github.com/rabbitholecomputing/QuokkADB-firmware), HIDHopper_ADB (https://github.com/TechByAndroda/HIDHopper_ADB), adbuino (https://github.com/akuker/adbuino), adb-usb (https://github.com/gblargg/adb-usb), Apple ADB Manager PDF (https://developer.apple.com/library/archive/documentation/mac/pdf/Devices/ADB_Manager.pdf), Apple HW technote hw_01 (https://developer.apple.com/legacy/library/technotes/hw/hw_01.html#Extended), Microchip AN591B (`/opt/adb/miscdocs/an591b.pdf`).
-  - Hootswitch `bus.pio` includes host+device TX/RX/attention programs; device-side logic lives in `computer.c` and shows collision detection + SRQ gating suitable for us to adapt.
-
-- ADB timing reference: trabular notes that the serial handler must run roughly every 50–70 µs and defines timing windows for attention/sync/bit pulses in its ADB bus implementation.
-- ADB default device addresses in trabular: keyboard=2, mouse=3; handler IDs reset alongside addresses on bus reset.
-- ADB RX/TX are tied to the same shared bus; plan to filter out local TX from RX processing except when explicitly testing loopback timing.
-- Current board wiring: GPIO6 is ADB RECV (non-inverting) and GPIO12 is ADB XMIT (inverted open-collector), so PIO output polarity must account for the inversion.
-- ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
-- Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
+- ADB implementation references: trabular (`/opt/adb/trabular`, https://github.com/saybur/trabular) plus the Apple ADB Manager PDF and AN591B in `/opt/adb/miscdocs`.
+- Trabular SPI cadence: the serial handler must run roughly every 50–70 µs, so SPI bytes should be paced to give the ATtiny85 polling loop time to service USIOIF.
+- Trabular SPI responses are returned on the next transfer; hosts must clock a dummy byte after command bytes that expect replies (e.g., status).

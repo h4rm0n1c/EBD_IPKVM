@@ -1,8 +1,11 @@
-# ADB peripheral implementation strategy
+# ADB peripheral integration (trabular)
 
 ## Current approach: External ADB microcontroller
 
-After exploring on-Pico ADB implementation, we've pivoted to using an **external dedicated ADB microcontroller** (ATtiny85 or similar) communicating with the RP2040 via SPI. This approach offers several advantages:
+We use an **external dedicated ADB microcontroller** (ATtiny85) running the
+canonical trabular firmware. The RP2040 talks to the ATtiny85 over SPI using
+trabular's byte-oriented command protocol so the Pico never has to meet ADB
+bus timing directly.
 
 ### Rationale
 
@@ -10,7 +13,8 @@ After exploring on-Pico ADB implementation, we've pivoted to using an **external
 
 2. **Timing isolation**: ADB requires precise real-time bus timing that can conflict with video capture DMA and USB servicing. A dedicated microcontroller eliminates these conflicts.
 
-3. **Proven implementations**: Mature ADB firmware for AVR microcontrollers (like ATtiny85) already exists and is well-tested (e.g., trabular firmware).
+3. **Proven implementation**: trabular already implements the ADB keyboard,
+   mouse, and arbitrary-device registers on AVR and is well-tested.
 
 4. **Simpler integration**: SPI communication between the Pico and ADB controller provides a clean interface without complex interrupt priority management or PIO resource juggling.
 
@@ -26,6 +30,18 @@ After exploring on-Pico ADB implementation, we've pivoted to using an **external
 └─────────────┘        └──────────────┘           └──────────┘
 ```
 
+### SPI interface (trabular)
+
+- Each SPI byte is split into a command nibble (upper 4 bits) and a payload
+  nibble (lower 4 bits), matching trabular's `handle_serial_data()`.
+- Responses are returned one transfer later; the Pico must send a dummy byte
+  to clock out the response (e.g., `0x00` after a status request).
+- The ATtiny85 polls the USI overflow flag from its main loop, so the Pico
+  must pace transfers (~50 µs or slower between bytes).
+
+See the upstream trabular source in `/opt/adb/trabular` for the authoritative
+SPI/USART protocol and ADB register behavior.
+
 ### Current focus
 
 For now, we are focusing on:
@@ -34,36 +50,7 @@ For now, we are focusing on:
 2. **Stable USB enumeration**: Proper tud_task() servicing, correct interrupt priorities
 3. **Reliable frame streaming**: VSYNC raw IRQ handling, optimized core1 utilization
 
-### Future work: External ADB integration
-
-When we're ready to add ADB support:
-
-1. Select appropriate AVR microcontroller (ATtiny85 or similar)
-2. Port/adapt existing ADB device firmware (trabular or similar)
-3. Design SPI protocol for keyboard/mouse events
-4. Add SPI master support to Pico firmware
-5. Design hardware interface (level shifting if needed, connector pinout)
-6. Integrate with USB HID on the Pico to translate host keyboard/mouse to ADB
-
 ### Reference materials
 
-Previous exploration of on-Pico ADB implementation identified these key resources:
-
-- **ADB Manager PDF**: Device addressing, handler IDs, register protocol
-- **AN591B (Microchip)**: Timing specifications, bus waveforms
-- **hootswitch**: RP2040 PIO + DMA ADB implementation (host + device)
-- **trabular**: AVR ADB keyboard + mouse emulation firmware
-- **adb-usb**: Simple ADB host implementation
-
-These remain valuable for the external controller approach.
-
-## Archived: On-Pico implementation notes
-
-The detailed on-Pico implementation plan has been archived. Key findings:
-
-- **Hardware wiring**: GPIO6 (ADB RECV), GPIO12 (ADB XMIT, inverted)
-- **PIO placement**: PIO1 was selected to avoid PIO0 video capture conflicts
-- **Timing requirements**: ~100µs attention pulse, 65-85µs bit cells
-- **Integration challenges**: IRQ priority conflicts with USB, PIO resource pressure, DMA channel contention
-
-These findings informed the decision to move ADB handling to an external controller.
+- **trabular** (ATtiny85 ADB firmware): `/opt/adb/trabular`
+- **ADB Manager PDF / AN591B**: `/opt/adb/miscdocs`

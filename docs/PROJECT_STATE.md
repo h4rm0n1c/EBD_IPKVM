@@ -13,7 +13,10 @@ Macintosh Classic KVM:
   - `GPIO2` HSYNC (PIO input, active-low)
   - `GPIO3` VIDEO (PIO input)
   - `GPIO9` ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
-  - `GPIO6`, `GPIO12` Reserved for future SPI communication with external ADB controller
+  - `GPIO16` SPI0 MISO from ATtiny85 (trabular DO)
+  - `GPIO17` ATtiny85 RESET (active low)
+  - `GPIO18` SPI0 SCK to ATtiny85
+  - `GPIO19` SPI0 MOSI to ATtiny85 (trabular DI)
 - Capture window:
   - VSYNC falling edge arms a frame if `armed` and not already capturing.
   - Skips 28 HSYNC lines (vertical blank), captures 342 active lines.

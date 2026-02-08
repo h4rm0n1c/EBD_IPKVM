@@ -9,7 +9,6 @@
 typedef struct {
     uint8_t tx;     /* command sent                                  */
     uint8_t rx;     /* MISO byte (old USIDR = response to prior cmd) */
-    uint8_t echo;   /* low byte of 16-bit RX (padding echo, expect 0) */
 } adb_spi_trace_entry_t;
 
 /*
@@ -20,14 +19,11 @@ typedef struct {
  *   GP17 = RESET      → ATtiny85 /RESET (pin 1, active low)
  *   GP18 = SCK        → ATtiny85 PB2 (USCK, pin 7)
  *   GP19 = MOSI (TX)  → ATtiny85 PB0 (DI, pin 5)
- *   GP20 = CS         → ATtiny85 PB4 (pin 3, active low)
  *
  * Per-byte protocol:
- *   1. Assert CS low
- *   2. Clock 8 bits (MOSI out, MISO in)
- *   3. Wait >=150 µs with CS still low (ATtiny handle_data() gates on CS)
- *   4. Deassert CS high (resets USI 4-bit counter for clean next byte)
- *   5. Next MISO byte carries the response to the previous command
+ *   1. Clock 8 bits (MOSI out, MISO in)
+ *   2. Wait >=150 µs to let the ATtiny85 poll and handle the byte
+ *   3. Next MISO byte carries the response to the previous command
  *
  * Trabular command encoding: upper nibble = command, lower = 4-bit payload.
  *   Keyboard:  0x4N low, 0x5N high → queues ADB keycode
@@ -36,11 +32,11 @@ typedef struct {
  *   Mouse Y:   0xCN += N, 0xDN -= N, 0xEN += N<<4, 0xFN -= N<<4
  *   Status:    0x01 query, 0x00 NOP (clock out previous response)
  *
- * Init is glitch-free (CS/SCK/MOSI pre-conditioned before mux switch)
+ * Init is glitch-free (SCK/MOSI pre-conditioned before mux switch)
  * and zero-blocking.  Flush is deferred to adb_spi_flush().
  */
 
-/* Hold ATtiny85 in reset (GP17 LOW), drive CS high (inactive), SCK LOW.
+/* Hold ATtiny85 in reset (GP17 LOW), drive SCK LOW.
  * Call this as early as possible in main(), before stdio/USB init,
  * so the ATtiny85 USI never sees spurious clock edges. */
 void adb_spi_hold_reset(void);
@@ -63,7 +59,7 @@ void adb_spi_deinit(void);
 /* True if SPI0 is currently initialised. */
 bool adb_spi_is_active(void);
 
-/* Send a raw trabular command byte with CS assert/deassert.
+/* Send a raw trabular command byte.
  * Returns the MISO byte clocked in (response to PREVIOUS command).
  * No-op (returns 0) if SPI is not active. */
 uint8_t adb_spi_xfer(uint8_t cmd);

@@ -17,7 +17,10 @@ Above output is current project output as of PR #19.
 - `GPIO1` — VSYNC (input, SIO GPIO, active-low, IRQ on falling edge)
 - `GPIO2` — HSYNC (input, PIO, active-low)
 - `GPIO3` — VIDEO (input, PIO, 1 bpp data)
-- `GPIO6`, `GPIO12` — Reserved for future SPI to external ADB controller
+- `GPIO16` — SPI0 MISO from ATtiny85 (trabular DO)
+- `GPIO17` — ATtiny85 RESET (active low)
+- `GPIO18` — SPI0 SCK to ATtiny85
+- `GPIO19` — SPI0 MOSI to ATtiny85 (trabular DI)
 - `GPIO9` — ATX `PS_ON` (output via ULN2803, GPIO high asserts PSU on)
 
 ⚠️ Upstream signals may be 5V TTL; ensure proper level shifting before the Pico.
@@ -104,7 +107,7 @@ This project relies on documentation and reference implementations from the foll
 - [**/opt/PicoHTTPServer**](https://github.com/sysprogs/PicoHTTPServer) — Pico W HTTP server, captive portal flow, and incremental response patterns for future on-device UI work.
 - [**/opt/SigrokPico**](https://github.com/pico-coder/sigrok-pico) — USB CDC transport patterns and RLE compression ideas for low-entropy line data.
 - [**/opt/picovga**](https://github.com/codaris/picovga-cmake) — multi-core video pipeline patterns for RP2040 video workloads.
-- [**/opt/adb/hootswitch**](https://github.com/saybur/hootswitch) — RP2040 ADB bus implementation (PIO + DMA + state machine) used as the reference for our ADB device emulation plan.
+- [**/opt/adb/trabular**](https://github.com/saybur/trabular) — ATtiny85 ADB keyboard/mouse firmware; SPI/USART interface reference.
 Use `scripts/setup_opt_references.sh` to install the above corpora under `/opt` if you need local copies.
 
 ## Build (typical Pico SDK)

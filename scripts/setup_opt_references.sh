@@ -237,7 +237,7 @@ install_git_snapshot_dir "/opt/SigrokPico/" "https://github.com/pico-coder/sigro
 install_git_snapshot_dir "/opt/picovga" "https://github.com/codaris/picovga-cmake"
 
 # ADB stuff
-install_git_snapshot_dir "/opt/adb/hootswitch" "https://github.com/saybur/hootswitch"
+install_git_snapshot_dir "/opt/adb/trabular" "https://github.com/saybur/trabular"
 
 install_curl_files_dir "/opt/adb/miscdocs" \
   "https://developer.apple.com/library/archive/documentation/mac/pdf/Devices/ADB_Manager.pdf" \
