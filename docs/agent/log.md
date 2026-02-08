@@ -88,3 +88,4 @@
 - 2026-02-03: Updated ADB reference notes to point at /opt/adb/trabular and /opt/adb/trabatar (hootswitch removed).
 - 2026-02-03: Reviewed trabular/trabatar serial command ordering (keyboard/mouse nibble order, button codes, deceleration) for SPI parity.
 - 2026-02-03: Reduced ADB diag mouse-key step size to 5 px for movement testing.
+- 2026-02-03: Reordered SPI mouse motion nibbles to send low then high, matching trabatar’s serial ordering.

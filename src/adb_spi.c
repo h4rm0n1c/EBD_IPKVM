@@ -274,38 +274,38 @@ void adb_spi_move_mouse(int8_t dx, int8_t dy) {
     /* X axis motion */
     if (dx > 0) {
         uint8_t v = (uint8_t)dx;
-        if (v > 15) {
-            adb_spi_xfer(0xA0 | ((v >> 4) & 0x0F));   /* X += high */
-        }
         if (v & 0x0F) {
             adb_spi_xfer(0x80 | (v & 0x0F));           /* X += low  */
         }
+        if (v > 15) {
+            adb_spi_xfer(0xA0 | ((v >> 4) & 0x0F));   /* X += high */
+        }
     } else if (dx < 0) {
         uint8_t v = (uint8_t)(-dx);
-        if (v > 15) {
-            adb_spi_xfer(0xB0 | ((v >> 4) & 0x0F));   /* X -= high */
-        }
         if (v & 0x0F) {
             adb_spi_xfer(0x90 | (v & 0x0F));           /* X -= low  */
+        }
+        if (v > 15) {
+            adb_spi_xfer(0xB0 | ((v >> 4) & 0x0F));   /* X -= high */
         }
     }
 
     /* Y axis motion */
     if (dy > 0) {
         uint8_t v = (uint8_t)dy;
-        if (v > 15) {
-            adb_spi_xfer(0xE0 | ((v >> 4) & 0x0F));   /* Y += high */
-        }
         if (v & 0x0F) {
             adb_spi_xfer(0xC0 | (v & 0x0F));           /* Y += low  */
         }
+        if (v > 15) {
+            adb_spi_xfer(0xE0 | ((v >> 4) & 0x0F));   /* Y += high */
+        }
     } else if (dy < 0) {
         uint8_t v = (uint8_t)(-dy);
-        if (v > 15) {
-            adb_spi_xfer(0xF0 | ((v >> 4) & 0x0F));   /* Y -= high */
-        }
         if (v & 0x0F) {
             adb_spi_xfer(0xD0 | (v & 0x0F));           /* Y -= low  */
+        }
+        if (v > 15) {
+            adb_spi_xfer(0xF0 | ((v >> 4) & 0x0F));   /* Y -= high */
         }
     }
 }
