@@ -121,8 +121,16 @@ void adb_spi_init(void) {
     /* Now init the SPI peripheral (doesn't touch pins yet). */
     spi_init(ADB_SPI_INST, ADB_SPI_BAUD);
 
-    /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire. */
-    spi_set_format(ADB_SPI_INST, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    /* SPI mode 0 (CPOL=0, CPHA=0) matches ATtiny85 USI three-wire.
+     *
+     * 16-bit frame: the ATtiny85 USI 4-bit counter is configured for
+     * positive-edge-only counting (USICS1:0 = 10).  The CS gate resets
+     * the counter to 0.  With 8-bit frames (8 rising edges), the counter
+     * only reaches 8 — never overflows (15→0).  With 16-bit frames
+     * (16 rising edges), counter goes 0→16→overflow.  Command is in the
+     * low byte (shifted in last = USIDR value), response is in the high
+     * byte (shifted out first from previous USIDR contents). */
+    spi_set_format(ADB_SPI_INST, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     /* Switch pin mux — SCK is already LOW, so no edge. */
     gpio_set_function(ADB_PIN_SCK,  GPIO_FUNC_SPI);
@@ -188,21 +196,34 @@ bool adb_spi_is_active(void) {
 
 uint8_t adb_spi_xfer(uint8_t cmd) {
     if (!spi_active) return 0;
-    uint8_t rx = 0;
+
+    /*
+     * 16-bit frame packing (MSB-first):
+     *   TX word = 0x00CC — high byte (0x00) is padding, low byte is cmd.
+     *     MOSI sends: [00000000] [CCCCCCCC]
+     *     ATtiny USI shifts 16 bits, USIDR ends up with last 8 = cmd.
+     *
+     *   RX word = 0xRR00 — high byte is the previous USIDR (response),
+     *     low byte is garbage (our padding shifted back).
+     */
+    uint16_t tx16 = (uint16_t)cmd;       /* cmd in low byte          */
+    uint16_t rx16 = 0;
 
     gpio_put(ADB_PIN_CS, 0);              /* CS assert (active low)   */
-    spi_write_read_blocking(ADB_SPI_INST, &cmd, &rx, 1);
+    spi_write16_read16_blocking(ADB_SPI_INST, &tx16, &rx16, 1);
     sleep_us(ADB_SPI_GAP_US);             /* ATtiny processes (CS low)*/
     gpio_put(ADB_PIN_CS, 1);              /* CS deassert → reset ctr  */
+
+    uint8_t response = (uint8_t)(rx16 >> 8);
 
     /* Record in trace buffer */
     if (trace_count < ADB_SPI_TRACE_LEN) {
         trace_buf[trace_count].tx = cmd;
-        trace_buf[trace_count].rx = rx;
+        trace_buf[trace_count].rx = response;
         trace_count++;
     }
 
-    return rx;
+    return response;
 }
 
 void adb_spi_send_key(uint8_t adb_code, bool key_down) {
@@ -265,10 +286,11 @@ void adb_spi_move_mouse(int8_t dx, int8_t dy) {
 
 uint8_t adb_spi_status(void) {
     /*
-     * SPI is full-duplex: the response to a command is loaded into
-     * USIDR *after* the byte finishes, and clocked out during the
-     * NEXT transfer.  So: send the status query (0x01), then send
-     * a NOP (0x00) to clock out the actual response.
+     * Response timing is still one-behind with 16-bit frames: the
+     * high byte of each RX word is the USIDR from *before* that
+     * transfer.  handle_data() writes the response *after* the
+     * transfer completes.  So: send 0x01 (query), then 0x00 (NOP)
+     * to clock out the actual status byte.
      */
     adb_spi_xfer(0x01);          /* request status         */
     return adb_spi_xfer(0x00);   /* clock out the response */
