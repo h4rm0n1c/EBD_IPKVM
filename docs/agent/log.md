@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-03: Reimplemented CDC1 ring-buffered control/status output with priority drain, bumped CDC TX buffer, and updated host tooling for CDC auto-detect + interactive relay.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
 - 2026-02-02: Added --no-read and --no-setup options to scripts/cdc_cmd.py for send-only CDC commands.

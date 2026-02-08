@@ -22,6 +22,9 @@
 
 #define CDC_CTRL 0
 
+#define CDC1_RING_SIZE 1024u
+#define CDC1_RING_MASK (CDC1_RING_SIZE - 1u)
+
 static app_core_config_t app_cfg;
 
 static volatile bool ps_on_state = false;
@@ -43,8 +46,17 @@ static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
 static volatile uint32_t diag_video_edges = 0;
 
+static uint8_t cdc1_ring[CDC1_RING_SIZE];
+static uint16_t cdc1_ring_r = 0;
+static uint16_t cdc1_ring_w = 0;
+static bool cdc1_connected = false;
+
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
+
+#if (CDC1_RING_SIZE & (CDC1_RING_SIZE - 1u)) != 0
+#error "CDC1_RING_SIZE must be power-of-two"
+#endif
 
 static inline void set_ps_on(bool on) {
     ps_on_state = on;
@@ -71,6 +83,15 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
         *total_us = core0_total_us;
         core0_total_us = 0;
     }
+}
+
+static inline void cdc1_ring_reset(void) {
+    cdc1_ring_r = 0;
+    cdc1_ring_w = 0;
+}
+
+static inline uint16_t cdc1_ring_space(void) {
+    return (uint16_t)((cdc1_ring_r - cdc1_ring_w - 1u) & CDC1_RING_MASK);
 }
 
 bool app_core_enqueue_ep0_command(uint8_t cmd) {
@@ -106,14 +127,18 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
         return;
     }
 
-    int avail = tud_cdc_n_write_available(CDC_CTRL);
-    if (avail < (int)len) {
+    if (len > CDC1_RING_MASK) {
         return;
     }
 
-    uint32_t wrote = tud_cdc_n_write(CDC_CTRL, buf, len);
-    if (wrote == len) {
-        tud_cdc_n_write_flush(CDC_CTRL);
+    uint16_t space = cdc1_ring_space();
+    if (space < len) {
+        return;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        cdc1_ring[cdc1_ring_w] = (uint8_t)buf[i];
+        cdc1_ring_w = (uint16_t)((cdc1_ring_w + 1u) & CDC1_RING_MASK);
     }
 }
 
@@ -145,6 +170,45 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
         return;
     }
     cdc_ctrl_write(out, out_len);
+}
+
+static bool cdc1_ring_drain(void) {
+    if (!tud_cdc_n_connected(CDC_CTRL)) {
+        return false;
+    }
+
+    bool wrote_any = false;
+    while (true) {
+        if (cdc1_ring_r == cdc1_ring_w) {
+            break;
+        }
+        int avail = tud_cdc_n_write_available(CDC_CTRL);
+        if (avail <= 0) {
+            break;
+        }
+        uint16_t used = (uint16_t)((cdc1_ring_w - cdc1_ring_r) & CDC1_RING_MASK);
+        uint16_t to_write = (uint16_t)avail;
+        if (to_write > used) {
+            to_write = used;
+        }
+        uint16_t contiguous = (uint16_t)(CDC1_RING_SIZE - cdc1_ring_r);
+        if (to_write > contiguous) {
+            to_write = contiguous;
+        }
+        if (to_write == 0) {
+            break;
+        }
+        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &cdc1_ring[cdc1_ring_r], to_write);
+        if (wrote == 0) {
+            break;
+        }
+        cdc1_ring_r = (uint16_t)((cdc1_ring_r + wrote) & CDC1_RING_MASK);
+        wrote_any = true;
+    }
+    if (wrote_any) {
+        tud_cdc_n_write_flush(CDC_CTRL);
+    }
+    return wrote_any;
 }
 
 static inline void diag_accumulate_edges(bool pixclk, bool hsync, bool vsync, bool video,
@@ -518,6 +582,11 @@ void app_core_poll(void) {
     uint32_t loop_start = time_us_32();
     uint32_t active_us = 0;
     tud_task();
+    bool cdc_now = tud_cdc_n_connected(CDC_CTRL);
+    if (!cdc_now && cdc1_connected) {
+        cdc1_ring_reset();
+    }
+    cdc1_connected = cdc_now;
     service_ep0_commands();
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
@@ -525,21 +594,10 @@ void app_core_poll(void) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
-    if (probe_pending) {
-        active_start = time_us_32();
-        if (try_send_probe_packet()) {
-            probe_pending = 0;
-            active_us += (uint32_t)(time_us_32() - active_start);
-        }
-    }
     if (debug_requested && can_emit_text()) {
         active_start = time_us_32();
         debug_requested = false;
         emit_debug_state();
-        active_us += (uint32_t)(time_us_32() - active_start);
-    }
-    active_start = time_us_32();
-    if (service_txq()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 
@@ -576,6 +634,24 @@ void app_core_poll(void) {
                             (unsigned long)core0_pct,
                             (unsigned long)core1_pct);
         }
+    }
+
+    active_start = time_us_32();
+    if (cdc1_ring_drain()) {
+        active_us += (uint32_t)(time_us_32() - active_start);
+    }
+
+    if (probe_pending) {
+        active_start = time_us_32();
+        if (try_send_probe_packet()) {
+            probe_pending = 0;
+            active_us += (uint32_t)(time_us_32() - active_start);
+        }
+    }
+
+    active_start = time_us_32();
+    if (service_txq()) {
+        active_us += (uint32_t)(time_us_32() - active_start);
     }
 
     tight_loop_contents();
