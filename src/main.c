@@ -22,6 +22,11 @@ int main(void) {
     adb_spi_hold_reset();
 
     stdio_init_all();
+
+    // Bring up the ATtiny85 SPI link early so the ADB device is alive
+    // while the host enumerates USB (target expects ADB within ~500 ms).
+    adb_spi_init();
+
     tud_init(0);
 
     // Service USB until the host finishes enumeration (SET_CONFIGURATION).
