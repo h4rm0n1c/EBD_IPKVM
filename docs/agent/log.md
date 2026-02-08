@@ -89,3 +89,4 @@
 - 2026-02-03: Reviewed trabular/trabatar serial command ordering (keyboard/mouse nibble order, button codes, deceleration) for SPI parity.
 - 2026-02-03: Reduced ADB diag mouse-key step size to 5 px for movement testing.
 - 2026-02-03: Reordered SPI mouse motion nibbles to send low then high, matching trabatar’s serial ordering.
+- 2026-02-03: Defaulted ADB SPI command placement to low byte to match USI’s 16-clock capture of the last 8 bits.

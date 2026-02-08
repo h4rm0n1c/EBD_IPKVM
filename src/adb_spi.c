@@ -41,11 +41,11 @@
 /*
  * Byte packing: 16-bit transfers can place the command byte in either
  * the high or low byte depending on the ATtiny85 USI handling.
- * Default to high-byte command (matches observed "B3 00" captures),
+ * Default to low-byte command (matches USI capture of the last 8 clocks),
  * but keep a compile-time switch for troubleshooting.
  */
 #ifndef ADB_SPI_CMD_IN_HIGH_BYTE
-#define ADB_SPI_CMD_IN_HIGH_BYTE 1
+#define ADB_SPI_CMD_IN_HIGH_BYTE 0
 #endif
 
 static bool spi_active = false;
