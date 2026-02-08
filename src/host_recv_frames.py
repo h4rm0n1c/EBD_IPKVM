@@ -324,6 +324,7 @@ old_term_settings = None
 if stdin_is_tty:
     old_term_settings = termios.tcgetattr(stdin_fd)
     tty.setcbreak(stdin_fd)
+    print("[host] interactive CDC relay active (stdin→CDC, CDC→stderr)", file=sys.stderr)
 
 def relay_stdin_cdc():
     """Forward any pending stdin bytes to the CDC control port."""
