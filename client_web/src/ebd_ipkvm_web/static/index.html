@@ -149,7 +149,7 @@
           <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
           <button class="secondary" id="stop-btn">Stop</button>
         </div>
-        <canvas class="video-canvas" id="video-canvas" width="512" height="342">
+        <canvas class="video-canvas" id="video-canvas" width="1024" height="684">
           Video stream placeholder (1024 × 684)
         </canvas>
         <p class="note">
@@ -176,6 +176,9 @@
 
       const WIDTH = 512;
       const HEIGHT = 342;
+      const SCALE = 2;
+      const RENDER_WIDTH = WIDTH * SCALE;
+      const RENDER_HEIGHT = HEIGHT * SCALE;
       const LINE_BYTES = 64;
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
@@ -187,7 +190,7 @@
       let lineSeen = new Uint8Array(HEIGHT);
       let frameReady = false;
       let renderQueued = false;
-      const imageData = ctx.createImageData(WIDTH, HEIGHT);
+      const imageData = ctx.createImageData(RENDER_WIDTH, RENDER_HEIGHT);
 
       const resetFrameBuffer = () => {
         lineBuffer.fill(0);
@@ -221,19 +224,26 @@
 
       const renderFrame = () => {
         const pixels = imageData.data;
-        let pixelIndex = 0;
         for (let y = 0; y < HEIGHT; y += 1) {
           const rowStart = y * LINE_BYTES;
-          for (let x = 0; x < LINE_BYTES; x += 1) {
-            const byte = renderBuffer[rowStart + x];
+          for (let xByte = 0; xByte < LINE_BYTES; xByte += 1) {
+            const byte = renderBuffer[rowStart + xByte];
             for (let bit = 7; bit >= 0; bit -= 1) {
               const on = (byte >> bit) & 1;
               const value = on ? 255 : 0;
-              pixels[pixelIndex] = value;
-              pixels[pixelIndex + 1] = value;
-              pixels[pixelIndex + 2] = value;
-              pixels[pixelIndex + 3] = 255;
-              pixelIndex += 4;
+              const x = xByte * 8 + (7 - bit);
+              const outX = x * SCALE;
+              const outY = y * SCALE;
+              const topLeft = (outY * RENDER_WIDTH + outX) * 4;
+              const topRight = topLeft + 4;
+              const bottomLeft = topLeft + RENDER_WIDTH * 4;
+              const bottomRight = bottomLeft + 4;
+              for (const idx of [topLeft, topRight, bottomLeft, bottomRight]) {
+                pixels[idx] = value;
+                pixels[idx + 1] = value;
+                pixels[idx + 2] = value;
+                pixels[idx + 3] = 255;
+              }
             }
           }
         }

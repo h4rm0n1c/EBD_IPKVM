@@ -123,3 +123,4 @@
 - 2026-02-05: Added EP0 vendor requests for PS_ON, BOOTSEL, and reboot; documented bulk-first transport and deprecated CDC video stream.
 - 2026-02-05: Buffered completed frames for render and moved canvas draws onto requestAnimationFrame to reduce flicker.
 - 2026-02-05: Removed boot/diag delays and added EP0 PS_OFF on stop to power down and end capture cleanly.
+- 2026-02-05: Rendered the web client canvas at 2x resolution with pixel-doubling to avoid browser scaling blur.
