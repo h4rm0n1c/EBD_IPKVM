@@ -17,6 +17,9 @@ This initial prototype uses FastAPI + Uvicorn for the UI shell and a placeholder
 Run it directly with:
 
 ```sh
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
 python -m ebd_ipkvm_web
 ```
 
