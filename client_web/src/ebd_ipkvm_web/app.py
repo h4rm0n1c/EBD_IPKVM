@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import glob
-import os
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,7 +23,8 @@ RLE_FLAG = 0x8000
 LEN_MASK = 0x7FFF
 MAGIC0 = 0xEB
 MAGIC1 = 0xD1
-STREAM_BAUD = 115200
+USB_VID = 0x2E8A
+USB_PID = 0x000A
 
 
 @dataclass
@@ -102,18 +101,55 @@ class SessionManager:
                 await self._stop_stream()
 
 
-def auto_detect_stream_device() -> tuple[Optional[str], Optional[str]]:
-    by_id_dir = "/dev/serial/by-id"
-    if not os.path.isdir(by_id_dir):
-        return None, f"{by_id_dir} is missing; CDC auto-detect is unavailable."
-    entries = sorted(glob.glob(os.path.join(by_id_dir, "*")))
-    matches = [e for e in entries if "if00" in os.path.basename(e)]
-    if not matches:
-        return None, "CDC stream port not found (expected /dev/serial/by-id/*if00*)."
-    if len(matches) > 1:
-        joined = "\n  ".join(matches)
-        return None, f"Multiple CDC stream ports found:\n  {joined}"
-    return matches[0], None
+def open_usb_stream() -> tuple[Any, int, Any]:
+    try:
+        import usb.core
+        import usb.util
+    except ImportError as exc:
+        raise RuntimeError(
+            f"pyusb not available: {exc}. Install python3-usb or pyusb."
+        ) from exc
+
+    dev = usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    if dev is None:
+        raise RuntimeError("USB device not found (VID/PID 0x2E8A:0x000A).")
+
+    try:
+        cfg = dev.get_active_configuration()
+    except usb.core.USBError:
+        cfg = None
+    if cfg is None:
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) != 16:
+                raise
+        cfg = dev.get_active_configuration()
+    intf = usb.util.find_descriptor(cfg, bInterfaceClass=0xFF)
+    if intf is None:
+        raise RuntimeError("Bulk stream interface not found.")
+
+    if dev.is_kernel_driver_active(intf.bInterfaceNumber):
+        dev.detach_kernel_driver(intf.bInterfaceNumber)
+
+    usb.util.claim_interface(dev, intf.bInterfaceNumber)
+    ep_in = usb.util.find_descriptor(
+        intf,
+        custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
+        == usb.util.ENDPOINT_IN,
+    )
+    if ep_in is None:
+        raise RuntimeError("Bulk IN endpoint not found.")
+    return dev, intf.bInterfaceNumber, ep_in
+
+
+def read_usb_stream(ep_in: Any, timeout_s: float) -> bytes:
+    timeout_ms = int(timeout_s * 1000)
+    try:
+        data = ep_in.read(8192, timeout=timeout_ms)
+        return bytes(data)
+    except Exception:
+        return b""
 
 
 def pop_one_packet(buf: bytearray) -> Optional[bytes]:
@@ -139,30 +175,17 @@ def pop_one_packet(buf: bytearray) -> Optional[bytes]:
 
 
 async def stream_loop(websocket: WebSocket, stop_event: asyncio.Event) -> None:
-    import serial
-
-    stream_device = os.environ.get("EBD_IPKVM_STREAM_DEVICE")
-    if not stream_device:
-        stream_device, err = auto_detect_stream_device()
-        if err:
-            await websocket.send_json({"type": "error", "message": err})
-            return
-    await websocket.send_json(
-        {"type": "status", "message": f"Opening CDC stream device: {stream_device}"}
-    )
     try:
-        stream = serial.Serial(stream_device, baudrate=STREAM_BAUD, timeout=0.5)
-    except serial.SerialException as exc:
+        dev, intf_num, ep_in = open_usb_stream()
+    except RuntimeError as exc:
         await websocket.send_json(
-            {"type": "error", "message": f"Failed to open stream device: {exc}"}
+            {"type": "error", "message": f"Failed to open USB stream: {exc}"}
         )
         return
-    stream.dtr = True
-    stream.rts = True
     buf = bytearray()
     try:
         while not stop_event.is_set():
-            chunk = await asyncio.to_thread(stream.read, 8192)
+            chunk = await asyncio.to_thread(read_usb_stream, ep_in, 0.25)
             if not chunk:
                 continue
             buf.extend(chunk)
@@ -180,7 +203,12 @@ async def stream_loop(websocket: WebSocket, stop_event: asyncio.Event) -> None:
                 header = struct.pack("<HHHH", frame_id, line_id, plen, 0)
                 await websocket.send_bytes(header + payload)
     finally:
-        stream.close()
+        try:
+            import usb.util
+
+            usb.util.release_interface(dev, intf_num)
+        except Exception:
+            pass
 
 
 def create_app() -> FastAPI:

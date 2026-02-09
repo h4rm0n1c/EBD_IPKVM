@@ -24,10 +24,17 @@ python -m ebd_ipkvm_web
 ```
 
 The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
-Set `EBD_IPKVM_STREAM_DEVICE` to override CDC stream auto-detect (expects `/dev/serial/by-id/*if00*`).
+The video stream uses the USB bulk interface (pyusb + EP0 control), matching `host_recv_frames.py`.
 
 ### Troubleshooting missing dependencies
 If you see `ModuleNotFoundError: No module named 'serial'`, the fix is to upgrade the editable install so `pyserial` is pulled in:
+
+```sh
+. .venv/bin/activate
+pip install -e . --upgrade
+```
+
+If you see `pyusb not available`, install the dependency and refresh the venv:
 
 ```sh
 . .venv/bin/activate

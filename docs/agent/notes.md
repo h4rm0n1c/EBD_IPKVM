@@ -11,6 +11,7 @@
 - Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
 - `host_recv_frames.py` auto-detects the CDC control port via `/dev/serial/by-id/*if01*`; pass `--ctrl-device` if udev naming is unavailable or ambiguous.
 - Web client dependency changes require upgrading the editable install (`pip install -e . --upgrade`); missing `serial` indicates `pyserial` is not installed yet.
+- Web client video ingest uses the USB bulk interface via pyusb (same path as `host_recv_frames.py`), not the CDC tty stream.
 - Linux udev symlinks include `if00` (CDC0 stream) and `if01` (CDC1 control); use `/dev/serial/by-id` for stable naming.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
