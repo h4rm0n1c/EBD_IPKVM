@@ -23,6 +23,8 @@ pip install -e .
 python -m ebd_ipkvm_web
 ```
 
+The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
+
 ## Devuan setup (PEP 668 + Serial Permissions)
 ### PEP 668 (Externally Managed Environments)
 Devuan enables PEP 668 by default, so `pip install` into the system Python is blocked. Use `pipx` for isolated installs.
