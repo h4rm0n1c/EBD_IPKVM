@@ -19,6 +19,9 @@ After any non-trivial change:
 - If you learned a constraint/quirk, write it down in `docs/agent/notes.md`.
 - Refresh this `agents.md` file periodically so it stays aligned with current workflows.
 
+## Parity-first implementation discipline
+- When implementing web client features that mirror host tooling (e.g., video ingest/transport), re-read the authoritative host reference (`src/host_recv_frames.py`) and match its transport/format decisions before coding.
+
 ## Reference sources
 - Use Apple legacy Mac documentation and official technotes when relevant to this project.
 - The `docs/mac_classic_video_protocol/` folder contains PDFs/snapshots for classic Mac video timing and sync behavior; use `pdftotext` to mine details before changing capture logic.

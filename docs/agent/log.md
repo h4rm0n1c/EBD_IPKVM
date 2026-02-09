@@ -117,3 +117,4 @@
 - 2026-02-05: Documented upgrading the web client venv after dependency changes and made pyserial import lazy to avoid startup crashes without serial.
 - 2026-02-05: Added troubleshooting notes for missing pyserial and recorded the editable-install upgrade reminder.
 - 2026-02-05: Switched web client streaming to pyusb bulk reads to match host_recv_frames and documented the dependency.
+- 2026-02-05: Added a parity-first reminder in AGENTS.md to re-check host_recv_frames before implementing web client transport logic.
