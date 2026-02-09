@@ -30,7 +30,7 @@
       }
       main {
         display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
         gap: 12px;
         padding: 12px 20px 16px;
         flex: 1;
@@ -69,8 +69,8 @@
         margin: 4px 0 0;
       }
       .video-canvas {
-        width: 100%;
-        aspect-ratio: 4 / 3;
+        width: min(100%, 1024px);
+        height: min(58vh, 684px);
         border-radius: 10px;
         background: #0b0f17;
         border: 1px dashed #2f3645;
@@ -78,7 +78,6 @@
         place-items: center;
         color: #5f6b7a;
         font-size: 0.9rem;
-        max-height: 58vh;
       }
       .console {
         display: flex;
@@ -132,7 +131,7 @@
           <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
           <button class="secondary" id="stop-btn">Stop</button>
         </div>
-        <div class="video-canvas" id="video-canvas">Video stream placeholder</div>
+        <div class="video-canvas" id="video-canvas">Video stream placeholder (1024 × 684)</div>
         <p class="note">
           The backend stays idle until you start a session. Only one browser session can own the
           Pico + CDC connections at a time.
