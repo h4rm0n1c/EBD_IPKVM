@@ -183,7 +183,11 @@
       let currentFrameId = null;
       let lineCount = 0;
       let lineBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
+      let renderBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
       let lineSeen = new Uint8Array(HEIGHT);
+      let frameReady = false;
+      let renderQueued = false;
+      const imageData = ctx.createImageData(WIDTH, HEIGHT);
 
       const resetFrameBuffer = () => {
         lineBuffer.fill(0);
@@ -216,13 +220,12 @@
       };
 
       const renderFrame = () => {
-        const imageData = ctx.createImageData(WIDTH, HEIGHT);
         const pixels = imageData.data;
         let pixelIndex = 0;
         for (let y = 0; y < HEIGHT; y += 1) {
           const rowStart = y * LINE_BYTES;
           for (let x = 0; x < LINE_BYTES; x += 1) {
-            const byte = lineBuffer[rowStart + x];
+            const byte = renderBuffer[rowStart + x];
             for (let bit = 7; bit >= 0; bit -= 1) {
               const on = (byte >> bit) & 1;
               const value = on ? 255 : 0;
@@ -235,6 +238,20 @@
           }
         }
         ctx.putImageData(imageData, 0, 0);
+      };
+
+      const queueRender = () => {
+        if (renderQueued) {
+          return;
+        }
+        renderQueued = true;
+        requestAnimationFrame(() => {
+          renderQueued = false;
+          if (frameReady) {
+            renderFrame();
+            frameReady = false;
+          }
+        });
       };
 
       const appendLog = (message) => {
@@ -306,7 +323,6 @@
             currentFrameId = frameId;
           }
           if (frameId !== currentFrameId) {
-            renderFrame();
             resetFrameBuffer();
             currentFrameId = frameId;
           }
@@ -325,7 +341,9 @@
             lineCount += 1;
           }
           if (lineCount >= HEIGHT) {
-            renderFrame();
+            renderBuffer.set(lineBuffer);
+            frameReady = true;
+            queueRender();
             resetFrameBuffer();
           }
           return;
