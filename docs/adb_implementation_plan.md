@@ -54,6 +54,9 @@ Previous exploration of on-Pico ADB implementation identified these key resource
 - **hootswitch**: RP2040 PIO + DMA ADB implementation (host + device)
 - **trabular**: AVR ADB keyboard + mouse emulation firmware (alternate reference)
 - **adb-usb**: Simple ADB host implementation
+- **Lopaciuk ADB protocol summary**: Clear protocol walk-through and timing summary (https://www.lopaciuk.eu/2021/03/26/apple-adb-protocol.html)
+- **TMK Apple Desktop Bus wiki**: ADB overview and implementation notes used by multiple firmware projects (https://github.com/tmk/tmk_keyboard/wiki/Apple-Desktop-Bus)
+- **MiSTer plus_too ADB core**: Verilog device-side ADB implementation for reference (https://raw.githubusercontent.com/mist-devel/plus_too/refs/heads/master/adb.v)
 
 These remain valuable for the external controller approach.
 
