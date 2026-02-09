@@ -111,3 +111,4 @@
 - 2026-02-05: Added box-sizing and a 10px console offset so the CDC1 panel sits cleanly beside the video panel.
 - 2026-02-05: Adjusted the video panel column width so the padded container fully contains the 1024px placeholder.
 - 2026-02-05: Switched the web client to uvicorn[standard] so WebSocket support is installed by default.
+- 2026-02-05: Expanded web client Step 5 to stream in-memory 1-bpp RLE line payloads over WebSocket for parity with the CDC stream and future transport swaps.

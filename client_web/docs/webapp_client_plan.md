@@ -50,8 +50,12 @@ Extract and reuse the core CDC stream decode logic from `src/host_recv_frames.py
 - CDC stream device discovery/override.
 - Line decoding + RLE handling.
 - Frame buffer assembly.
-Convert frames to a browser-friendly format (e.g., PNG) and stream over WebSocket to the UI’s canvas.
-Maintain parity with current options (raw/pgm/pbm handling where relevant to the pipeline).
+Stream in-memory, binary 1-bpp RLE line payloads over WebSocket (no file writes) and decode into a frame buffer in the browser:
+- Keep the payload format identical to the CDC stream (`docs/protocol/usb_cdc_stream.md`) so we can swap transports later.
+- Send line packets (frame_id, line_id, flags, payload_len, payload bytes) as binary WS messages.
+- Expand RLE in the browser (or server) using the same `(count, value)` semantics as `host_recv_frames.py`.
+- Render via a `Uint8ClampedArray` → `ImageData` path for 1-bpp frames.
+Maintain parity with current raw/RLE toggles and 1-bpp assumptions used by the host receiver.
 :::
 
 ## Step 6 — Add CDC1 live console passthrough

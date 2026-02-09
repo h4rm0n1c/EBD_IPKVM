@@ -3,6 +3,7 @@
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.
 - 2026-02-04: Pivot ADB to an external ATmega328p running the MacFriends Arduino core and connect it over UART1 (GPIO20/21), superseding the prior GPIO6/12 direct ADB wiring plan.
 - 2026-02-05: Define the web client as a single-session/single-client UI with one active set of Pico (and future MacFriends) connections.
+- 2026-02-05: Stream 1-bpp RLE line payloads over WebSocket in-memory (no file writes), keeping payload format aligned with the CDC stream to ease future UDP transport swaps.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
 - 2026-02-03: Base ADB device emulation on hootswitch’s PIO+DMA bus engine and device-side state machine, trimmed to a single keyboard+mouse.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
