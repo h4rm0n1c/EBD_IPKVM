@@ -91,3 +91,7 @@
 - 2026-02-04: Set the Arduino Uno PlatformIO upload speed to 57600 for the Uno environment.
 - 2026-02-04: Aligned the Arduino Uno monitor speed to 57600 to match the updated upload rate.
 - 2026-02-04: Added a Duemilanove PlatformIO environment copied from the prior Uno config and restored the Uno speeds to 115200.
+- 2026-02-05: Added initial client_web scaffold with README and Devuan setup notes for pipx/serial permissions.
+- 2026-02-05: Moved Devuan pipx/serial setup notes into client_web/README.md for quick reference.
+- 2026-02-05: Stored the webapp client plan in client_web/docs so progress can be tracked over time.
+- 2026-02-05: Added implementation references to the web client plan, highlighting host_recv_frames.py as the primary CDC decode/comms reference.
