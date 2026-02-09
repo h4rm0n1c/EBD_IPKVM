@@ -30,11 +30,14 @@
       }
       main {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+        grid-template-columns: minmax(0, 1fr);
         gap: 12px;
         padding: 12px 20px 16px;
         flex: 1;
         min-height: 0;
+        max-width: 1200px;
+        width: 100%;
+        margin: 0 auto;
       }
       .panel {
         background: #151a23;
@@ -70,7 +73,7 @@
       }
       .video-canvas {
         width: min(100%, 1024px);
-        height: min(58vh, 684px);
+        height: 684px;
         border-radius: 10px;
         background: #0b0f17;
         border: 1px dashed #2f3645;
@@ -83,15 +86,13 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        height: 100%;
-        min-height: 0;
       }
       .console h2 {
         margin: 0;
         font-size: 1rem;
       }
       .console-log {
-        flex: 1;
+        min-height: 220px;
         background: #0b0f17;
         border-radius: 8px;
         border: 1px solid #2a3242;
@@ -100,7 +101,6 @@
         font-size: 0.8rem;
         overflow-y: auto;
         white-space: pre-wrap;
-        min-height: 0;
       }
       .console-input {
         display: flex;
