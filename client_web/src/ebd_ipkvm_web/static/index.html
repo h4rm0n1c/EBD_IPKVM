@@ -315,7 +315,8 @@
         }
       });
 
-      const socket = new WebSocket(`ws://${window.location.host}/ws`);
+      const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws`);
       socket.binaryType = "arraybuffer";
       socket.addEventListener("message", (event) => {
         if (event.data instanceof ArrayBuffer) {

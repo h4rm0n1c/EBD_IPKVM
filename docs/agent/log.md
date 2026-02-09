@@ -126,3 +126,4 @@
 - 2026-02-05: Rendered the web client canvas at 2x resolution with pixel-doubling to avoid browser scaling blur.
 - 2026-02-05: Styled the video panel with beige casing and larger padding to evoke a luggable Mac enclosure.
 - 2026-02-05: Adjusted video panel CSS specificity so the beige casing/padding overrides the base panel styling.
+- 2026-02-05: Documented LAN access defaults and ensured WebSocket scheme matches http/https.

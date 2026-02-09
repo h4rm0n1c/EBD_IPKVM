@@ -23,6 +23,9 @@ pip install -e . --upgrade
 python -m ebd_ipkvm_web
 ```
 
+The server binds to `0.0.0.0:8000` by default so you can access it from other machines on your LAN.
+If you still cannot reach it remotely, check your firewall or run `uvicorn` explicitly with `--host 0.0.0.0`.
+
 The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
 The video stream uses the USB bulk interface (pyusb + EP0 control), matching `host_recv_frames.py`.
 
