@@ -367,8 +367,9 @@
           appendLog(data.message);
         }
       });
-      socket.addEventListener("close", () => {
-        appendLog("[ws] Connection closed.");
+      socket.addEventListener("close", (event) => {
+        const reason = event.reason ? event.reason : "n/a";
+        appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
       });
 
       updateStatus();
