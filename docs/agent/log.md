@@ -95,3 +95,4 @@
 - 2026-02-05: Moved Devuan pipx/serial setup notes into client_web/README.md for quick reference.
 - 2026-02-05: Stored the webapp client plan in client_web/docs so progress can be tracked over time.
 - 2026-02-05: Added implementation references to the web client plan, highlighting host_recv_frames.py as the primary CDC decode/comms reference.
+- 2026-02-05: Clarified that web client setup/usage notes live in client_web/README.md (not docs).

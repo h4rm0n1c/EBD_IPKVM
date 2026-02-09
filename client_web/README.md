@@ -39,4 +39,4 @@ sudo usermod -aG dialout "$USER"
 Log out and back in to apply the group change.
 
 ## Documentation
-- Setup/usage notes: add files under `docs/` as the client grows.
+- Setup/usage notes live in this README as the client grows.
