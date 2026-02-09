@@ -100,3 +100,4 @@
 - 2026-02-05: Added a FastAPI-based web client shell with a single-session UI, session API, and CDC1 console placeholder.
 - 2026-02-05: Added client_web/requirements.txt and venv install steps to document FastAPI/Uvicorn dependencies.
 - 2026-02-05: Ignored client_web/.venv in git to avoid committing local virtualenvs.
+- 2026-02-05: Added a client_web pyproject so `pip install -e .` installs the web client module.
