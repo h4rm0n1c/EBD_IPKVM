@@ -41,6 +41,12 @@ If you see `pyusb not available`, install the dependency and refresh the venv:
 pip install -e . --upgrade
 ```
 
+On Debian/Devuan you may also need the system package:
+
+```sh
+sudo apt-get install -y python3-usb
+```
+
 ## Devuan setup (PEP 668 + Serial Permissions)
 ### PEP 668 (Externally Managed Environments)
 Devuan enables PEP 668 by default, so `pip install` into the system Python is blocked. Use `pipx` for isolated installs.
