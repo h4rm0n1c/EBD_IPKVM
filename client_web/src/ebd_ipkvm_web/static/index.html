@@ -8,6 +8,9 @@
       :root {
         color-scheme: dark;
         font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --video-width: 1024px;
+        --video-height: 684px;
+        --panel-height: 760px;
       }
       html,
       body {
@@ -30,18 +33,21 @@
       }
       main {
         display: grid;
-        grid-template-columns: minmax(0, 1024px) minmax(260px, 320px);
-        gap: 12px;
+        grid-template-columns: var(--video-width) 320px;
+        gap: 16px;
         padding: 12px 20px 16px;
         flex: 1;
         min-height: 0;
-        width: fit-content;
         max-width: 100%;
         margin: 0 auto;
+        justify-content: center;
         align-items: start;
       }
       .video-panel {
-        width: min(100%, 1024px);
+        width: var(--video-width);
+        height: var(--panel-height);
+        display: flex;
+        flex-direction: column;
       }
       .panel {
         background: #151a23;
@@ -76,8 +82,8 @@
         margin: 4px 0 0;
       }
       .video-canvas {
-        width: min(100%, 1024px);
-        height: 684px;
+        width: var(--video-width);
+        height: var(--video-height);
         border-radius: 10px;
         background: #0b0f17;
         border: 1px dashed #2f3645;
@@ -90,7 +96,7 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        height: 684px;
+        height: var(--panel-height);
         align-self: start;
       }
       .console h2 {
