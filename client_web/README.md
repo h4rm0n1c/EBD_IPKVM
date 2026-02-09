@@ -2,6 +2,7 @@
 
 ## Overview
 This folder contains the planned web client for EBD IPKVM. The web service is **idle by default** and only connects to devices after the user explicitly starts a session from the web UI.
+This is a **single-session, single-client** UI: one browser session owns one set of connections to the Pico (and later the MacFriends Arduino), and multi-user concurrency is explicitly out of scope.
 
 ## Goals
 - Provide a browser-based control and monitoring UI.
@@ -10,6 +11,14 @@ This folder contains the planned web client for EBD IPKVM. The web service is **
 
 ## Run (placeholder)
 `pipx run ebd-ipkvm-web --host 0.0.0.0 --port 8000`
+
+## Local development (prototype)
+This initial prototype uses FastAPI + Uvicorn for the UI shell and a placeholder session API.
+Run it directly with:
+
+```sh
+python -m ebd_ipkvm_web
+```
 
 ## Devuan setup (PEP 668 + Serial Permissions)
 ### PEP 668 (Externally Managed Environments)

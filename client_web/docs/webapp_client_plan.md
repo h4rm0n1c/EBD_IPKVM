@@ -27,6 +27,7 @@ In `client_web/README.md` or `client_web/docs/devuan.md`:
 In the README:
 - Provide a one-line run command (e.g., `pipx run ebd-ipkvm-web --host 0.0.0.0 --port 8000`).
 - Explicitly state that the service starts idle and only connects to devices when the web UI triggers a session.
+- Explicitly call out that the web client is single-session/single-client with one set of device connections.
 Add config flags for default devices but don’t auto-connect at startup.
 :::
 

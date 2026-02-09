@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EBD IPKVM Web Client (Prototype)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #0e1117;
+        color: #f5f5f5;
+      }
+      header {
+        padding: 24px 32px;
+        border-bottom: 1px solid #1f2430;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+        gap: 24px;
+        padding: 24px 32px 32px;
+      }
+      .panel {
+        background: #151a23;
+        border: 1px solid #1f2430;
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      button {
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #3b82f6;
+        color: #fff;
+      }
+      button.secondary {
+        background: #2f3645;
+        color: #fff;
+      }
+      .status {
+        font-size: 0.9rem;
+        color: #9aa4b2;
+        margin: 0 0 12px;
+      }
+      .video-canvas {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        border-radius: 10px;
+        background: #0b0f17;
+        border: 1px dashed #2f3645;
+        display: grid;
+        place-items: center;
+        color: #5f6b7a;
+        font-size: 0.95rem;
+      }
+      .console {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 100%;
+      }
+      .console-log {
+        flex: 1;
+        background: #0b0f17;
+        border-radius: 8px;
+        border: 1px solid #2a3242;
+        padding: 12px;
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        font-size: 0.85rem;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .console-input {
+        display: flex;
+        gap: 8px;
+      }
+      .console-input input {
+        flex: 1;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #2a3242;
+        background: #0b0f17;
+        color: #fff;
+      }
+      .note {
+        font-size: 0.85rem;
+        color: #9aa4b2;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>EBD IPKVM Web Client</h1>
+      <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
+    </header>
+    <main>
+      <section class="panel">
+        <div class="controls">
+          <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
+          <button class="secondary" id="stop-btn">Stop</button>
+        </div>
+        <div class="video-canvas" id="video-canvas">Video stream placeholder</div>
+        <p class="note">
+          The backend stays idle until you start a session. Only one browser session can own the
+          Pico + CDC connections at a time.
+        </p>
+      </section>
+      <section class="panel console">
+        <h2>CDC1 Live Console</h2>
+        <div class="console-log" id="console-log"></div>
+        <div class="console-input">
+          <input id="console-input" type="text" placeholder="Type and press Enter..." />
+        </div>
+      </section>
+    </main>
+    <script>
+      const consoleLog = document.getElementById("console-log");
+      const sessionStatus = document.getElementById("session-status");
+      const input = document.getElementById("console-input");
+      const startBtn = document.getElementById("start-btn");
+      const stopBtn = document.getElementById("stop-btn");
+
+      const appendLog = (message) => {
+        const line = document.createElement("div");
+        line.textContent = message;
+        consoleLog.appendChild(line);
+        consoleLog.scrollTop = consoleLog.scrollHeight;
+      };
+
+      const ownerId = `browser-${crypto.randomUUID()}`;
+
+      const updateStatus = async () => {
+        const response = await fetch("/api/session/status");
+        const data = await response.json();
+        const active = data.active ? "active" : "idle";
+        sessionStatus.textContent = `Status: ${active} (single-session, single-client)`;
+      };
+
+      startBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
+      stopBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          const message = input.value.trim();
+          if (message && socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "console_input", message }));
+            input.value = "";
+          }
+        }
+      });
+
+      const socket = new WebSocket(`ws://${window.location.host}/ws`);
+      socket.addEventListener("message", (event) => {
+        const data = JSON.parse(event.data);
+        if (data.message) {
+          appendLog(data.message);
+        }
+      });
+      socket.addEventListener("close", () => {
+        appendLog("[ws] Connection closed.");
+      });
+
+      updateStatus();
+    </script>
+  </body>
+</html>
