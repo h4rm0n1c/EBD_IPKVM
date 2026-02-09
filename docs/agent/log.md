@@ -89,3 +89,4 @@
 
 - 2026-02-03: Imported the MacFriends Arduino core snapshot into /Arduino with source/credit notes.
 - 2026-02-04: Set the Arduino Uno PlatformIO upload speed to 57600 for the Uno environment.
+- 2026-02-04: Aligned the Arduino Uno monitor speed to 57600 to match the updated upload rate.
