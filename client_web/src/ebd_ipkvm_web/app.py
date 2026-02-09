@@ -25,6 +25,14 @@ MAGIC0 = 0xEB
 MAGIC1 = 0xD1
 USB_VID = 0x2E8A
 USB_PID = 0x000A
+CTRL_REQ_CAPTURE_START = 0x01
+CTRL_REQ_CAPTURE_STOP = 0x02
+CTRL_REQ_RESET_COUNTERS = 0x03
+CTRL_REQ_RLE_ON = 0x05
+
+DEFAULT_BOOT_WAIT_S = 12.0
+DEFAULT_DIAG_SECS = 12.0
+DEFAULT_CTRL_MODE = "ep0"
 
 
 @dataclass
@@ -67,6 +75,8 @@ class SessionManager:
                 }
             self._state.active = True
             self._state.owner_id = owner_id
+            if self._state.websocket is not None:
+                await run_control_sequence(self._state.websocket)
             await self._start_stream()
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
 
@@ -78,6 +88,17 @@ class SessionManager:
                 raise HTTPException(status_code=403, detail="Session owned by another client.")
             self._state.active = False
             self._state.owner_id = None
+            if self._state.websocket is not None:
+                try:
+                    dev = await asyncio.to_thread(open_usb_device_for_control)
+                    await asyncio.to_thread(send_ep0_cmd, dev, CTRL_REQ_CAPTURE_STOP)
+                    await self._state.websocket.send_json(
+                        {"type": "status", "message": "EP0: capture stop"}
+                    )
+                except RuntimeError as exc:
+                    await self._state.websocket.send_json(
+                        {"type": "error", "message": str(exc)}
+                    )
             await self._stop_stream()
             return {"active": False, "message": "Session stopped."}
 
@@ -150,6 +171,72 @@ def read_usb_stream(ep_in: Any, timeout_s: float) -> bytes:
         return bytes(data)
     except Exception:
         return b""
+
+
+def open_usb_device_for_control() -> Any:
+    try:
+        import usb.core
+    except ImportError as exc:
+        raise RuntimeError(
+            f"pyusb not available: {exc}. Install python3-usb or pyusb."
+        ) from exc
+
+    dev = usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    if dev is None:
+        raise RuntimeError("USB device not found (VID/PID 0x2E8A:0x000A).")
+
+    try:
+        dev.get_active_configuration()
+    except Exception:
+        try:
+            dev.set_configuration()
+        except Exception:
+            pass
+    return dev
+
+
+def send_ep0_cmd(dev: Any, req: int) -> None:
+    try:
+        dev.ctrl_transfer(0x41, req, 0, 0, None)
+    except Exception as exc:
+        raise RuntimeError(f"EP0 control transfer failed (req=0x{req:02X}): {exc}") from exc
+
+
+async def run_control_sequence(
+    websocket: WebSocket,
+    *,
+    boot_wait_s: float = DEFAULT_BOOT_WAIT_S,
+    diag_secs: float = DEFAULT_DIAG_SECS,
+) -> None:
+    if DEFAULT_CTRL_MODE != "ep0":
+        return
+    try:
+        dev = await asyncio.to_thread(open_usb_device_for_control)
+    except RuntimeError as exc:
+        await websocket.send_json({"type": "error", "message": str(exc)})
+        return
+
+    if diag_secs > 0:
+        await websocket.send_json(
+            {"type": "status", "message": f"diag: waiting {diag_secs:.2f}s before start"}
+        )
+        await asyncio.sleep(diag_secs)
+
+    if boot_wait_s > diag_secs:
+        await asyncio.sleep(boot_wait_s - diag_secs)
+
+    for req, note in (
+        (CTRL_REQ_CAPTURE_STOP, "capture stop"),
+        (CTRL_REQ_RESET_COUNTERS, "reset counters"),
+        (CTRL_REQ_RLE_ON, "enable RLE"),
+        (CTRL_REQ_CAPTURE_START, "capture start"),
+    ):
+        try:
+            await asyncio.to_thread(send_ep0_cmd, dev, req)
+        except RuntimeError as exc:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+            return
+        await websocket.send_json({"type": "status", "message": f"EP0: {note}"})
 
 
 def pop_one_packet(buf: bytearray) -> Optional[bytes]:
