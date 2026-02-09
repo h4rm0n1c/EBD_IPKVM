@@ -1,10 +1,10 @@
 # MacFriends Arduino core
 
-This directory is a **verbatim snapshot** of the `Arduino/` folder from the local `/opt/adb/macfriends` repository (MacFriends: Universal Control for your old Macintosh Classic). It is **the primary firmware we use** for the external ATmega328p that handles ADB on this project, not just a reference.
+This directory is a **verbatim snapshot** of the MacFriends `Arduino/` folder (MacFriends: Universal Control for your old Macintosh Classic). It is **the primary firmware we use** for the external ATmega328p that handles ADB on this project, not just a reference.
 
 ## Source
-- Local source: `/opt/adb/macfriends/Arduino`
-- Project name: **MacFriends** (see `/opt/adb/macfriends/Readme.md`)
+- Project name: **MacFriends**
+- Upstream repository: https://github.com/bartjakobs/MacFriends
 
 ## Build + flash (PlatformIO with pipx / PEP 668 friendly)
 
