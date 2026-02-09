@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
-import serial
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
@@ -140,6 +139,8 @@ def pop_one_packet(buf: bytearray) -> Optional[bytes]:
 
 
 async def stream_loop(websocket: WebSocket, stop_event: asyncio.Event) -> None:
+    import serial
+
     stream_device = os.environ.get("EBD_IPKVM_STREAM_DEVICE")
     if not stream_device:
         stream_device, err = auto_detect_stream_device()

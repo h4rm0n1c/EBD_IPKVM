@@ -19,7 +19,7 @@ Run it directly with:
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -e . --upgrade
 python -m ebd_ipkvm_web
 ```
 
