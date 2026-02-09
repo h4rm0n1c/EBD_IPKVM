@@ -105,3 +105,4 @@
 - 2026-02-05: Reduced web client UI spacing and typography so the layout is shorter on 1080p screens.
 - 2026-02-05: Set the web client video placeholder to 1024x684 (2x target capture size) and adjusted layout sizing.
 - 2026-02-05: Reflowed the web client layout into a single column so the video and console panels fit without clipping.
+- 2026-02-05: Rebalanced the web client layout into compact side-by-side panels sized to content.

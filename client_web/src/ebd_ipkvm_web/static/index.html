@@ -30,14 +30,18 @@
       }
       main {
         display: grid;
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1024px) minmax(260px, 320px);
         gap: 12px;
         padding: 12px 20px 16px;
         flex: 1;
         min-height: 0;
-        max-width: 1200px;
-        width: 100%;
+        width: fit-content;
+        max-width: 100%;
         margin: 0 auto;
+        align-items: start;
+      }
+      .video-panel {
+        width: min(100%, 1024px);
       }
       .panel {
         background: #151a23;
@@ -92,7 +96,8 @@
         font-size: 1rem;
       }
       .console-log {
-        min-height: 220px;
+        min-height: 200px;
+        max-height: 320px;
         background: #0b0f17;
         border-radius: 8px;
         border: 1px solid #2a3242;
@@ -126,7 +131,7 @@
       <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
     </header>
     <main>
-      <section class="panel">
+      <section class="panel video-panel">
         <div class="controls">
           <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
           <button class="secondary" id="stop-btn">Stop</button>
