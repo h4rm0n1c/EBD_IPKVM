@@ -30,11 +30,12 @@ CTRL_REQ_CAPTURE_STOP = 0x02
 CTRL_REQ_RESET_COUNTERS = 0x03
 CTRL_REQ_RLE_ON = 0x05
 CTRL_REQ_PS_ON = 0x08
+CTRL_REQ_PS_OFF = 0x09
 CTRL_REQ_BOOTSEL = 0x0A
 CTRL_REQ_REBOOT = 0x0B
 
-DEFAULT_BOOT_WAIT_S = 12.0
-DEFAULT_DIAG_SECS = 12.0
+DEFAULT_BOOT_WAIT_S = 0.0
+DEFAULT_DIAG_SECS = 0.0
 DEFAULT_CTRL_MODE = "ep0"
 
 
@@ -94,10 +95,14 @@ class SessionManager:
             if self._state.websocket is not None:
                 try:
                     dev = await asyncio.to_thread(open_usb_device_for_control)
-                    await asyncio.to_thread(send_ep0_cmd, dev, CTRL_REQ_CAPTURE_STOP)
-                    await self._state.websocket.send_json(
-                        {"type": "status", "message": "EP0: capture stop"}
-                    )
+                    for req, note in (
+                        (CTRL_REQ_CAPTURE_STOP, "capture stop"),
+                        (CTRL_REQ_PS_OFF, "ps_on=0"),
+                    ):
+                        await asyncio.to_thread(send_ep0_cmd, dev, req)
+                        await self._state.websocket.send_json(
+                            {"type": "status", "message": f"EP0: {note}"}
+                        )
                 except RuntimeError as exc:
                     await self._state.websocket.send_json(
                         {"type": "error", "message": str(exc)}
