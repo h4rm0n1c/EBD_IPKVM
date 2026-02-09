@@ -17,11 +17,12 @@ After any non-trivial change:
 - Add a short entry to `docs/agent/log.md` (what changed + why).
 - If it’s a design choice (not just refactor), add it to `docs/agent/decisions.md`.
 - If you learned a constraint/quirk, write it down in `docs/agent/notes.md`.
+- Refresh this `agents.md` file periodically so it stays aligned with current workflows.
 
 ## Reference sources
-- Use `/opt/MacDevDocs` (Apple legacy Mac documentation) as a local reference when relevant to this project.
+- Use Apple legacy Mac documentation and official technotes when relevant to this project.
 - The `docs/mac_classic_video_protocol/` folder contains PDFs/snapshots for classic Mac video timing and sync behavior; use `pdftotext` to mine details before changing capture logic.
-- ADB references are available under `/opt/adb` (project snapshots) and `/opt/adb/miscdocs` (ADB Manager PDF, hardware technotes).
+- ADB references include the Apple ADB Manager PDF and hardware technotes, plus upstream ADB projects cited in `docs/agent/notes.md`.
 
 ## Preferred reporting style
 - Cite file paths.
