@@ -62,7 +62,7 @@ These remain valuable for the external controller approach.
 
 ## ADB Device Inventory
 
-### In-repo MacFriends snapshot (Arduino core)
+### In-repo MacFriends Arduino core (primary ADB firmware)
 
 | Device | ADB address | Registers used | Notes | Key files |
 | --- | --- | --- | --- | --- |
