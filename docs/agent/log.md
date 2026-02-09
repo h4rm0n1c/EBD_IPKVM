@@ -88,3 +88,4 @@
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
 
 - 2026-02-03: Imported the MacFriends Arduino core snapshot into /Arduino with source/credit notes.
+- 2026-02-04: Set the Arduino Uno PlatformIO upload speed to 57600 for the Uno environment.
