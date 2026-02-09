@@ -128,3 +128,4 @@
 - 2026-02-05: Adjusted video panel CSS specificity so the beige casing/padding overrides the base panel styling.
 - 2026-02-05: Documented LAN access defaults and ensured WebSocket scheme matches http/https.
 - 2026-02-05: Logged WebSocket close reasons in the UI and documented single-client WebSocket behavior.
+- 2026-02-05: Added a crypto.randomUUID fallback for older browsers without the API.

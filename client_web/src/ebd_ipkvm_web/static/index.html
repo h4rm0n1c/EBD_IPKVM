@@ -274,7 +274,10 @@
         consoleLog.scrollTop = consoleLog.scrollHeight;
       };
 
-      const ownerId = `browser-${crypto.randomUUID()}`;
+      const fallbackId = () => `browser-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const ownerId = typeof crypto !== "undefined" && crypto.randomUUID
+        ? `browser-${crypto.randomUUID()}`
+        : fallbackId();
 
       const updateStatus = async () => {
         const response = await fetch("/api/session/status");
