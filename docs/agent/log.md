@@ -129,3 +129,4 @@
 - 2026-02-05: Documented LAN access defaults and ensured WebSocket scheme matches http/https.
 - 2026-02-05: Logged WebSocket close reasons in the UI and documented single-client WebSocket behavior.
 - 2026-02-05: Added a crypto.randomUUID fallback for older browsers without the API.
+- 2026-02-05: Noted that crypto.randomUUID may be unavailable on non-secure remote contexts and the UI fallback covers it.
