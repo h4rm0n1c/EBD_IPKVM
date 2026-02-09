@@ -149,7 +149,9 @@
           <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
           <button class="secondary" id="stop-btn">Stop</button>
         </div>
-        <div class="video-canvas" id="video-canvas">Video stream placeholder (1024 × 684)</div>
+        <canvas class="video-canvas" id="video-canvas" width="512" height="342">
+          Video stream placeholder (1024 × 684)
+        </canvas>
         <p class="note">
           The backend stays idle until you start a session. Only one browser session can own the
           Pico + CDC connections at a time.
@@ -169,6 +171,71 @@
       const input = document.getElementById("console-input");
       const startBtn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
+      const canvas = document.getElementById("video-canvas");
+      const ctx = canvas.getContext("2d");
+
+      const WIDTH = 512;
+      const HEIGHT = 342;
+      const LINE_BYTES = 64;
+      const RLE_FLAG = 0x8000;
+      const LEN_MASK = 0x7fff;
+
+      let currentFrameId = null;
+      let lineCount = 0;
+      let lineBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
+      let lineSeen = new Uint8Array(HEIGHT);
+
+      const resetFrameBuffer = () => {
+        lineBuffer.fill(0);
+        lineSeen.fill(0);
+        lineCount = 0;
+      };
+
+      const decodeRleLine = (payload) => {
+        if (payload.length % 2 !== 0) {
+          return null;
+        }
+        const output = new Uint8Array(LINE_BYTES);
+        let outIndex = 0;
+        for (let i = 0; i < payload.length; i += 2) {
+          const count = payload[i];
+          const value = payload[i + 1];
+          if (count === 0) {
+            return null;
+          }
+          if (outIndex + count > LINE_BYTES) {
+            return null;
+          }
+          output.fill(value, outIndex, outIndex + count);
+          outIndex += count;
+        }
+        if (outIndex !== LINE_BYTES) {
+          return null;
+        }
+        return output;
+      };
+
+      const renderFrame = () => {
+        const imageData = ctx.createImageData(WIDTH, HEIGHT);
+        const pixels = imageData.data;
+        let pixelIndex = 0;
+        for (let y = 0; y < HEIGHT; y += 1) {
+          const rowStart = y * LINE_BYTES;
+          for (let x = 0; x < LINE_BYTES; x += 1) {
+            const byte = lineBuffer[rowStart + x];
+            for (let bit = 7; bit >= 0; bit -= 1) {
+              const on = (byte >> bit) & 1;
+              const value = on ? 255 : 0;
+              pixels[pixelIndex] = value;
+              pixels[pixelIndex + 1] = value;
+              pixels[pixelIndex + 2] = value;
+              pixels[pixelIndex + 3] = 255;
+              pixelIndex += 4;
+            }
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+      };
 
       const appendLog = (message) => {
         const line = document.createElement("div");
@@ -219,7 +286,50 @@
       });
 
       const socket = new WebSocket(`ws://${window.location.host}/ws`);
+      socket.binaryType = "arraybuffer";
       socket.addEventListener("message", (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          const buffer = event.data;
+          if (buffer.byteLength < 8) {
+            return;
+          }
+          const header = new DataView(buffer, 0, 8);
+          const frameId = header.getUint16(0, true);
+          const lineId = header.getUint16(2, true);
+          const payloadLen = header.getUint16(4, true);
+          const payloadFlags = payloadLen & RLE_FLAG;
+          const payloadSize = payloadLen & LEN_MASK;
+          if (lineId >= HEIGHT || payloadSize === 0) {
+            return;
+          }
+          if (currentFrameId === null) {
+            currentFrameId = frameId;
+          }
+          if (frameId !== currentFrameId) {
+            renderFrame();
+            resetFrameBuffer();
+            currentFrameId = frameId;
+          }
+          const payload = new Uint8Array(buffer, 8, payloadSize);
+          let packed = payload;
+          if (payloadFlags) {
+            const decoded = decodeRleLine(payload);
+            if (!decoded) {
+              return;
+            }
+            packed = decoded;
+          }
+          lineBuffer.set(packed, lineId * LINE_BYTES);
+          if (!lineSeen[lineId]) {
+            lineSeen[lineId] = 1;
+            lineCount += 1;
+          }
+          if (lineCount >= HEIGHT) {
+            renderFrame();
+            resetFrameBuffer();
+          }
+          return;
+        }
         const data = JSON.parse(event.data);
         if (data.message) {
           appendLog(data.message);

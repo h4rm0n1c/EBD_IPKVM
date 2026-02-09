@@ -24,6 +24,7 @@ python -m ebd_ipkvm_web
 ```
 
 The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
+Set `EBD_IPKVM_STREAM_DEVICE` to override CDC stream auto-detect (expects `/dev/serial/by-id/*if00*`).
 
 ## Devuan setup (PEP 668 + Serial Permissions)
 ### PEP 668 (Externally Managed Environments)
