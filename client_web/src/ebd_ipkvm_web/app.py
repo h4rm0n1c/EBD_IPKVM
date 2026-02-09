@@ -29,6 +29,9 @@ CTRL_REQ_CAPTURE_START = 0x01
 CTRL_REQ_CAPTURE_STOP = 0x02
 CTRL_REQ_RESET_COUNTERS = 0x03
 CTRL_REQ_RLE_ON = 0x05
+CTRL_REQ_PS_ON = 0x08
+CTRL_REQ_BOOTSEL = 0x0A
+CTRL_REQ_REBOOT = 0x0B
 
 DEFAULT_BOOT_WAIT_S = 12.0
 DEFAULT_DIAG_SECS = 12.0
@@ -226,6 +229,7 @@ async def run_control_sequence(
         await asyncio.sleep(boot_wait_s - diag_secs)
 
     for req, note in (
+        (CTRL_REQ_PS_ON, "ps_on=1"),
         (CTRL_REQ_CAPTURE_STOP, "capture stop"),
         (CTRL_REQ_RESET_COUNTERS, "reset counters"),
         (CTRL_REQ_RLE_ON, "enable RLE"),

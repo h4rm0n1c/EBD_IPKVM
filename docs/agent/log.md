@@ -120,3 +120,4 @@
 - 2026-02-05: Added a parity-first reminder in AGENTS.md to re-check host_recv_frames before implementing web client transport logic.
 - 2026-02-05: Added troubleshooting guidance for missing pyusb (`python3-usb`) in web client docs.
 - 2026-02-05: Wired web client start/stop to EP0 control commands (reset, RLE, capture start/stop) to match host_recv_frames behavior.
+- 2026-02-05: Added EP0 vendor requests for PS_ON, BOOTSEL, and reboot; documented bulk-first transport and deprecated CDC video stream.

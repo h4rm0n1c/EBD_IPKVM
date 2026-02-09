@@ -6,6 +6,7 @@
 - 2026-02-05: Stream 1-bpp RLE line payloads over WebSocket in-memory (no file writes), keeping payload format aligned with the CDC stream to ease future UDP transport swaps.
 - 2026-02-05: Buffer complete frames in the browser and keep decode/render logic client-side so the Pico can remain a thin transport endpoint long-term.
 - 2026-02-05: Align web client video ingest with host_recv_frames by using pyusb to read the vendor bulk stream interface (EP0 control path).
+- 2026-02-05: Extend EP0 control requests to include power (PS_ON), BOOTSEL, and reboot commands so web tooling can avoid CDC control for those actions.
 - 2026-02-03: Update ADB wiring to GPIO6 (RECV, non-inverting) and GPIO12 (XMIT, inverted open-collector) on the shared ADB data line.
 - 2026-02-03: Base ADB device emulation on hootswitch’s PIO+DMA bus engine and device-side state machine, trimmed to a single keyboard+mouse.
 - 2026-01-31: Move capture/line packetization to core1 and reserve core0 for CDC I/O with an SPSC queue bridging cores.
