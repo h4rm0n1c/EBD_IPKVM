@@ -55,7 +55,9 @@ Stream in-memory, binary 1-bpp RLE line payloads over WebSocket (no file writes)
 - Send line packets (frame_id, line_id, flags, payload_len, payload bytes) as binary WS messages.
 - Expand RLE in the browser (or server) using the same `(count, value)` semantics as `host_recv_frames.py`.
 - Render via a `Uint8ClampedArray` → `ImageData` path for 1-bpp frames.
+Assemble full frames from per-line packets before display (buffer lines keyed by frame_id, flush on complete frame or frame_id change).
 Maintain parity with current raw/RLE toggles and 1-bpp assumptions used by the host receiver.
+Push as much decode/render logic into the browser as possible so long-term the Pico can serve raw line packets while clients handle assembly/rendering (future UDP transport).
 :::
 
 ## Step 6 — Add CDC1 live console passthrough
