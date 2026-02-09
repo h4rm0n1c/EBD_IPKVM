@@ -115,3 +115,4 @@
 - 2026-02-05: Clarified web client Step 5 to buffer full frames in the browser and push decode/render logic client-side for future UDP transport.
 - 2026-02-05: Implemented web client Step 5 stream parsing and browser-side frame assembly with CDC line packets over WebSocket.
 - 2026-02-05: Documented upgrading the web client venv after dependency changes and made pyserial import lazy to avoid startup crashes without serial.
+- 2026-02-05: Added troubleshooting notes for missing pyserial and recorded the editable-install upgrade reminder.

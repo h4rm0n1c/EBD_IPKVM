@@ -26,6 +26,14 @@ python -m ebd_ipkvm_web
 The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
 Set `EBD_IPKVM_STREAM_DEVICE` to override CDC stream auto-detect (expects `/dev/serial/by-id/*if00*`).
 
+### Troubleshooting missing dependencies
+If you see `ModuleNotFoundError: No module named 'serial'`, the fix is to upgrade the editable install so `pyserial` is pulled in:
+
+```sh
+. .venv/bin/activate
+pip install -e . --upgrade
+```
+
 ## Devuan setup (PEP 668 + Serial Permissions)
 ### PEP 668 (Externally Managed Environments)
 Devuan enables PEP 668 by default, so `pip install` into the system Python is blocked. Use `pipx` for isolated installs.
