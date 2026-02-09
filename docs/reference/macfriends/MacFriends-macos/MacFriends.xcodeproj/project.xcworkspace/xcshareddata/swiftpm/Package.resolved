@@ -1,0 +1,24 @@
+{
+  "originHash" : "985f48930fe6902cc85259d6fc0e355da7297bd8a469bbe05c4581f4a7c60c5e",
+  "pins" : [
+    {
+      "identity" : "bitbytedata",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tsolomko/BitByteData",
+      "state" : {
+        "revision" : "cdcdc5177ad536cfb11b95c620f926a81014b7fe",
+        "version" : "2.0.4"
+      }
+    },
+    {
+      "identity" : "swiftserial",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/christophhagen/SwiftSerial",
+      "state" : {
+        "revision" : "0fd167e3e22b9d2574c77b0660be5ecf0c8035bb",
+        "version" : "1.1.0"
+      }
+    }
+  ],
+  "version" : 3
+}
