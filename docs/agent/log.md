@@ -108,3 +108,4 @@
 - 2026-02-05: Rebalanced the web client layout into compact side-by-side panels sized to content.
 - 2026-02-05: Matched the CDC1 console panel height to the 1024x684 video placeholder.
 - 2026-02-05: Standardized video/console panel heights with shared layout variables to stop overlap.
+- 2026-02-05: Added box-sizing and a 10px console offset so the CDC1 panel sits cleanly beside the video panel.
