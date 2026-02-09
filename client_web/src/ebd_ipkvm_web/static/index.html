@@ -21,34 +21,37 @@
         flex-direction: column;
       }
       header {
-        padding: 16px 24px;
+        padding: 12px 20px;
         border-bottom: 1px solid #1f2430;
+      }
+      header h1 {
+        font-size: 1.2rem;
+        margin: 0 0 4px;
       }
       main {
         display: grid;
         grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-        gap: 16px;
-        padding: 16px 24px 20px;
+        gap: 12px;
+        padding: 12px 20px 16px;
         flex: 1;
         min-height: 0;
-        overflow: hidden;
       }
       .panel {
         background: #151a23;
         border: 1px solid #1f2430;
         border-radius: 12px;
-        padding: 16px;
+        padding: 12px;
       }
       .controls {
         display: flex;
-        gap: 12px;
+        gap: 8px;
         flex-wrap: wrap;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
       }
       button {
         border: none;
         border-radius: 8px;
-        padding: 10px 16px;
+        padding: 8px 12px;
         font-weight: 600;
         cursor: pointer;
       }
@@ -61,7 +64,7 @@
         color: #fff;
       }
       .status {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         color: #9aa4b2;
         margin: 4px 0 0;
       }
@@ -74,23 +77,28 @@
         display: grid;
         place-items: center;
         color: #5f6b7a;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
+        max-height: 58vh;
       }
       .console {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 8px;
         height: 100%;
         min-height: 0;
+      }
+      .console h2 {
+        margin: 0;
+        font-size: 1rem;
       }
       .console-log {
         flex: 1;
         background: #0b0f17;
         border-radius: 8px;
         border: 1px solid #2a3242;
-        padding: 12px;
+        padding: 10px;
         font-family: "JetBrains Mono", "Fira Code", monospace;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         overflow-y: auto;
         white-space: pre-wrap;
         min-height: 0;
@@ -101,14 +109,14 @@
       }
       .console-input input {
         flex: 1;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border-radius: 8px;
         border: 1px solid #2a3242;
         background: #0b0f17;
         color: #fff;
       }
       .note {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: #9aa4b2;
       }
     </style>

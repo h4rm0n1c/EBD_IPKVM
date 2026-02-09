@@ -102,3 +102,4 @@
 - 2026-02-05: Ignored client_web/.venv in git to avoid committing local virtualenvs.
 - 2026-02-05: Added a client_web pyproject so `pip install -e .` installs the web client module.
 - 2026-02-05: Tightened the web client UI layout to fit within a 1080p viewport without scrolling.
+- 2026-02-05: Reduced web client UI spacing and typography so the layout is shorter on 1080p screens.
