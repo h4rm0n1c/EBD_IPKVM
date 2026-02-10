@@ -2,7 +2,7 @@
 
 ## Overview
 This folder contains the planned web client for EBD IPKVM. The web service is **idle by default** and only connects to devices after the user explicitly starts a session from the web UI.
-This is a **single-session, single-client** UI: one browser session owns one set of connections to the Pico (and later the MacFriends Arduino), and multi-user concurrency is explicitly out of scope.
+This is a **single-session, single-owner** UI: one browser session owns control connections to the Pico/ADB path, while additional connected clients stay in view-only mode and continue receiving video.
 
 ## Goals
 - Provide a browser-based control and monitoring UI.
@@ -81,3 +81,25 @@ Log out and back in to apply the group change.
 
 ## Documentation
 - Setup/usage notes live in this README as the client grows.
+
+
+## ADB mouse bridge (web canvas → Arduino serial)
+The web client now captures pointer-locked mouse input on the video canvas and forwards relative deltas + left-button state to the MacFriends Arduino core over serial.
+
+- Default serial discovery glob: `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0`
+- Override with `ADB_SERIAL_PORT` (exact path or glob)
+- Packet format matches the MacFriends host client (`magic=123`, `updateType=1`, signed `dx`/`dy`)
+
+Example:
+
+```sh
+export ADB_SERIAL_PORT='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0'
+python -m ebd_ipkvm_web
+```
+
+In the UI, click the video canvas to lock the pointer. Only the active session owner can lock pointer/input and send movement, left-click, and keyboard keydown/keyup events to the Arduino; other connected clients stay in viewer mode and continue receiving live video. Mouse movement is currently scaled to 0.75x in the browser to keep cursor response snappier on the 2x canvas display, and each outbound packet is capped to ±24 counts per axis to avoid over-damping fast motions. Right-click exits pointer lock so Escape can be passed through to the Mac.
+
+If you enable **Boot for ROM disk** before starting a session, the web backend asserts the ROM-disk chord (`Command+Option+X+O`) before power-on, then reasserts it periodically through the first ~10 seconds.
+
+
+Stop Capture and Shutdown Mac are separate controls: **Stop Capture** sends `capture stop` and releases session ownership while leaving power on; **Shutdown Mac** sends both `capture stop` and `ps_on=0`.

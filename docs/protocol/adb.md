@@ -25,3 +25,40 @@ the Arduino shield/hardware, not on the Pico GPIO.
 ## Implementation notes
 - Base the UART protocol on the MacFriends host client, which already issues keyboard and mouse commands over USB serial to the Arduino shield.
 - The Pico should treat UART1 as a transport to the ATmega328p firmware, not as a direct ADB bus driver.
+
+
+## Web client serial bridge packet format
+
+The web backend now writes MacFriends-compatible 8-byte instructions directly to the Arduino serial port (`115200` baud) when the browser sends mouse input.
+
+Web session ownership is single-owner + multi-viewer: one `owner_id` is allowed to start/stop control and send ADB input, while additional connected clients remain in viewer mode and continue receiving the live video stream.
+
+- Device selection defaults to `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0`.
+- Override with `ADB_SERIAL_PORT` to provide an explicit tty path or glob.
+- Packet bytes match `Arduino/include/instruction.h` and MacFriends `ADBInstruction.toData()`.
+
+| Byte | Field | Type | Value |
+| ---- | ----- | ---- | ----- |
+| 0 | `magic` | int8 | `123` |
+| 1 | `updateType` | uint8 | `1` (`UPDATE_MOUSE`) |
+| 2 | `mouseIsDown` | int8 | `0` or `1` |
+| 3 | `dx` | int8 | relative X delta, clamped to `[-63, 63]` |
+| 4 | `dy` | int8 | relative Y delta, clamped to `[-63, 63]` |
+| 5 | `keyCode` | uint8 | `0` for mouse-only packets |
+| 6 | `isKeyUp` | uint8 | `0` for mouse-only packets |
+| 7 | `modifierKeys` | uint8 | `0` for mouse-only packets |
+
+The browser captures pointer-locked movement on the video canvas and sends relative `dx`/`dy` plus left-button state over WebSocket as `mouse_input`; the backend converts those into these serial packets. Mouse deltas are forwarded directly from pointer-lock movement (with sensitivity scaling and per-packet clamp).
+
+
+Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOARD`), `dx=0`, `dy=0`, and key fields populated (`keyCode`, `isKeyUp`, `modifierKeys`). Browser events are translated to Mac-style scan codes before transport.
+
+In the web client capture mode, right-click exits pointer lock (instead of relying on Escape) so Escape can be forwarded as keyboard input.
+
+When `/api/session/start` is called with `boot_rom_disk=true`, the backend asserts `Command+Option+X+O` before power-on and holds it for ~10 seconds from startup (then releases it), using standard keyboard packets (`updateType=2`). During that hold window the backend reasserts the same chord periodically to survive early-boot keyboard init timing. Modifier sequencing follows key transitions (Cmd down, Opt down, X down, O down; release in reverse).
+
+
+## Stop/Shutdown control behavior
+
+- `POST /api/session/stop` performs **capture stop only** (`CTRL_REQ_CAPTURE_STOP`) and ends the active owner session without forcing power off.
+- `POST /api/session/shutdown` performs **capture stop + power off** (`CTRL_REQ_CAPTURE_STOP`, `CTRL_REQ_PS_OFF`) and ends the active owner session.

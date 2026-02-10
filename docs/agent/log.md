@@ -1,5 +1,19 @@
 # Log (running)
 
+- 2026-02-10: Split web controls into separate Stop Capture and Shutdown Mac actions so capture can be stopped without powering off.
+- 2026-02-10: Removed bounded virtual-pointer clamping because it caused perceived drifting bounds; mouse now uses direct pointer-lock deltas again.
+- 2026-02-10: Switched web connection policy from single-client rejection to single-owner + multi-viewer mode so non-owner clients still receive live video stream.
+- 2026-02-10: Added a bounded virtual pointer during pointer-lock capture so mouse deltas are clamped to the canvas area, improving control consistency at edges.
+- 2026-02-10: Retuned web mouse mapping to 0.75x sensitivity with ±24 per-packet delta cap after testing showed the prior tuning felt floaty/over-damped.
+- 2026-02-10: Fixed web mouse click reliability by always transmitting button-state changes even when relative movement is 0.
+- 2026-02-10: Smoothed web mouse motion mapping by reducing sensitivity to 0.35x and capping per-packet deltas to ±12 before serial transport.
+- 2026-02-10: Updated ROM-disk boot assist to periodically reassert Cmd+Opt+X+O during the 10s hold window so late keyboard initialization still sees the chord.
+- 2026-02-10: Fixed ROM-disk boot chord sequencing to assert keys before PS_ON and to use transition-accurate modifier states so the Mac sees a true Cmd+Opt+X+O hold from power-on.
+- 2026-02-10: Tuned ROM-disk boot chord hold duration down to 10s (from 45s) after successful bring-up confirmed a shorter reassert window is sufficient.
+- 2026-02-10: Added a `Boot for ROM disk` start option in the web UI that holds Command+Option+X+O for ~10s after power-on, then releases all keys automatically.
+- 2026-02-10: Added web keyboard capture (keydown/keyup + modifier bits) and right-click pointer-lock release so Escape can be passed through as ADB keyboard input.
+- 2026-02-10: Reduced web canvas mouse sensitivity to 0.35x before serial packetization so pointer motion matches the 2x upscaled display better.
+- 2026-02-10: Added web-client pointer-lock mouse capture and a backend serial bridge that sends MacFriends-format mouse packets to the Arduino ADB core over `/dev/serial/by-id/...` (override via `ADB_SERIAL_PORT`).
 - 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
 - 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
 - 2026-02-10: Removed deprecated CDC video-feed references, simplified `host_recv_frames.py` to USB bulk video + EP0 control only, and updated web/docs text to treat CDC strictly as control/debug.

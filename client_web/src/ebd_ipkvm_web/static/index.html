@@ -77,7 +77,16 @@
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+        align-items: center;
         margin-bottom: 8px;
+      }
+      .checkbox-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #fff;
+        font-size: 0.85rem;
+        margin-left: 4px;
       }
       button {
         border: none;
@@ -174,19 +183,27 @@
         margin: 0;
         max-width: var(--video-width);
       }
+      .note strong {
+        color: #9dd8ff;
+      }
     </style>
   </head>
   <body>
     <header>
       <h1>EBD IPKVM Web Client</h1>
-      <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
+      <p class="status" id="session-status">Status: idle (single-session, multi-viewer)</p>
     </header>
     <main>
       <div class="video-column">
         <section class="panel video-panel">
           <div class="controls">
             <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
-            <button class="secondary" id="stop-btn">Stop</button>
+            <button class="secondary" id="stop-btn">Stop Capture</button>
+            <button class="secondary" id="shutdown-btn">Shutdown Mac</button>
+            <label class="checkbox-control" for="boot-rom-disk">
+              <input id="boot-rom-disk" type="checkbox" />
+              Boot for ROM disk
+            </label>
           </div>
           <canvas class="video-canvas" id="video-canvas" width="512" height="342">
             Video stream placeholder (512 × 342 source, 2× display)
@@ -196,8 +213,12 @@
           </div>
         </section>
         <p class="note">
-          The backend stays idle until you start a session. Only one browser session can own the
-          Pico + CDC0 control connections at a time.
+          The backend stays idle until you start a session. Only one browser session can own control at a time; other connected clients remain in viewer mode with live video.
+        </p>
+        <p class="note">
+          <strong>Mouse capture:</strong> click the video canvas to lock the pointer and stream
+          relative motion + left-click state to the ADB Arduino bridge. Right-click to
+          release pointer lock before keyboard passthrough testing.
         </p>
       </div>
       <section class="panel console">
@@ -214,6 +235,8 @@
       const input = document.getElementById("console-input");
       const startBtn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
+      const shutdownBtn = document.getElementById("shutdown-btn");
+      const bootRomDiskCheckbox = document.getElementById("boot-rom-disk");
       const canvas = document.getElementById("video-canvas");
       const powerLed = document.getElementById("power-led");
       const ctx = canvas.getContext("2d", { alpha: false });
@@ -223,6 +246,36 @@
       const LINE_BYTES = 64;
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
+      const MOUSE_SENSITIVITY = 0.75;
+      const MOUSE_MAX_DELTA_PER_PACKET = 24;
+      const MOD_CMD = 1;
+      const MOD_OPT = 2;
+      const MOD_SHIFT = 4;
+      const MOD_CONTROL = 8;
+      const MOD_CAPS = 32;
+      const MOD_DELETE = 64;
+      const BROWSER_CODE_TO_MAC_KEYCODE = {
+        KeyA: 0x00, KeyS: 0x01, KeyD: 0x02, KeyF: 0x03, KeyH: 0x04, KeyG: 0x05,
+        KeyZ: 0x06, KeyX: 0x07, KeyC: 0x08, KeyV: 0x09, KeyB: 0x0b, KeyQ: 0x0c,
+        KeyW: 0x0d, KeyE: 0x0e, KeyR: 0x0f, KeyY: 0x10, KeyT: 0x11, Digit1: 0x12,
+        Digit2: 0x13, Digit3: 0x14, Digit4: 0x15, Digit6: 0x16, Digit5: 0x17,
+        Equal: 0x18, Digit9: 0x19, Digit7: 0x1a, Minus: 0x1b, Digit8: 0x1c,
+        Digit0: 0x1d, BracketRight: 0x1e, KeyO: 0x1f, KeyU: 0x20, BracketLeft: 0x21,
+        KeyI: 0x22, KeyP: 0x23, Enter: 0x24, KeyL: 0x25, KeyJ: 0x26, Quote: 0x27,
+        KeyK: 0x28, Semicolon: 0x29, Backslash: 0x2a, Comma: 0x2b, Slash: 0x2c,
+        KeyN: 0x2d, KeyM: 0x2e, Period: 0x2f, Tab: 0x30, Space: 0x31, Backquote: 0x32,
+        Backspace: 0x33, Escape: 0x35, MetaLeft: 0x37, ShiftLeft: 0x38, CapsLock: 0x39,
+        AltLeft: 0x3a, ControlLeft: 0x3b, ShiftRight: 0x3c, AltRight: 0x3d,
+        ControlRight: 0x3e, ArrowLeft: 0x3b, ArrowRight: 0x3c, ArrowDown: 0x3d,
+        ArrowUp: 0x3e, NumpadDecimal: 0x41, NumpadMultiply: 0x43, NumpadAdd: 0x45,
+        NumpadClear: 0x47, NumpadDivide: 0x4b, NumpadEnter: 0x4c, NumpadSubtract: 0x4e,
+        NumpadEquals: 0x51, Numpad0: 0x52, Numpad1: 0x53, Numpad2: 0x54, Numpad3: 0x55,
+        Numpad4: 0x56, Numpad5: 0x57, Numpad6: 0x58, Numpad7: 0x59, Numpad8: 0x5b,
+        Numpad9: 0x5c, F5: 0x60, F6: 0x61, F7: 0x62, F3: 0x63, F8: 0x64, F9: 0x65,
+        F11: 0x67, F13: 0x69, F14: 0x6b, F10: 0x6d, F12: 0x6f, F15: 0x71, Insert: 0x72,
+        Home: 0x73, PageUp: 0x74, Delete: 0x75, End: 0x77, PageDown: 0x79, F1: 0x7a,
+        F2: 0x78, F4: 0x76
+      };
 
       ctx.imageSmoothingEnabled = false;
 
@@ -234,6 +287,14 @@
       let frameReady = false;
       let renderQueued = false;
       const imageData = ctx.createImageData(WIDTH, HEIGHT);
+      let pointerLocked = false;
+      let mouseDown = false;
+      let pendingDeltaX = 0;
+      let pendingDeltaY = 0;
+      let mouseSendQueued = false;
+      let lastSentMouseDown = false;
+      let sessionOwnerId = null;
+      let viewerMode = true;
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -328,22 +389,107 @@
         powerLed.classList.toggle("on", isOn);
       };
 
+      const getModifierKeys = (event) => {
+        let keys = 0;
+        if (event.metaKey) keys |= MOD_CMD;
+        if (event.altKey) keys |= MOD_OPT;
+        if (event.shiftKey) keys |= MOD_SHIFT;
+        if (event.ctrlKey) keys |= MOD_CONTROL;
+        if (event.getModifierState && event.getModifierState("CapsLock")) keys |= MOD_CAPS;
+        if (event.code === "Delete") keys |= MOD_DELETE;
+        return keys;
+      };
+
+      const sendKeyboardPacket = (event, isKeyUp) => {
+        if (viewerMode || !pointerLocked || !socket || socket.readyState !== WebSocket.OPEN) {
+          return false;
+        }
+        const scanCode = BROWSER_CODE_TO_MAC_KEYCODE[event.code];
+        if (scanCode === undefined) {
+          return false;
+        }
+        socket.send(JSON.stringify({
+          type: "keyboard_input",
+          owner_id: ownerId,
+          scan_code: scanCode,
+          is_key_up: isKeyUp,
+          modifier_keys: getModifierKeys(event),
+        }));
+        return true;
+      };
+
+      const queueMousePacket = () => {
+        if (mouseSendQueued) {
+          return;
+        }
+        mouseSendQueued = true;
+        requestAnimationFrame(() => {
+          mouseSendQueued = false;
+          if (viewerMode || !socket || socket.readyState !== WebSocket.OPEN) {
+            pendingDeltaX = 0;
+            pendingDeltaY = 0;
+            return;
+          }
+          if (!pointerLocked && !mouseDown) {
+            pendingDeltaX = 0;
+            pendingDeltaY = 0;
+            return;
+          }
+          const dxRaw = Math.trunc(pendingDeltaX);
+          const dyRaw = Math.trunc(pendingDeltaY);
+          const dx = Math.max(-MOUSE_MAX_DELTA_PER_PACKET, Math.min(MOUSE_MAX_DELTA_PER_PACKET, dxRaw));
+          const dy = Math.max(-MOUSE_MAX_DELTA_PER_PACKET, Math.min(MOUSE_MAX_DELTA_PER_PACKET, dyRaw));
+          pendingDeltaX -= dx;
+          pendingDeltaY -= dy;
+          const buttonStateChanged = mouseDown !== lastSentMouseDown;
+          if (dx === 0 && dy === 0 && pointerLocked && !buttonStateChanged) {
+            return;
+          }
+          lastSentMouseDown = mouseDown;
+          socket.send(
+            JSON.stringify({
+              type: "mouse_input",
+              owner_id: ownerId,
+              dx,
+              dy,
+              mouse_down: mouseDown,
+            }),
+          );
+        });
+      };
+
+      const updateViewerUi = () => {
+        startBtn.disabled = viewerMode;
+        stopBtn.disabled = viewerMode || !sessionOwnerId;
+        shutdownBtn.disabled = viewerMode || !sessionOwnerId;
+      };
+
+      const applySessionMode = (active, owner) => {
+        sessionOwnerId = owner || null;
+        viewerMode = Boolean(active) && sessionOwnerId !== ownerId;
+        const modeLabel = viewerMode ? "viewer" : "owner";
+        const activeLabel = active ? "active" : "idle";
+        sessionStatus.textContent = `Status: ${activeLabel} (${modeLabel} mode)`;
+        setPowerLed(Boolean(active));
+        updateViewerUi();
+      };
+
       const updateStatus = async () => {
         const response = await fetch("/api/session/status");
         const data = await response.json();
-        const active = data.active ? "active" : "idle";
-        sessionStatus.textContent = `Status: ${active} (single-session, single-client)`;
-        setPowerLed(Boolean(data.active));
+        applySessionMode(Boolean(data.active), data.owner_id || null);
       };
 
       startBtn.addEventListener("click", async () => {
         const response = await fetch("/api/session/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ owner_id: ownerId }),
+          body: JSON.stringify({
+            owner_id: ownerId,
+            boot_rom_disk: Boolean(bootRomDiskCheckbox && bootRomDiskCheckbox.checked),
+          }),
         });
         const data = await response.json();
-        setPowerLed(true);
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
@@ -357,9 +503,98 @@
         const data = await response.json();
         resetVideoState();
         clearVideoCanvas();
-        setPowerLed(false);
         appendLog(`[session] ${data.message}`);
         updateStatus();
+      });
+
+      shutdownBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/shutdown", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        resetVideoState();
+        clearVideoCanvas();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
+      canvas.addEventListener("click", async () => {
+        if (viewerMode) {
+          appendLog("[viewer] Input is disabled while another client owns control.");
+          return;
+        }
+        if (!document.pointerLockElement) {
+          try {
+            await canvas.requestPointerLock();
+          } catch (error) {
+            appendLog(`[mouse] Pointer lock failed: ${error}`);
+          }
+        }
+      });
+
+      canvas.addEventListener("contextmenu", (event) => {
+        if (!pointerLocked) {
+          return;
+        }
+        event.preventDefault();
+        document.exitPointerLock();
+      });
+
+      document.addEventListener("pointerlockchange", () => {
+        pointerLocked = document.pointerLockElement === canvas;
+        if (pointerLocked) {
+          appendLog("[mouse] Pointer locked to video canvas.");
+        } else {
+          pendingDeltaX = 0;
+          pendingDeltaY = 0;
+          mouseDown = false;
+          lastSentMouseDown = false;
+          appendLog("[mouse] Pointer unlocked.");
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "mouse_input", owner_id: ownerId, dx: 0, dy: 0, mouse_down: false }));
+          }
+        }
+      });
+
+      document.addEventListener("mousemove", (event) => {
+        if (viewerMode || !pointerLocked) {
+          return;
+        }
+        pendingDeltaX += event.movementX * MOUSE_SENSITIVITY;
+        pendingDeltaY += event.movementY * MOUSE_SENSITIVITY;
+        queueMousePacket();
+      });
+
+      document.addEventListener("mousedown", (event) => {
+        if (!pointerLocked || event.button !== 0) {
+          return;
+        }
+        mouseDown = true;
+        queueMousePacket();
+      });
+
+      document.addEventListener("mouseup", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        mouseDown = false;
+        queueMousePacket();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const sent = sendKeyboardPacket(event, false);
+        if (sent) {
+          event.preventDefault();
+        }
+      });
+
+      document.addEventListener("keyup", (event) => {
+        const sent = sendKeyboardPacket(event, true);
+        if (sent) {
+          event.preventDefault();
+        }
       });
 
       input.addEventListener("keydown", (event) => {
@@ -420,6 +655,9 @@
           return;
         }
         const data = JSON.parse(event.data);
+        if (data.type === "session_mode") {
+          applySessionMode(Boolean(data.active), data.owner_id || null);
+        }
         if (data.message) {
           appendLog(data.message);
         }
@@ -430,10 +668,13 @@
         setPowerLed(false);
         const reason = event.reason ? event.reason : "n/a";
         appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
+        viewerMode = true;
+        updateViewerUi();
       });
 
       clearVideoCanvas();
       setPowerLed(false);
+      updateViewerUi();
       updateStatus();
     </script>
   </body>
