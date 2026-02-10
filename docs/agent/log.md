@@ -136,3 +136,4 @@
 - 2026-02-10: Cleared the web video canvas to black on Stop/WebSocket close and reset frame state so the last captured frame is not left on screen after shutdown.
 - 2026-02-10: Restyled the web video panel toward a classic Macintosh Color Display bezel, moved the session note below the bezel, and added a power LED indicator tied to session active/stop state.
 - 2026-02-10: Fixed canvas moire risk by pinning web canvas CSS size to exact 1024x684, centering it in the bezel, widening the video column to avoid shrink, and adding pixelated/crisp-edges rendering hints.
+- 2026-02-10: Removed the canvas inner vignette overlay to avoid interference patterns on high-frequency dither areas while keeping the bezel lip styling.
