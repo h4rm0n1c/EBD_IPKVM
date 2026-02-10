@@ -230,6 +230,7 @@
       const LINE_BYTES = 64;
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
+      const MOUSE_SENSITIVITY = 0.5;
 
       ctx.imageSmoothingEnabled = false;
 
@@ -437,8 +438,8 @@
         if (!pointerLocked) {
           return;
         }
-        pendingDeltaX += event.movementX;
-        pendingDeltaY += event.movementY;
+        pendingDeltaX += event.movementX * MOUSE_SENSITIVITY;
+        pendingDeltaY += event.movementY * MOUSE_SENSITIVITY;
         queueMousePacket();
       });
 

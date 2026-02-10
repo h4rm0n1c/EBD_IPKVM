@@ -97,4 +97,4 @@ export ADB_SERIAL_PORT='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0'
 python -m ebd_ipkvm_web
 ```
 
-In the UI, click the video canvas to lock the pointer. Movement and left-click are sent to the Arduino while the capture session is active.
+In the UI, click the video canvas to lock the pointer. Movement and left-click are sent to the Arduino while the capture session is active. Mouse movement is currently scaled to 0.5x in the browser to compensate for the 2x canvas display.

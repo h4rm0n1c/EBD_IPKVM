@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-10: Reduced web canvas mouse sensitivity to 0.5x before serial packetization so pointer motion matches the 2x upscaled display better.
 - 2026-02-10: Added web-client pointer-lock mouse capture and a backend serial bridge that sends MacFriends-format mouse packets to the Arduino ADB core over `/dev/serial/by-id/...` (override via `ADB_SERIAL_PORT`).
 - 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
 - 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
