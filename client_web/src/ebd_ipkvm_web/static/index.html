@@ -188,8 +188,8 @@
             <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
             <button class="secondary" id="stop-btn">Stop</button>
           </div>
-          <canvas class="video-canvas" id="video-canvas" width="1024" height="684">
-            Video stream placeholder (1024 × 684)
+          <canvas class="video-canvas" id="video-canvas" width="512" height="342">
+            Video stream placeholder (512 × 342 source, 2× display)
           </canvas>
           <div class="video-footer">
             <div class="power-led" id="power-led" aria-label="Power LED"></div>
@@ -220,19 +220,11 @@
 
       const WIDTH = 512;
       const HEIGHT = 342;
-      const SCALE = 2;
-      const RENDER_WIDTH = WIDTH * SCALE;
-      const RENDER_HEIGHT = HEIGHT * SCALE;
       const LINE_BYTES = 64;
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
 
       ctx.imageSmoothingEnabled = false;
-      const sourceCanvas = document.createElement("canvas");
-      sourceCanvas.width = WIDTH;
-      sourceCanvas.height = HEIGHT;
-      const sourceCtx = sourceCanvas.getContext("2d", { alpha: false });
-      sourceCtx.imageSmoothingEnabled = false;
 
       let currentFrameId = null;
       let lineCount = 0;
@@ -241,7 +233,7 @@
       let lineSeen = new Uint8Array(HEIGHT);
       let frameReady = false;
       let renderQueued = false;
-      const sourceImageData = sourceCtx.createImageData(WIDTH, HEIGHT);
+      const imageData = ctx.createImageData(WIDTH, HEIGHT);
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -286,7 +278,7 @@
       };
 
       const renderFrame = () => {
-        const pixels = sourceImageData.data;
+        const pixels = imageData.data;
         for (let y = 0; y < HEIGHT; y += 1) {
           const rowStart = y * LINE_BYTES;
           for (let xByte = 0; xByte < LINE_BYTES; xByte += 1) {
@@ -303,8 +295,7 @@
             }
           }
         }
-        sourceCtx.putImageData(sourceImageData, 0, 0);
-        ctx.drawImage(sourceCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, RENDER_WIDTH, RENDER_HEIGHT);
+        ctx.putImageData(imageData, 0, 0);
       };
 
       const queueRender = () => {

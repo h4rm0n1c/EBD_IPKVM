@@ -138,3 +138,4 @@
 - 2026-02-10: Fixed canvas moire risk by pinning web canvas CSS size to exact 1024x684, centering it in the bezel, widening the video column to avoid shrink, and adding pixelated/crisp-edges rendering hints.
 - 2026-02-10: Removed the canvas inner vignette overlay to avoid interference patterns on high-frequency dither areas while keeping the bezel lip styling.
 - 2026-02-10: Switched browser rendering to a 512x342 source ImageData + nearest-neighbor drawImage upscale path to avoid periodic tile-like artifacts from direct 1024x684 manual pixel writes.
+- 2026-02-10: Switched display canvas backing store to native 512x342 with CSS 2x upscale so frames are blitted with putImageData at source resolution and avoid GPU tile artifacts from drawImage scaling.
