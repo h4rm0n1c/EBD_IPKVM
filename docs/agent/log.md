@@ -1,5 +1,8 @@
 # Log (running)
 
+- 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
+- 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
+- 2026-02-10: Removed deprecated CDC video-feed references, simplified `host_recv_frames.py` to USB bulk video + EP0 control only, and updated web/docs text to treat CDC strictly as control/debug.
 - 2026-02-04: Copied MacFriends macOS reference app sources into docs/reference/macfriends for ADB comms reference.
 - 2026-02-03: Reimplemented CDC1 ring-buffered control/status output with priority drain, bumped CDC TX buffer, and updated host tooling for CDC auto-detect + interactive relay.
 - 2026-02-04: Updated ADB documentation to use the MacFriends Arduino core on an ATmega328p over UART1 (GPIO20/21) and captured the wiring/level-shifting notes.
@@ -130,3 +133,9 @@
 - 2026-02-05: Logged WebSocket close reasons in the UI and documented single-client WebSocket behavior.
 - 2026-02-05: Added a crypto.randomUUID fallback for older browsers without the API.
 - 2026-02-05: Noted that crypto.randomUUID may be unavailable on non-secure remote contexts and the UI fallback covers it.
+- 2026-02-10: Cleared the web video canvas to black on Stop/WebSocket close and reset frame state so the last captured frame is not left on screen after shutdown.
+- 2026-02-10: Restyled the web video panel toward a classic Macintosh Color Display bezel, moved the session note below the bezel, and added a power LED indicator tied to session active/stop state.
+- 2026-02-10: Fixed canvas moire risk by pinning web canvas CSS size to exact 1024x684, centering it in the bezel, widening the video column to avoid shrink, and adding pixelated/crisp-edges rendering hints.
+- 2026-02-10: Removed the canvas inner vignette overlay to avoid interference patterns on high-frequency dither areas while keeping the bezel lip styling.
+- 2026-02-10: Switched browser rendering to a 512x342 source ImageData + nearest-neighbor drawImage upscale path to avoid periodic tile-like artifacts from direct 1024x684 manual pixel writes.
+- 2026-02-10: Switched display canvas backing store to native 512x342 with CSS 2x upscale so frames are blitted with putImageData at source resolution and avoid GPU tile artifacts from drawImage scaling.

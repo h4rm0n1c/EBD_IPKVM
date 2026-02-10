@@ -1,5 +1,8 @@
 # Notes
 
+- In `lsusb -t`, CDC ACM shows two interfaces (`Communications` + `CDC Data`) for one serial function; this is expected and does not indicate two separate CDC control channels.
+- Firmware now hard-fails build if `CFG_TUD_CDC` is not exactly 1, guarding against accidental reintroduction of a CDC video interface.
+- Legacy CDC video transport is retired: video ingestion must use vendor bulk, and CDC should be treated as control/debug text only.
 - Local reference: `/opt/MacDevDocs` contains Apple legacy Mac documentation to consult when needed for this project.
 - Local reference: `/opt/Pico-SDK` and `/opt/PicoHTTPServer` are available for Pico SDK API details and Pico W captive-portal web UI patterns.
 - Local reference: `/opt/SigrokPico` documents USB CDC RLE streaming patterns, and `/opt/picovga` shows a core1 video pipeline split for RP2040.
@@ -8,12 +11,12 @@
 - PIXCLK phase-lock after HSYNC (and a pre-roll high before falling-edge capture) prevents occasional 1-pixel capture phase slips.
 - If HSYNC edge polarity is ever changed from the default, retune XOFF before enabling capture; otherwise the window can straddle horizontal blanking and produce a stable but incorrect black band.
 - `scripts/cdc_cmd.py` is a quick helper for sending CDC command bytes and reading ASCII responses.
-- Control/status traffic now uses CDC1 while CDC0 is reserved for the binary video stream; host tooling must open the second CDC interface for commands.
+- Control/debug traffic uses CDC0 while binary video runs on vendor bulk; host tooling should open CDC only for logs/commands.
 - `host_recv_frames.py` auto-detects the CDC control port via `/dev/serial/by-id/*if01*`; pass `--ctrl-device` if udev naming is unavailable or ambiguous.
 - Web client dependency changes require upgrading the editable install (`pip install -e . --upgrade`); missing `serial` indicates `pyserial` is not installed yet.
 - Web client video ingest uses the USB bulk interface via pyusb (same path as `host_recv_frames.py`), not the CDC tty stream.
 - If `ModuleNotFoundError: No module named 'usb'` appears, install `python3-usb` (Debian/Devuan) and re-run `pip install -e . --upgrade`.
-- Linux udev symlinks include `if00` (CDC0 stream) and `if01` (CDC1 control); use `/dev/serial/by-id` for stable naming.
+- Linux udev symlinks usually expose CDC control as `...-if01...`; use `/dev/serial/by-id` for stable naming.
 - `scripts/ab_capture.py` expects firmware support for the `O` command to toggle VIDEO inversion between runs.
 - Classic compact Mac video timing: dot clock ~15.6672 MHz, HSYNC ~22.25 kHz (≈45 µs line), VSYNC ~60.15 Hz with ~180 µs low pulse; HSYNC continues during VSYNC and DATA idles high between active pixels.
 - Classic compact Mac HSYNC and VIDEO polarity are inverted compared to TTL PC monitor expectations (VSYNC polarity matches).

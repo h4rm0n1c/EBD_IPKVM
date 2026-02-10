@@ -3,7 +3,7 @@
 We should not do this all in one block all at once. This is the staged plan for delivery over time, and we will keep progress updated here as tasks are completed.
 
 ## Implementation references (keep in sync as we learn more)
-- `src/host_recv_frames.py` is the primary reference for CDC stream decode, frame assembly, and Pico CDC comms expectations; use it for parity checks when porting logic into the web client.
+- `src/host_recv_frames.py` is the primary reference for bulk video decode, frame assembly, and Pico control/transport expectations; use it for parity checks when porting logic into the web client.
 
 ## Step 1 — Create the client app directory + baseline docs
 :::task-stub{title="Add a dedicated web client directory and baseline README"}
@@ -32,26 +32,26 @@ Add config flags for default devices but don’t auto-connect at startup.
 :::
 
 ## Step 4 — Implement the web server shell + UI skeleton
-:::task-stub{title="Create the web UI shell with Start/Stop and CDC1 live console"}
+:::task-stub{title="Create the web UI shell with Start/Stop and CDC0 live console"}
 Implement a basic web server with:
 - `/` serving a simple HTML UI.
-- WebSocket endpoint for frame updates and CDC1 console streaming.
+- WebSocket endpoint for frame updates and CDC0 console streaming.
 UI components:
 - “Start Capture / Boot Mac” button.
 - “Stop” button.
 - Video canvas area.
-- CDC1 live console (scrollback + single-line input, send on Enter).
+- CDC0 live console (scrollback + single-line input, send on Enter).
 The UI must be present before any device connections are made.
 :::
 
 ## Step 5 — Achieve parity with host_recv_frames (video pipeline)
 :::task-stub{title="Port host_recv_frames decode logic into the webapp"}
-Extract and reuse the core CDC stream decode logic from `src/host_recv_frames.py`:
-- CDC stream device discovery/override.
+Extract and reuse the core bulk stream decode logic from `src/host_recv_frames.py`:
+- Vendor bulk endpoint discovery and claim/release handling.
 - Line decoding + RLE handling.
 - Frame buffer assembly.
 Stream in-memory, binary 1-bpp RLE line payloads over WebSocket (no file writes) and decode into a frame buffer in the browser:
-- Keep the payload format identical to the CDC stream (`docs/protocol/usb_cdc_stream.md`) so we can swap transports later.
+- Keep the payload format identical to the bulk video stream (`docs/protocol/usb_cdc_stream.md`) so we can swap transports later.
 - Send line packets (frame_id, line_id, flags, payload_len, payload bytes) as binary WS messages.
 - Expand RLE in the browser (or server) using the same `(count, value)` semantics as `host_recv_frames.py`.
 - Render via a `Uint8ClampedArray` → `ImageData` path for 1-bpp frames.
@@ -60,29 +60,29 @@ Maintain parity with current raw/RLE toggles and 1-bpp assumptions used by the h
 Push as much decode/render logic into the browser as possible so long-term the Pico can serve raw line packets while clients handle assembly/rendering (future UDP transport).
 :::
 
-## Step 6 — Add CDC1 live console passthrough
-:::task-stub{title="Implement a live CDC1 console passthrough"}
-Add a persistent CDC1 read loop that streams output to the browser console.
+## Step 6 — Add CDC0 live console passthrough
+:::task-stub{title="Implement a live CDC0 console passthrough"}
+Add a persistent CDC0 read loop that streams output to the browser console.
 The console must:
 - Show live scrollback.
 - Send on Enter (no separate send button).
 - Provide optional clear/reset.
-Start CDC1 only after “Start Capture / Boot Mac” and tear down on “Stop.”
+Start CDC0 only after “Start Capture / Boot Mac” and tear down on “Stop.”
 :::
 
 ## Step 7 — Session control flow (Start/Stop / Boot Mac)
 :::task-stub{title="Add a Boot Mac session flow that starts capture and console"}
 Implement “Start Capture / Boot Mac” that:
-- Opens CDC stream.
+- Opens the vendor bulk stream.
 - Starts video decode/streaming.
-- Starts CDC1 live console.
+- Starts CDC0 live console.
 Add “Stop” to close devices and return to idle state.
 :::
 
 ## Step 8 — Future network transport notes
 :::task-stub{title="Document transport abstraction for future network mode"}
 Add a short doc (client README or `docs/architecture.md`) describing:
-- A transport interface with USB CDC now, network sockets later.
+- A transport interface with USB bulk + CDC control now, network sockets later.
 - Where the transport boundary sits in the code.
 - The intent to keep UI unchanged while transport swaps.
 :::

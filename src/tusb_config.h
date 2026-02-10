@@ -17,6 +17,10 @@
 
 #define CFG_TUD_CDC             (1)
 
+#if CFG_TUD_CDC != 1
+#error "EBD_IPKVM firmware supports exactly one CDC interface for control/debug."
+#endif
+
 #ifndef CFG_TUD_CDC_RX_BUFSIZE
 #define CFG_TUD_CDC_RX_BUFSIZE  (TUD_OPT_HIGH_SPEED ? 512 : 64)
 #endif
