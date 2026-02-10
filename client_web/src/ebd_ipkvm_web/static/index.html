@@ -292,6 +292,10 @@
       let pendingDeltaY = 0;
       let mouseSendQueued = false;
       let lastSentMouseDown = false;
+      let virtualPointerX = WIDTH / 2;
+      let virtualPointerY = HEIGHT / 2;
+
+      const clamp = (value, minValue, maxValue) => Math.min(maxValue, Math.max(minValue, value));
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -511,7 +515,9 @@
       document.addEventListener("pointerlockchange", () => {
         pointerLocked = document.pointerLockElement === canvas;
         if (pointerLocked) {
-          appendLog("[mouse] Pointer locked to video canvas.");
+          virtualPointerX = WIDTH / 2;
+          virtualPointerY = HEIGHT / 2;
+          appendLog("[mouse] Pointer locked to video canvas (virtual pointer bounded to canvas).");
         } else {
           pendingDeltaX = 0;
           pendingDeltaY = 0;
@@ -528,8 +534,14 @@
         if (!pointerLocked) {
           return;
         }
-        pendingDeltaX += event.movementX * MOUSE_SENSITIVITY;
-        pendingDeltaY += event.movementY * MOUSE_SENSITIVITY;
+        const scaledX = event.movementX * MOUSE_SENSITIVITY;
+        const scaledY = event.movementY * MOUSE_SENSITIVITY;
+        const targetX = clamp(virtualPointerX + scaledX, 0, WIDTH - 1);
+        const targetY = clamp(virtualPointerY + scaledY, 0, HEIGHT - 1);
+        pendingDeltaX += targetX - virtualPointerX;
+        pendingDeltaY += targetY - virtualPointerY;
+        virtualPointerX = targetX;
+        virtualPointerY = targetY;
         queueMousePacket();
       });
 

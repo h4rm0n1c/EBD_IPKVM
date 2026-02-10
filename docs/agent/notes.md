@@ -45,3 +45,5 @@
 - Pointer-lock mouse transport must emit packets on button transitions even at `dx=dy=0`; suppressing zero-delta packets can drop click up/down events and look flaky on ADB mouse input.
 
 - If web pointer control feels floaty/sluggish, sensitivity and per-packet delta cap need to be tuned together; too-low sensitivity plus a tight cap over-damps motion.
+
+- Pointer lock has no native edge constraints; if canvas-bounded behavior is desired, maintain a virtual cursor and clamp it to capture geometry before deriving outbound deltas.
