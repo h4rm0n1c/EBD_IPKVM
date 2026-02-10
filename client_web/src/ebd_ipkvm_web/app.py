@@ -47,6 +47,7 @@ ADB_DX_DY_MIN = -63
 ADB_DX_DY_MAX = 63
 DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
 ROM_DISK_HOLD_SECONDS = 45.0
+ROM_DISK_REFRESH_SECONDS = 0.35
 
 MAC_KEY_COMMAND = 0x37
 MAC_KEY_OPTION = 0x3A
@@ -203,9 +204,16 @@ class SessionManager:
         await self._adb.send_keyboard(MAC_KEY_OPTION, True, MAC_MOD_COMMAND)
         await self._adb.send_keyboard(MAC_KEY_COMMAND, True, 0)
 
-    async def _hold_rom_disk_chord(self, hold_s: float) -> None:
+    async def _hold_rom_disk_chord(self, hold_s: float, refresh_s: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + hold_s
         try:
-            await asyncio.sleep(hold_s)
+            while True:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
+                await self._send_rom_disk_press()
+                await asyncio.sleep(min(refresh_s, remaining))
         except asyncio.CancelledError:
             raise
         finally:
@@ -214,9 +222,9 @@ class SessionManager:
             except RuntimeError:
                 pass
 
-    async def _start_rom_disk_hold(self, hold_s: float) -> None:
+    async def _start_rom_disk_hold(self, hold_s: float, refresh_s: float) -> None:
         await self._cancel_rom_disk_task()
-        self._rom_disk_task = asyncio.create_task(self._hold_rom_disk_chord(hold_s))
+        self._rom_disk_task = asyncio.create_task(self._hold_rom_disk_chord(hold_s, refresh_s))
 
     async def _start_stream(self) -> None:
         if self._state.stream_task or self._state.websocket is None:
@@ -256,13 +264,13 @@ class SessionManager:
                     )
                 if boot_rom_disk:
                     await self._send_rom_disk_press()
-                    await self._start_rom_disk_hold(ROM_DISK_HOLD_SECONDS)
+                    await self._start_rom_disk_hold(ROM_DISK_HOLD_SECONDS, ROM_DISK_REFRESH_SECONDS)
                     await self._state.websocket.send_json(
                         {
                             "type": "status",
                             "message": (
                                 "ROM-disk boot chord asserted before power-on "
-                                "(Command+Option+X+O), holding for 45s."
+                                "(Command+Option+X+O), reasserting for 45s."
                             ),
                         }
                     )

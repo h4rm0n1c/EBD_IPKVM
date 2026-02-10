@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-10: Updated ROM-disk boot assist to periodically reassert Cmd+Opt+X+O during the 45s hold window so late keyboard initialization still sees the chord.
 - 2026-02-10: Fixed ROM-disk boot chord sequencing to assert keys before PS_ON and to use transition-accurate modifier states so the Mac sees a true Cmd+Opt+X+O hold from power-on.
 - 2026-02-10: Increased ROM-disk boot chord hold duration from 30s to 45s to cover slower post-power-on ROM-disk detection windows.
 - 2026-02-10: Added a `Boot for ROM disk` start option in the web UI that holds Command+Option+X+O for ~45s after power-on, then releases all keys automatically.

@@ -39,3 +39,5 @@
 - Field testing indicates ROM-disk boot chord timing may need a longer post-power-on hold; 45s currently improves reliability versus 30s.
 
 - For synthetic key holds involving modifiers, send modifier bitfields that reflect transition order (e.g., Cmd-down uses Cmd only; Opt-down and subsequent keys use Cmd|Opt; release unwinds in reverse) to avoid host-side interpretation drift.
+
+- Some boot paths appear to initialize keyboard handling after power rails are stable; periodic chord reassert during the hold window improves capture reliability versus one-shot keydown.
