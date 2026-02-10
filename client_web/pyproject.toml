@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ebd-ipkvm-web"
+version = "0.0.0"
+description = "Prototype web client for EBD IPKVM."
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.110",
+  "pyserial>=3.5",
+  "pyusb>=1.2.1",
+  "uvicorn[standard]>=0.29",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

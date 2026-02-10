@@ -20,3 +20,6 @@
 .DS_Store
 .vscode/
 .idea/
+
+# client_web venv
+client_web/.venv/
