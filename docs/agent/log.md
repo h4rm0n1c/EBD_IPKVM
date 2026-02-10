@@ -1,6 +1,11 @@
 # Log (running)
 
+- 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
+- 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
+- 2026-02-10: Removed deprecated CDC video-feed references, simplified `host_recv_frames.py` to USB bulk video + EP0 control only, and updated web/docs text to treat CDC strictly as control/debug.
+- 2026-02-04: Copied MacFriends macOS reference app sources into docs/reference/macfriends for ADB comms reference.
 - 2026-02-03: Reimplemented CDC1 ring-buffered control/status output with priority drain, bumped CDC TX buffer, and updated host tooling for CDC auto-detect + interactive relay.
+- 2026-02-04: Updated ADB documentation to use the MacFriends Arduino core on an ATmega328p over UART1 (GPIO20/21) and captured the wiring/level-shifting notes.
 - 2026-02-03: Fixed host receiver CDC auto-detect initialization order to avoid NameError on startup.
 - 2026-02-03: Added scripts/setup_opt_references.sh to install /opt reference corpora including hootswitch and ADB miscdocs.
 - 2026-02-03: Updated ADB documentation to reflect hootswitch-based bus planning, AppleCore naming, and GPIO6/12 wiring.
@@ -84,3 +89,53 @@
 - 2026-01-25: Disable internal pullups/pulldowns on PIXCLK/VIDEO/HSYNC/VSYNC to rely on external termination.
 
 - 2026-02-02: Added an ADB keyboard/mouse implementation plan covering PIO timing, core split, and CDC test channel.
+
+- 2026-02-03: Imported the MacFriends Arduino core snapshot into /Arduino with source/credit notes.
+- 2026-02-04: Set the Arduino Uno PlatformIO upload speed to 57600 for the Uno environment.
+- 2026-02-04: Aligned the Arduino Uno monitor speed to 57600 to match the updated upload rate.
+- 2026-02-04: Added a Duemilanove PlatformIO environment copied from the prior Uno config and restored the Uno speeds to 115200.
+- 2026-02-05: Added initial client_web scaffold with README and Devuan setup notes for pipx/serial permissions.
+- 2026-02-05: Moved Devuan pipx/serial setup notes into client_web/README.md for quick reference.
+- 2026-02-05: Stored the webapp client plan in client_web/docs so progress can be tracked over time.
+- 2026-02-05: Added implementation references to the web client plan, highlighting host_recv_frames.py as the primary CDC decode/comms reference.
+- 2026-02-05: Clarified that web client setup/usage notes live in client_web/README.md (not docs).
+- 2026-02-05: Documented that the web client is single-session/single-client with one set of device connections.
+- 2026-02-05: Added a FastAPI-based web client shell with a single-session UI, session API, and CDC1 console placeholder.
+- 2026-02-05: Added client_web/requirements.txt and venv install steps to document FastAPI/Uvicorn dependencies.
+- 2026-02-05: Ignored client_web/.venv in git to avoid committing local virtualenvs.
+- 2026-02-05: Added a client_web pyproject so `pip install -e .` installs the web client module.
+- 2026-02-05: Tightened the web client UI layout to fit within a 1080p viewport without scrolling.
+- 2026-02-05: Reduced web client UI spacing and typography so the layout is shorter on 1080p screens.
+- 2026-02-05: Set the web client video placeholder to 1024x684 (2x target capture size) and adjusted layout sizing.
+- 2026-02-05: Reflowed the web client layout into a single column so the video and console panels fit without clipping.
+- 2026-02-05: Rebalanced the web client layout into compact side-by-side panels sized to content.
+- 2026-02-05: Matched the CDC1 console panel height to the 1024x684 video placeholder.
+- 2026-02-05: Standardized video/console panel heights with shared layout variables to stop overlap.
+- 2026-02-05: Added box-sizing and a 10px console offset so the CDC1 panel sits cleanly beside the video panel.
+- 2026-02-05: Adjusted the video panel column width so the padded container fully contains the 1024px placeholder.
+- 2026-02-05: Switched the web client to uvicorn[standard] so WebSocket support is installed by default.
+- 2026-02-05: Expanded web client Step 5 to stream in-memory 1-bpp RLE line payloads over WebSocket for parity with the CDC stream and future transport swaps.
+- 2026-02-05: Clarified web client Step 5 to buffer full frames in the browser and push decode/render logic client-side for future UDP transport.
+- 2026-02-05: Implemented web client Step 5 stream parsing and browser-side frame assembly with CDC line packets over WebSocket.
+- 2026-02-05: Documented upgrading the web client venv after dependency changes and made pyserial import lazy to avoid startup crashes without serial.
+- 2026-02-05: Added troubleshooting notes for missing pyserial and recorded the editable-install upgrade reminder.
+- 2026-02-05: Switched web client streaming to pyusb bulk reads to match host_recv_frames and documented the dependency.
+- 2026-02-05: Added a parity-first reminder in AGENTS.md to re-check host_recv_frames before implementing web client transport logic.
+- 2026-02-05: Added troubleshooting guidance for missing pyusb (`python3-usb`) in web client docs.
+- 2026-02-05: Wired web client start/stop to EP0 control commands (reset, RLE, capture start/stop) to match host_recv_frames behavior.
+- 2026-02-05: Added EP0 vendor requests for PS_ON, BOOTSEL, and reboot; documented bulk-first transport and deprecated CDC video stream.
+- 2026-02-05: Buffered completed frames for render and moved canvas draws onto requestAnimationFrame to reduce flicker.
+- 2026-02-05: Removed boot/diag delays and added EP0 PS_OFF on stop to power down and end capture cleanly.
+- 2026-02-05: Rendered the web client canvas at 2x resolution with pixel-doubling to avoid browser scaling blur.
+- 2026-02-05: Styled the video panel with beige casing and larger padding to evoke a luggable Mac enclosure.
+- 2026-02-05: Adjusted video panel CSS specificity so the beige casing/padding overrides the base panel styling.
+- 2026-02-05: Documented LAN access defaults and ensured WebSocket scheme matches http/https.
+- 2026-02-05: Logged WebSocket close reasons in the UI and documented single-client WebSocket behavior.
+- 2026-02-05: Added a crypto.randomUUID fallback for older browsers without the API.
+- 2026-02-05: Noted that crypto.randomUUID may be unavailable on non-secure remote contexts and the UI fallback covers it.
+- 2026-02-10: Cleared the web video canvas to black on Stop/WebSocket close and reset frame state so the last captured frame is not left on screen after shutdown.
+- 2026-02-10: Restyled the web video panel toward a classic Macintosh Color Display bezel, moved the session note below the bezel, and added a power LED indicator tied to session active/stop state.
+- 2026-02-10: Fixed canvas moire risk by pinning web canvas CSS size to exact 1024x684, centering it in the bezel, widening the video column to avoid shrink, and adding pixelated/crisp-edges rendering hints.
+- 2026-02-10: Removed the canvas inner vignette overlay to avoid interference patterns on high-frequency dither areas while keeping the bezel lip styling.
+- 2026-02-10: Switched browser rendering to a 512x342 source ImageData + nearest-neighbor drawImage upscale path to avoid periodic tile-like artifacts from direct 1024x684 manual pixel writes.
+- 2026-02-10: Switched display canvas backing store to native 512x342 with CSS 2x upscale so frames are blitted with putImageData at source resolution and avoid GPU tile artifacts from drawImage scaling.

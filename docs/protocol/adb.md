@@ -1,17 +1,27 @@
-# ADB wiring + control notes
+# ADB controller wiring + control notes
 
-## GPIO assignment
+ADB is handled by an external ATmega328p running the MacFriends Arduino core. The
+RP2040 speaks to that controller over UART1; the ADB bus itself is terminated on
+the Arduino shield/hardware, not on the Pico GPIO.
+
+## UART1 assignment (RP2040 ↔ ATmega328p)
 
 | Signal | GPIO | Direction | Level shifting | Notes |
 | ------ | ---- | --------- | -------------- | ----- |
-| ADB RECV | GPIO6 | Input | 74LVC245 | Receives ADB data from the Mac (non-inverting). |
-| ADB XMIT | GPIO12 | Output | ULN2803 | Drives the shared ADB data line (open-collector, inverted: GPIO high pulls bus low). |
+| UART1 TX | GPIO20 | Output | Direct | Pico TX → Arduino RX (D0). |
+| UART1 RX | GPIO21 | Input | Resistor divider | Arduino TX (D1) → Pico RX (5V→3.3V divider). |
 
 ## Electrical constraints
-- The ADB data line is shared between RECV and XMIT; ensure open-collector behavior on the transmit path.
-- GPIO12 is inverted on the transmit driver: driving the GPIO high pulls the ADB bus low, so PIO should invert its output polarity accordingly.
-- Do not connect 5V ADB signals directly to RP2040 GPIO; use level shifting (74LVC245) and an open-collector driver (ULN2803).
-- Ground is common between the Mac ADB port and the RP2040.
+- Do not connect 5V UART signals directly to RP2040 GPIO; use a divider on Arduino TX (D1) → Pico RX (GPIO21).
+- Divider options: 1k+2k, 4.7k+10k, or 10k+20k (top resistor from Arduino TX to node, bottom from node to GND).
+- Pico GND must tie to Arduino GND.
+- ADB bus level shifting and open-collector behavior are handled on the Arduino side, not the Pico.
+
+## Duemilanove wiring (Pico ↔ Arduino)
+- Pico GP20 (TX) → Arduino RX (D0) direct.
+- Arduino TX (D1) → resistor divider → Pico GP21 (RX).
+- GND ↔ GND.
 
 ## Implementation notes
-- ADB should follow the same core split as the video pipeline (AppleCore): PIO for timing and core1 for RX/TX state handling, with core0 only enqueueing host commands.
+- Base the UART protocol on the MacFriends host client, which already issues keyboard and mouse commands over USB serial to the Arduino shield.
+- The Pico should treat UART1 as a transport to the ATmega328p firmware, not as a direct ADB bus driver.

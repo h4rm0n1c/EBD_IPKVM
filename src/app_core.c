@@ -22,8 +22,8 @@
 
 #define CDC_CTRL 0
 
-#define CDC1_RING_SIZE 1024u
-#define CDC1_RING_MASK (CDC1_RING_SIZE - 1u)
+#define CDC_CTRL_RING_SIZE 1024u
+#define CDC_CTRL_RING_MASK (CDC_CTRL_RING_SIZE - 1u)
 
 static app_core_config_t app_cfg;
 
@@ -46,16 +46,16 @@ static volatile uint32_t diag_hsync_edges = 0;
 static volatile uint32_t diag_vsync_edges = 0;
 static volatile uint32_t diag_video_edges = 0;
 
-static uint8_t cdc1_ring[CDC1_RING_SIZE];
-static uint16_t cdc1_ring_r = 0;
-static uint16_t cdc1_ring_w = 0;
-static bool cdc1_connected = false;
+static uint8_t cdc_ctrl_ring[CDC_CTRL_RING_SIZE];
+static uint16_t cdc_ctrl_ring_r = 0;
+static uint16_t cdc_ctrl_ring_w = 0;
+static bool cdc_ctrl_connected = false;
 
 static absolute_time_t status_next;
 static uint32_t status_last_lines = 0;
 
-#if (CDC1_RING_SIZE & (CDC1_RING_SIZE - 1u)) != 0
-#error "CDC1_RING_SIZE must be power-of-two"
+#if (CDC_CTRL_RING_SIZE & (CDC_CTRL_RING_SIZE - 1u)) != 0
+#error "CDC_CTRL_RING_SIZE must be power-of-two"
 #endif
 
 static inline void set_ps_on(bool on) {
@@ -85,13 +85,13 @@ static inline void take_core0_utilization(uint32_t *busy_us, uint32_t *total_us)
     }
 }
 
-static inline void cdc1_ring_reset(void) {
-    cdc1_ring_r = 0;
-    cdc1_ring_w = 0;
+static inline void cdc_ctrl_ring_reset(void) {
+    cdc_ctrl_ring_r = 0;
+    cdc_ctrl_ring_w = 0;
 }
 
-static inline uint16_t cdc1_ring_space(void) {
-    return (uint16_t)((cdc1_ring_r - cdc1_ring_w - 1u) & CDC1_RING_MASK);
+static inline uint16_t cdc_ctrl_ring_space(void) {
+    return (uint16_t)((cdc_ctrl_ring_r - cdc_ctrl_ring_w - 1u) & CDC_CTRL_RING_MASK);
 }
 
 bool app_core_enqueue_ep0_command(uint8_t cmd) {
@@ -127,18 +127,18 @@ static void cdc_ctrl_write(const char *buf, size_t len) {
         return;
     }
 
-    if (len > CDC1_RING_MASK) {
+    if (len > CDC_CTRL_RING_MASK) {
         return;
     }
 
-    uint16_t space = cdc1_ring_space();
+    uint16_t space = cdc_ctrl_ring_space();
     if (space < len) {
         return;
     }
 
     for (size_t i = 0; i < len; i++) {
-        cdc1_ring[cdc1_ring_w] = (uint8_t)buf[i];
-        cdc1_ring_w = (uint16_t)((cdc1_ring_w + 1u) & CDC1_RING_MASK);
+        cdc_ctrl_ring[cdc_ctrl_ring_w] = (uint8_t)buf[i];
+        cdc_ctrl_ring_w = (uint16_t)((cdc_ctrl_ring_w + 1u) & CDC_CTRL_RING_MASK);
     }
 }
 
@@ -172,37 +172,37 @@ static void cdc_ctrl_printf(const char *fmt, ...) {
     cdc_ctrl_write(out, out_len);
 }
 
-static bool cdc1_ring_drain(void) {
+static bool cdc_ctrl_ring_drain(void) {
     if (!tud_cdc_n_connected(CDC_CTRL)) {
         return false;
     }
 
     bool wrote_any = false;
     while (true) {
-        if (cdc1_ring_r == cdc1_ring_w) {
+        if (cdc_ctrl_ring_r == cdc_ctrl_ring_w) {
             break;
         }
         int avail = tud_cdc_n_write_available(CDC_CTRL);
         if (avail <= 0) {
             break;
         }
-        uint16_t used = (uint16_t)((cdc1_ring_w - cdc1_ring_r) & CDC1_RING_MASK);
+        uint16_t used = (uint16_t)((cdc_ctrl_ring_w - cdc_ctrl_ring_r) & CDC_CTRL_RING_MASK);
         uint16_t to_write = (uint16_t)avail;
         if (to_write > used) {
             to_write = used;
         }
-        uint16_t contiguous = (uint16_t)(CDC1_RING_SIZE - cdc1_ring_r);
+        uint16_t contiguous = (uint16_t)(CDC_CTRL_RING_SIZE - cdc_ctrl_ring_r);
         if (to_write > contiguous) {
             to_write = contiguous;
         }
         if (to_write == 0) {
             break;
         }
-        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &cdc1_ring[cdc1_ring_r], to_write);
+        uint32_t wrote = tud_cdc_n_write(CDC_CTRL, &cdc_ctrl_ring[cdc_ctrl_ring_r], to_write);
         if (wrote == 0) {
             break;
         }
-        cdc1_ring_r = (uint16_t)((cdc1_ring_r + wrote) & CDC1_RING_MASK);
+        cdc_ctrl_ring_r = (uint16_t)((cdc_ctrl_ring_r + wrote) & CDC_CTRL_RING_MASK);
         wrote_any = true;
     }
     if (wrote_any) {
@@ -381,6 +381,32 @@ static void handle_rle_off(void) {
     }
 }
 
+static void handle_ps_on(bool on) {
+    set_ps_on(on);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM] ps_on=%u\n", on ? 1 : 0);
+    }
+}
+
+static void handle_bootsel(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    sleep_ms(10);
+    reset_usb_boot(0, 0);
+}
+
+static void handle_reboot(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    sleep_ms(10);
+    watchdog_reboot(0, 0, 0);
+    while (true) { tight_loop_contents(); }
+}
+
 static void handle_ep0_command(uint8_t cmd) {
     switch (cmd) {
     case USB_CTRL_REQ_CAPTURE_START:
@@ -403,6 +429,18 @@ static void handle_ep0_command(uint8_t cmd) {
         break;
     case USB_CTRL_REQ_RLE_OFF:
         handle_rle_off();
+        break;
+    case USB_CTRL_REQ_PS_ON:
+        handle_ps_on(true);
+        break;
+    case USB_CTRL_REQ_PS_OFF:
+        handle_ps_on(false);
+        break;
+    case USB_CTRL_REQ_BOOTSEL:
+        handle_bootsel();
+        break;
+    case USB_CTRL_REQ_REBOOT:
+        handle_reboot();
         break;
     default:
         break;
@@ -434,30 +472,13 @@ static bool poll_cdc_commands(void) {
         if (ch == 'R' || ch == 'r') {
             handle_reset_counters();
         } else if (ch == 'P') {
-            set_ps_on(true);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ps_on=1\n");
-            }
+            handle_ps_on(true);
         } else if (ch == 'p') {
-            set_ps_on(false);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ps_on=0\n");
-            }
+            handle_ps_on(false);
         } else if (ch == 'B' || ch == 'b') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            sleep_ms(10);
-            reset_usb_boot(0, 0);
+            handle_bootsel();
         } else if (ch == 'Z' || ch == 'z') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            sleep_ms(10);
-            watchdog_reboot(0, 0, 0);
-            while (true) { tight_loop_contents(); }
+            handle_reboot();
         } else if (ch == 'F' || ch == 'f') {
             core_bridge_send(CORE_BRIDGE_CMD_SINGLE_FRAME, 0);
         } else if (ch == 'T' || ch == 't') {
@@ -583,10 +604,10 @@ void app_core_poll(void) {
     uint32_t active_us = 0;
     tud_task();
     bool cdc_now = tud_cdc_n_connected(CDC_CTRL);
-    if (!cdc_now && cdc1_connected) {
-        cdc1_ring_reset();
+    if (!cdc_now && cdc_ctrl_connected) {
+        cdc_ctrl_ring_reset();
     }
-    cdc1_connected = cdc_now;
+    cdc_ctrl_connected = cdc_now;
     service_ep0_commands();
     uint32_t active_start = time_us_32();
     bool did_work = poll_cdc_commands();
@@ -637,7 +658,7 @@ void app_core_poll(void) {
     }
 
     active_start = time_us_32();
-    if (cdc1_ring_drain()) {
+    if (cdc_ctrl_ring_drain()) {
         active_us += (uint32_t)(time_us_32() - active_start);
     }
 

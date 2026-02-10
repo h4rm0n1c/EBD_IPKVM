@@ -1,22 +1,25 @@
-# USB CDC line stream protocol
+# USB bulk video + CDC control protocol
 
-The firmware exposes two USB CDC interfaces:
+The firmware exposes a vendor bulk interface for video, plus a USB CDC control interface:
 
-- CDC0: video stream (binary packets).
-- CDC1: control + status (ASCII commands and logs).
+- BULK (vendor): video stream (binary packets).
+- CDC ACM: control + status (ASCII commands and logs).
 
-Captured Macintosh Classic video is streamed as fixed-size packets over CDC0.
+Captured Macintosh Classic video is streamed as fixed-size packets over the vendor bulk interface.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
-### Identifying CDC0 vs CDC1 on Linux
-The USB interface strings are set to `EBD_IPKVM stream` and `EBD_IPKVM control`,
-which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
-also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
-number:
+### Identifying interfaces on Linux
+The USB interface strings are set to `EBD_IPKVM stream (bulk)` and
+`EBD_IPKVM control`, which are visible in tools like `lsusb -v` or
+`udevadm info -a`.
 
-- `...-if00` → CDC0 (stream)
-- `...-if02` → CDC1 (control)
+Expected `lsusb -t` shape (single CDC ACM function + vendor bulk):
+- `If 0` Vendor Specific → video bulk interface
+- `If 1` Communications → CDC ACM control interface
+- `If 2` CDC Data → CDC ACM data interface
+
+Seeing both `If 1` and `If 2` does **not** mean there are two CDC serial channels; those two interfaces are the standard ACM pair for one `/dev/ttyACM*` node. The control tty is typically exposed as `/dev/serial/by-id/...-if01...`.
 
 ## Packet layout (variable length)
 
@@ -38,7 +41,7 @@ number:
 - Firmware may emit raw packets even when RLE mode is enabled if the RLE payload is not smaller than 64 bytes.
 
 ## Host control commands
-The firmware is host-controlled over CDC1 (control channel):
+The firmware is host-controlled over CDC ACM (control channel):
 
 | Command | Action |
 | ------- | ------ |
@@ -50,6 +53,22 @@ The firmware is host-controlled over CDC1 (control channel):
 | `p` | Deassert ATX `PS_ON` (power off; GPIO9 low via ULN2803). |
 | `B` | Reboot into BOOTSEL USB mass storage (RP2040 boot ROM). |
 | `Z` | Reboot the RP2040 firmware (watchdog reset). |
+
+EP0 vendor requests mirror the core control commands for capture plus power/reset:
+
+| Request | Action |
+| ------- | ------ |
+| `0x01` | Capture start |
+| `0x02` | Capture stop |
+| `0x03` | Reset counters |
+| `0x04` | Probe packet |
+| `0x05` | RLE on |
+| `0x06` | RLE off |
+| `0x07` | Capture park |
+| `0x08` | PS_ON assert |
+| `0x09` | PS_ON deassert |
+| `0x0A` | BOOTSEL |
+| `0x0B` | Reboot |
 | `G` | Report GPIO input states and edge counts over a short sampling window. |
 | `F` | Force a capture window immediately (bypasses VSYNC gating for one frame). |
 | `T` | Transmit a synthetic test frame (alternating black/white lines) and emit a probe packet. |
@@ -60,14 +79,14 @@ The firmware is host-controlled over CDC1 (control channel):
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
-Status lines (including utilization counters) are emitted on CDC1 and can be
-read without interfering with the CDC0 video stream. Utilization percentages
+Status lines (including utilization counters) are emitted on CDC ACM and can be
+read without interfering with the bulk video stream. Utilization percentages
 (`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
 work (only when those operations perform work), rather than total loop
 occupancy.
 
 ### GPIO diagnostic output (`G`)
-- Emitted on CDC1 (control channel).
+- Emitted on CDC ACM (control channel).
 - Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
 - Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:

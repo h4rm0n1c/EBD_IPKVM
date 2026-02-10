@@ -30,6 +30,10 @@ PicoVGA demonstrates a stable pattern for running video timing generation on the
 
 Hootswitch is an RP2040-based ADB multiplexer that already implements ADB bus timing in PIO with a CPU-side state machine. The `bus.pio` file provides both host and device implementations (TX, RX, attention detect, reset), and the `computer.c` logic handles device-side state transitions, collision detection, SRQ gating, and register handling. We can use this as the canonical reference for our ADB device emulation on EBD_IPKVM, trimming it down to a single keyboard + mouse device and mapping it onto PIO1 to avoid the video capture PIO.
 
+## /opt/adb/macfriends (Arduino ADB core + host client)
+
+MacFriends includes an Arduino core and a companion host client that communicate over USB serial to issue keyboard and mouse actions. This is the primary reference for the new ADB direction: an ATmega328p running the MacFriends core, connected to the Pico over UART1 for command transport, with the ADB bus handled on the Arduino side.
+
 ## /opt/adb/miscdocs (ADB PDFs + technotes)
 
 This folder includes the Apple ADB Manager PDF, the hardware technote (HW01), and Microchip AN591B. Together these provide the ADB protocol overview, register semantics, and low-level timing references we can cross-check against hootswitch and our own PIO programs.
