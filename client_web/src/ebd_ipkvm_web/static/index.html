@@ -198,7 +198,8 @@
         <section class="panel video-panel">
           <div class="controls">
             <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
-            <button class="secondary" id="stop-btn">Stop</button>
+            <button class="secondary" id="stop-btn">Stop Capture</button>
+            <button class="secondary" id="shutdown-btn">Shutdown Mac</button>
             <label class="checkbox-control" for="boot-rom-disk">
               <input id="boot-rom-disk" type="checkbox" />
               Boot for ROM disk
@@ -234,6 +235,7 @@
       const input = document.getElementById("console-input");
       const startBtn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
+      const shutdownBtn = document.getElementById("shutdown-btn");
       const bootRomDiskCheckbox = document.getElementById("boot-rom-disk");
       const canvas = document.getElementById("video-canvas");
       const powerLed = document.getElementById("power-led");
@@ -291,12 +293,8 @@
       let pendingDeltaY = 0;
       let mouseSendQueued = false;
       let lastSentMouseDown = false;
-      let virtualPointerX = WIDTH / 2;
-      let virtualPointerY = HEIGHT / 2;
       let sessionOwnerId = null;
       let viewerMode = true;
-
-      const clamp = (value, minValue, maxValue) => Math.min(maxValue, Math.max(minValue, value));
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -463,6 +461,7 @@
       const updateViewerUi = () => {
         startBtn.disabled = viewerMode;
         stopBtn.disabled = viewerMode || !sessionOwnerId;
+        shutdownBtn.disabled = viewerMode || !sessionOwnerId;
       };
 
       const applySessionMode = (active, owner) => {
@@ -508,6 +507,19 @@
         updateStatus();
       });
 
+      shutdownBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/shutdown", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        resetVideoState();
+        clearVideoCanvas();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
       canvas.addEventListener("click", async () => {
         if (viewerMode) {
           appendLog("[viewer] Input is disabled while another client owns control.");
@@ -533,9 +545,7 @@
       document.addEventListener("pointerlockchange", () => {
         pointerLocked = document.pointerLockElement === canvas;
         if (pointerLocked) {
-          virtualPointerX = WIDTH / 2;
-          virtualPointerY = HEIGHT / 2;
-          appendLog("[mouse] Pointer locked to video canvas (virtual pointer bounded to canvas).");
+          appendLog("[mouse] Pointer locked to video canvas.");
         } else {
           pendingDeltaX = 0;
           pendingDeltaY = 0;
@@ -552,14 +562,8 @@
         if (viewerMode || !pointerLocked) {
           return;
         }
-        const scaledX = event.movementX * MOUSE_SENSITIVITY;
-        const scaledY = event.movementY * MOUSE_SENSITIVITY;
-        const targetX = clamp(virtualPointerX + scaledX, 0, WIDTH - 1);
-        const targetY = clamp(virtualPointerY + scaledY, 0, HEIGHT - 1);
-        pendingDeltaX += targetX - virtualPointerX;
-        pendingDeltaY += targetY - virtualPointerY;
-        virtualPointerX = targetX;
-        virtualPointerY = targetY;
+        pendingDeltaX += event.movementX * MOUSE_SENSITIVITY;
+        pendingDeltaY += event.movementY * MOUSE_SENSITIVITY;
         queueMousePacket();
       });
 

@@ -48,7 +48,7 @@ Web session ownership is single-owner + multi-viewer: one `owner_id` is allowed 
 | 6 | `isKeyUp` | uint8 | `0` for mouse-only packets |
 | 7 | `modifierKeys` | uint8 | `0` for mouse-only packets |
 
-The browser captures pointer-locked movement on the video canvas and sends relative `dx`/`dy` plus left-button state over WebSocket as `mouse_input`; the backend converts those into these serial packets. During capture, the browser tracks a virtual pointer bounded to the 512×342 canvas and only emits deltas for in-bounds movement.
+The browser captures pointer-locked movement on the video canvas and sends relative `dx`/`dy` plus left-button state over WebSocket as `mouse_input`; the backend converts those into these serial packets. Mouse deltas are forwarded directly from pointer-lock movement (with sensitivity scaling and per-packet clamp).
 
 
 Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOARD`), `dx=0`, `dy=0`, and key fields populated (`keyCode`, `isKeyUp`, `modifierKeys`). Browser events are translated to Mac-style scan codes before transport.
@@ -56,3 +56,9 @@ Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOAR
 In the web client capture mode, right-click exits pointer lock (instead of relying on Escape) so Escape can be forwarded as keyboard input.
 
 When `/api/session/start` is called with `boot_rom_disk=true`, the backend asserts `Command+Option+X+O` before power-on and holds it for ~10 seconds from startup (then releases it), using standard keyboard packets (`updateType=2`). During that hold window the backend reasserts the same chord periodically to survive early-boot keyboard init timing. Modifier sequencing follows key transitions (Cmd down, Opt down, X down, O down; release in reverse).
+
+
+## Stop/Shutdown control behavior
+
+- `POST /api/session/stop` performs **capture stop only** (`CTRL_REQ_CAPTURE_STOP`) and ends the active owner session without forcing power off.
+- `POST /api/session/shutdown` performs **capture stop + power off** (`CTRL_REQ_CAPTURE_STOP`, `CTRL_REQ_PS_OFF`) and ends the active owner session.

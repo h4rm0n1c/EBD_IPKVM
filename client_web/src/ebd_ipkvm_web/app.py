@@ -306,6 +306,9 @@ class SessionManager:
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
 
     async def stop(self, owner_id: Optional[str]) -> Dict[str, Any]:
+        return await self.stop_capture(owner_id)
+
+    async def stop_capture(self, owner_id: Optional[str]) -> Dict[str, Any]:
         async with self._state.lock:
             if not self._state.active:
                 return {"active": False, "message": "Session already idle."}
@@ -316,10 +319,7 @@ class SessionManager:
             if self._state.websockets:
                 try:
                     dev = await asyncio.to_thread(open_usb_device_for_control)
-                    for req, note in (
-                        (CTRL_REQ_CAPTURE_STOP, "capture stop"),
-                        (CTRL_REQ_PS_OFF, "ps_on=0"),
-                    ):
+                    for req, note in ((CTRL_REQ_CAPTURE_STOP, "capture stop"),):
                         await asyncio.to_thread(send_ep0_cmd, dev, req)
                         await self._broadcast_json(
                             {"type": "status", "message": f"EP0: {note}"}
@@ -334,7 +334,33 @@ class SessionManager:
             await self._broadcast_json(
                 {"type": "session_mode", "active": False, "owner_id": None}
             )
-            return {"active": False, "message": "Session stopped."}
+            return {"active": False, "message": "Capture stopped."}
+
+    async def shutdown(self, owner_id: Optional[str]) -> Dict[str, Any]:
+        async with self._state.lock:
+            if owner_id and self._state.owner_id and owner_id != self._state.owner_id:
+                raise HTTPException(status_code=403, detail="Session owned by another client.")
+            self._state.active = False
+            self._state.owner_id = None
+            try:
+                dev = await asyncio.to_thread(open_usb_device_for_control)
+                for req, note in (
+                    (CTRL_REQ_CAPTURE_STOP, "capture stop"),
+                    (CTRL_REQ_PS_OFF, "ps_on=0"),
+                ):
+                    await asyncio.to_thread(send_ep0_cmd, dev, req)
+                    await self._broadcast_json(
+                        {"type": "status", "message": f"EP0: {note}"}
+                    )
+            except RuntimeError as exc:
+                await self._broadcast_json({"type": "error", "message": str(exc)})
+            await self._stop_stream()
+            await self._cancel_rom_disk_task()
+            await self._adb.close()
+            await self._broadcast_json(
+                {"type": "session_mode", "active": False, "owner_id": None}
+            )
+            return {"active": False, "message": "Mac shutdown requested."}
 
     async def status(self) -> Dict[str, Any]:
         async with self._state.lock:
@@ -582,7 +608,13 @@ def create_app() -> FastAPI:
     @app.post("/api/session/stop")
     async def stop_session(payload: Dict[str, Any]) -> JSONResponse:
         owner_id = payload.get("owner_id")
-        response = await session_manager.stop(owner_id)
+        response = await session_manager.stop_capture(owner_id)
+        return JSONResponse(response)
+
+    @app.post("/api/session/shutdown")
+    async def shutdown_session(payload: Dict[str, Any]) -> JSONResponse:
+        owner_id = payload.get("owner_id")
+        response = await session_manager.shutdown(owner_id)
         return JSONResponse(response)
 
     @app.get("/api/session/status")

@@ -49,3 +49,7 @@
 - Pointer lock has no native edge constraints; if canvas-bounded behavior is desired, maintain a virtual cursor and clamp it to capture geometry before deriving outbound deltas.
 
 - For shared web sessions, preserve live video for all clients but reject non-owner input packets server-side to prevent control contention.
+
+- Virtual in-browser cursor clamping can feel like a shifting boundary if host-side mouse acceleration/position diverges; direct relative deltas are more predictable for this stack.
+
+- Keep capture-stop and power-off as distinct actions during bring-up so failed video/input tests do not force a full reboot cycle.

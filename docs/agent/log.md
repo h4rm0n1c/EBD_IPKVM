@@ -1,5 +1,7 @@
 # Log (running)
 
+- 2026-02-10: Split web controls into separate Stop Capture and Shutdown Mac actions so capture can be stopped without powering off.
+- 2026-02-10: Removed bounded virtual-pointer clamping because it caused perceived drifting bounds; mouse now uses direct pointer-lock deltas again.
 - 2026-02-10: Switched web connection policy from single-client rejection to single-owner + multi-viewer mode so non-owner clients still receive live video stream.
 - 2026-02-10: Added a bounded virtual pointer during pointer-lock capture so mouse deltas are clamped to the canvas area, improving control consistency at edges.
 - 2026-02-10: Retuned web mouse mapping to 0.75x sensitivity with ±24 per-packet delta cap after testing showed the prior tuning felt floaty/over-damped.

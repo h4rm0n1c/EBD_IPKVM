@@ -1,5 +1,7 @@
 # Decisions (running)
 
+- 2026-02-10: Keep pointer-lock mouse mapping unbounded in browser space (scaled + capped deltas only) to avoid variable-feeling edge stalls from virtual-cursor clamping.
+- 2026-02-10: Separate stop semantics: `stop` should halt capture/session ownership without PS_OFF, while `shutdown` explicitly issues PS_OFF.
 - 2026-02-10: In pointer-lock mode, bound a virtual cursor to 512×342 and derive deltas from bounded movement so web-side mouse input cannot accumulate beyond visible capture geometry.
 - 2026-02-10: Gate `mouse_input`/`keyboard_input` by `owner_id` to enforce viewer mode without disconnecting observers.
 - 2026-02-10: Reassert ROM-disk chord periodically during the hold interval instead of relying on a single initial keydown burst.
