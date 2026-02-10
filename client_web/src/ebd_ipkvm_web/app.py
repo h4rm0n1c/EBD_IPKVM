@@ -192,18 +192,19 @@ class SessionManager:
             pass
 
     async def _send_rom_disk_press(self) -> None:
-        for key_code in (MAC_KEY_COMMAND, MAC_KEY_OPTION, MAC_KEY_X, MAC_KEY_O):
-            await self._adb.send_keyboard(key_code, False, MAC_MOD_ROM_CHORD)
+        await self._adb.send_keyboard(MAC_KEY_COMMAND, False, MAC_MOD_COMMAND)
+        await self._adb.send_keyboard(MAC_KEY_OPTION, False, MAC_MOD_ROM_CHORD)
+        await self._adb.send_keyboard(MAC_KEY_X, False, MAC_MOD_ROM_CHORD)
+        await self._adb.send_keyboard(MAC_KEY_O, False, MAC_MOD_ROM_CHORD)
 
     async def _send_rom_disk_release(self) -> None:
-        for key_code in (MAC_KEY_O, MAC_KEY_X):
-            await self._adb.send_keyboard(key_code, True, MAC_MOD_ROM_CHORD)
-        for key_code in (MAC_KEY_OPTION, MAC_KEY_COMMAND):
-            await self._adb.send_keyboard(key_code, True, 0)
+        await self._adb.send_keyboard(MAC_KEY_O, True, MAC_MOD_ROM_CHORD)
+        await self._adb.send_keyboard(MAC_KEY_X, True, MAC_MOD_ROM_CHORD)
+        await self._adb.send_keyboard(MAC_KEY_OPTION, True, MAC_MOD_COMMAND)
+        await self._adb.send_keyboard(MAC_KEY_COMMAND, True, 0)
 
     async def _hold_rom_disk_chord(self, hold_s: float) -> None:
         try:
-            await self._send_rom_disk_press()
             await asyncio.sleep(hold_s)
         except asyncio.CancelledError:
             raise
@@ -244,7 +245,6 @@ class SessionManager:
             self._state.active = True
             self._state.owner_id = owner_id
             if self._state.websocket is not None:
-                await run_control_sequence(self._state.websocket)
                 try:
                     path = await self._adb.connect()
                     await self._state.websocket.send_json(
@@ -255,16 +255,18 @@ class SessionManager:
                         {"type": "error", "message": str(exc)}
                     )
                 if boot_rom_disk:
+                    await self._send_rom_disk_press()
                     await self._start_rom_disk_hold(ROM_DISK_HOLD_SECONDS)
                     await self._state.websocket.send_json(
                         {
                             "type": "status",
                             "message": (
-                                "Holding ROM-disk boot chord "
-                                "(Command+Option+X+O) for 45s."
+                                "ROM-disk boot chord asserted before power-on "
+                                "(Command+Option+X+O), holding for 45s."
                             ),
                         }
                     )
+                await run_control_sequence(self._state.websocket)
             await self._start_stream()
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
 

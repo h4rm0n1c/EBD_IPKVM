@@ -53,4 +53,4 @@ Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOAR
 
 In the web client capture mode, right-click exits pointer lock (instead of relying on Escape) so Escape can be forwarded as keyboard input.
 
-When `/api/session/start` is called with `boot_rom_disk=true`, the backend automatically sends and holds `Command+Option+X+O` for ~45 seconds after startup (then releases it), using standard keyboard packets (`updateType=2`).
+When `/api/session/start` is called with `boot_rom_disk=true`, the backend asserts `Command+Option+X+O` before power-on and holds it for ~45 seconds from startup (then releases it), using standard keyboard packets (`updateType=2`). Modifier sequencing follows key transitions (Cmd down, Opt down, X down, O down; release in reverse).
