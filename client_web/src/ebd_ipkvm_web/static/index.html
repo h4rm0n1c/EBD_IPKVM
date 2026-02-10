@@ -38,7 +38,7 @@
       }
       main {
         display: grid;
-        grid-template-columns: calc(var(--video-width) + 24px) 320px;
+        grid-template-columns: calc(var(--video-width) + 48px) 320px;
         gap: 16px;
         padding: 12px 20px 16px;
         flex: 1;
@@ -48,14 +48,22 @@
         justify-content: center;
         align-items: start;
       }
-      .panel.video-panel {
+      .video-column {
         width: 100%;
-        height: var(--panel-height);
         display: flex;
         flex-direction: column;
-        background: #d8d0c3;
-        border-color: #b7b0a5;
-        padding: 12px 24px 24px;
+        gap: 10px;
+      }
+      .panel.video-panel {
+        width: 100%;
+        min-height: var(--panel-height);
+        display: flex;
+        flex-direction: column;
+        background: linear-gradient(180deg, #d8d3ca 0%, #cdc6bc 100%);
+        border: 1px solid #b8b0a2;
+        border-radius: 14px;
+        padding: 14px 28px 44px;
+        box-shadow: inset 0 1px 1px #f1ece4, inset 0 -2px 3px #b9b2a8;
       }
       .panel {
         background: #151a23;
@@ -92,9 +100,10 @@
       .video-canvas {
         width: 100%;
         height: var(--video-height);
-        border-radius: 10px;
+        border-radius: 3px;
         background: #0b0f17;
-        border: 1px dashed #2f3645;
+        border: 1px solid #3f3f3f;
+        box-shadow: inset 0 0 0 6px #efebe3, inset 0 0 26px rgba(0, 0, 0, 0.65);
         display: grid;
         place-items: center;
         color: #5f6b7a;
@@ -135,9 +144,30 @@
         background: #0b0f17;
         color: #fff;
       }
+      .video-footer {
+        margin-top: 10px;
+        min-height: 14px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .power-led {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        border: 1px solid #707067;
+        background: #2e2e2e;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3) inset;
+        transition: background 120ms ease, box-shadow 120ms ease;
+      }
+      .power-led.on {
+        background: #55f07c;
+        box-shadow: 0 0 4px #55f07c, 0 0 8px rgba(85, 240, 124, 0.85);
+      }
       .note {
         font-size: 0.8rem;
-        color: #9aa4b2;
+        color: #fff;
+        margin: 0;
+        max-width: var(--video-width);
       }
     </style>
   </head>
@@ -147,19 +177,24 @@
       <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
     </header>
     <main>
-      <section class="panel video-panel">
-        <div class="controls">
-          <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
-          <button class="secondary" id="stop-btn">Stop</button>
-        </div>
-        <canvas class="video-canvas" id="video-canvas" width="1024" height="684">
-          Video stream placeholder (1024 × 684)
-        </canvas>
+      <div class="video-column">
+        <section class="panel video-panel">
+          <div class="controls">
+            <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
+            <button class="secondary" id="stop-btn">Stop</button>
+          </div>
+          <canvas class="video-canvas" id="video-canvas" width="1024" height="684">
+            Video stream placeholder (1024 × 684)
+          </canvas>
+          <div class="video-footer">
+            <div class="power-led" id="power-led" aria-label="Power LED"></div>
+          </div>
+        </section>
         <p class="note">
           The backend stays idle until you start a session. Only one browser session can own the
           Pico + CDC0 control connections at a time.
         </p>
-      </section>
+      </div>
       <section class="panel console">
         <h2>CDC0 Live Console</h2>
         <div class="console-log" id="console-log"></div>
@@ -175,6 +210,7 @@
       const startBtn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
       const canvas = document.getElementById("video-canvas");
+      const powerLed = document.getElementById("power-led");
       const ctx = canvas.getContext("2d");
 
       const WIDTH = 512;
@@ -291,11 +327,16 @@
         ? `browser-${crypto.randomUUID()}`
         : fallbackId();
 
+      const setPowerLed = (isOn) => {
+        powerLed.classList.toggle("on", isOn);
+      };
+
       const updateStatus = async () => {
         const response = await fetch("/api/session/status");
         const data = await response.json();
         const active = data.active ? "active" : "idle";
         sessionStatus.textContent = `Status: ${active} (single-session, single-client)`;
+        setPowerLed(Boolean(data.active));
       };
 
       startBtn.addEventListener("click", async () => {
@@ -305,6 +346,7 @@
           body: JSON.stringify({ owner_id: ownerId }),
         });
         const data = await response.json();
+        setPowerLed(true);
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
@@ -318,6 +360,7 @@
         const data = await response.json();
         resetVideoState();
         clearVideoCanvas();
+        setPowerLed(false);
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
@@ -387,11 +430,13 @@
       socket.addEventListener("close", (event) => {
         resetVideoState();
         clearVideoCanvas();
+        setPowerLed(false);
         const reason = event.reason ? event.reason : "n/a";
         appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
       });
 
       clearVideoCanvas();
+      setPowerLed(false);
       updateStatus();
     </script>
   </body>

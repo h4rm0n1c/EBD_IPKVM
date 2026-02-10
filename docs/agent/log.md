@@ -134,3 +134,4 @@
 - 2026-02-05: Added a crypto.randomUUID fallback for older browsers without the API.
 - 2026-02-05: Noted that crypto.randomUUID may be unavailable on non-secure remote contexts and the UI fallback covers it.
 - 2026-02-10: Cleared the web video canvas to black on Stop/WebSocket close and reset frame state so the last captured frame is not left on screen after shutdown.
+- 2026-02-10: Restyled the web video panel toward a classic Macintosh Color Display bezel, moved the session note below the bezel, and added a power LED indicator tied to session active/stop state.
