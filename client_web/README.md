@@ -99,4 +99,4 @@ python -m ebd_ipkvm_web
 
 In the UI, click the video canvas to lock the pointer. Movement, left-click, and keyboard keydown/keyup events are sent to the Arduino while the capture session is active. Mouse movement is currently scaled to 0.5x in the browser to compensate for the 2x canvas display. Right-click exits pointer lock so Escape can be passed through to the Mac.
 
-If you enable **Boot for ROM disk** before starting a session, the web backend holds the ROM-disk chord (`Command+Option+X+O`) for about 30 seconds immediately after power-on.
+If you enable **Boot for ROM disk** before starting a session, the web backend holds the ROM-disk chord (`Command+Option+X+O`) for about 45 seconds immediately after power-on.

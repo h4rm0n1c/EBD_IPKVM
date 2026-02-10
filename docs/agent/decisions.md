@@ -1,6 +1,6 @@
 # Decisions (running)
 
-- 2026-02-10: Implement ROM-disk boot assist as an optional session-start key hold (`Command+Option+X+O` for ~30s) controlled by the web UI checkbox, not as a permanent default.
+- 2026-02-10: Implement ROM-disk boot assist as an optional session-start key hold (`Command+Option+X+O` for ~45s) controlled by the web UI checkbox, not as a permanent default.
 - 2026-02-10: Use right-click as the primary pointer-lock exit path in the web client so Escape remains available for keyboard passthrough during ADB testing.
 - 2026-02-10: Keep web-to-Arduino ADB transport byte-for-byte compatible with MacFriends (`magic=123`, 8-byte instruction layout, `dx/dy` clamp to [-63,63]) to avoid firmware-side divergence.
 

@@ -46,7 +46,7 @@ ADB_UPDATE_KEYBOARD = 0x02
 ADB_DX_DY_MIN = -63
 ADB_DX_DY_MAX = 63
 DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
-ROM_DISK_HOLD_SECONDS = 30.0
+ROM_DISK_HOLD_SECONDS = 45.0
 
 MAC_KEY_COMMAND = 0x37
 MAC_KEY_OPTION = 0x3A
@@ -261,7 +261,7 @@ class SessionManager:
                             "type": "status",
                             "message": (
                                 "Holding ROM-disk boot chord "
-                                "(Command+Option+X+O) for 30s."
+                                "(Command+Option+X+O) for 45s."
                             ),
                         }
                     )

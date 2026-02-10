@@ -35,3 +35,5 @@
 - Browser keyboard capture now maps `KeyboardEvent.code` values to Mac-style scan codes for serial transport; unmapped keys are intentionally ignored to avoid sending incorrect scan codes.
 
 - ROM-disk boot assist releases keys in a `finally` path and on session stop/disconnect to reduce risk of stuck modifier state if the hold task is interrupted.
+
+- Field testing indicates ROM-disk boot chord timing may need a longer post-power-on hold; 45s currently improves reliability versus 30s.
