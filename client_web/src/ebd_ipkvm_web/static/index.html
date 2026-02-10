@@ -195,10 +195,22 @@
       let renderQueued = false;
       const imageData = ctx.createImageData(RENDER_WIDTH, RENDER_HEIGHT);
 
+      const clearVideoCanvas = () => {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      };
+
       const resetFrameBuffer = () => {
         lineBuffer.fill(0);
         lineSeen.fill(0);
         lineCount = 0;
+      };
+
+      const resetVideoState = () => {
+        resetFrameBuffer();
+        renderBuffer.fill(0);
+        frameReady = false;
+        currentFrameId = null;
       };
 
       const decodeRleLine = (payload) => {
@@ -304,6 +316,8 @@
           body: JSON.stringify({ owner_id: ownerId }),
         });
         const data = await response.json();
+        resetVideoState();
+        clearVideoCanvas();
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
@@ -371,10 +385,13 @@
         }
       });
       socket.addEventListener("close", (event) => {
+        resetVideoState();
+        clearVideoCanvas();
         const reason = event.reason ? event.reason : "n/a";
         appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
       });
 
+      clearVideoCanvas();
       updateStatus();
     </script>
   </body>
