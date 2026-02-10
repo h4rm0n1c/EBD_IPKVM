@@ -216,7 +216,7 @@
       const stopBtn = document.getElementById("stop-btn");
       const canvas = document.getElementById("video-canvas");
       const powerLed = document.getElementById("power-led");
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { alpha: false });
 
       const WIDTH = 512;
       const HEIGHT = 342;
@@ -227,6 +227,13 @@
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
 
+      ctx.imageSmoothingEnabled = false;
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = WIDTH;
+      sourceCanvas.height = HEIGHT;
+      const sourceCtx = sourceCanvas.getContext("2d", { alpha: false });
+      sourceCtx.imageSmoothingEnabled = false;
+
       let currentFrameId = null;
       let lineCount = 0;
       let lineBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
@@ -234,7 +241,7 @@
       let lineSeen = new Uint8Array(HEIGHT);
       let frameReady = false;
       let renderQueued = false;
-      const imageData = ctx.createImageData(RENDER_WIDTH, RENDER_HEIGHT);
+      const sourceImageData = sourceCtx.createImageData(WIDTH, HEIGHT);
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -279,7 +286,7 @@
       };
 
       const renderFrame = () => {
-        const pixels = imageData.data;
+        const pixels = sourceImageData.data;
         for (let y = 0; y < HEIGHT; y += 1) {
           const rowStart = y * LINE_BYTES;
           for (let xByte = 0; xByte < LINE_BYTES; xByte += 1) {
@@ -288,22 +295,16 @@
               const on = (byte >> bit) & 1;
               const value = on ? 255 : 0;
               const x = xByte * 8 + (7 - bit);
-              const outX = x * SCALE;
-              const outY = y * SCALE;
-              const topLeft = (outY * RENDER_WIDTH + outX) * 4;
-              const topRight = topLeft + 4;
-              const bottomLeft = topLeft + RENDER_WIDTH * 4;
-              const bottomRight = bottomLeft + 4;
-              for (const idx of [topLeft, topRight, bottomLeft, bottomRight]) {
-                pixels[idx] = value;
-                pixels[idx + 1] = value;
-                pixels[idx + 2] = value;
-                pixels[idx + 3] = 255;
-              }
+              const pixelIndex = (y * WIDTH + x) * 4;
+              pixels[pixelIndex] = value;
+              pixels[pixelIndex + 1] = value;
+              pixels[pixelIndex + 2] = value;
+              pixels[pixelIndex + 3] = 255;
             }
           }
         }
-        ctx.putImageData(imageData, 0, 0);
+        sourceCtx.putImageData(sourceImageData, 0, 0);
+        ctx.drawImage(sourceCanvas, 0, 0, WIDTH, HEIGHT, 0, 0, RENDER_WIDTH, RENDER_HEIGHT);
       };
 
       const queueRender = () => {
