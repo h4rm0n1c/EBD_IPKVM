@@ -81,3 +81,20 @@ Log out and back in to apply the group change.
 
 ## Documentation
 - Setup/usage notes live in this README as the client grows.
+
+
+## ADB mouse bridge (web canvas → Arduino serial)
+The web client now captures pointer-locked mouse input on the video canvas and forwards relative deltas + left-button state to the MacFriends Arduino core over serial.
+
+- Default serial discovery glob: `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0`
+- Override with `ADB_SERIAL_PORT` (exact path or glob)
+- Packet format matches the MacFriends host client (`magic=123`, `updateType=1`, signed `dx`/`dy`)
+
+Example:
+
+```sh
+export ADB_SERIAL_PORT='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0'
+python -m ebd_ipkvm_web
+```
+
+In the UI, click the video canvas to lock the pointer. Movement and left-click are sent to the Arduino while the capture session is active.

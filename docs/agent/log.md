@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-10: Added web-client pointer-lock mouse capture and a backend serial bridge that sends MacFriends-format mouse packets to the Arduino ADB core over `/dev/serial/by-id/...` (override via `ADB_SERIAL_PORT`).
 - 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
 - 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
 - 2026-02-10: Removed deprecated CDC video-feed references, simplified `host_recv_frames.py` to USB bulk video + EP0 control only, and updated web/docs text to treat CDC strictly as control/debug.

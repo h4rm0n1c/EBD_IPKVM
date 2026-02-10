@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import glob
+import os
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +39,90 @@ CTRL_REQ_REBOOT = 0x0B
 DEFAULT_BOOT_WAIT_S = 0.0
 DEFAULT_DIAG_SECS = 0.0
 DEFAULT_CTRL_MODE = "ep0"
+ADB_SERIAL_BAUD = 115200
+ADB_MAGIC_NUMBER = 123
+ADB_UPDATE_MOUSE = 0x01
+ADB_DX_DY_MIN = -63
+ADB_DX_DY_MAX = 63
+DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
+
+
+class AdbSerialBridge:
+    def __init__(self, port_glob: Optional[str] = None) -> None:
+        self._port_glob = (
+            port_glob
+            or os.getenv("ADB_SERIAL_PORT")
+            or DEFAULT_ADB_SERIAL_PORT_GLOB
+        )
+        self._serial_handle: Optional[Any] = None
+        self._serial_path: Optional[str] = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def serial_path(self) -> Optional[str]:
+        return self._serial_path
+
+    def _resolve_serial_path(self) -> str:
+        candidates = sorted(glob.glob(self._port_glob))
+        if not candidates:
+            raise RuntimeError(
+                f"No ADB serial devices matched {self._port_glob!r}. "
+                "Set ADB_SERIAL_PORT to an explicit device path or glob."
+            )
+        return candidates[0]
+
+    def _ensure_open_blocking(self) -> str:
+        if self._serial_handle is not None:
+            return self._serial_path or ""
+        try:
+            import serial
+        except ImportError as exc:
+            raise RuntimeError(
+                f"pyserial not available: {exc}. Install with `pip install -e . --upgrade`."
+            ) from exc
+
+        path = self._resolve_serial_path()
+        try:
+            self._serial_handle = serial.Serial(path, ADB_SERIAL_BAUD, timeout=0, write_timeout=0)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to open ADB serial device {path}: {exc}") from exc
+        self._serial_path = path
+        return path
+
+    def _send_mouse_blocking(self, dx: int, dy: int, mouse_down: bool) -> None:
+        path = self._ensure_open_blocking()
+        if self._serial_handle is None:
+            raise RuntimeError(f"ADB serial device {path} was not opened.")
+        clamped_dx = max(ADB_DX_DY_MIN, min(ADB_DX_DY_MAX, dx))
+        clamped_dy = max(ADB_DX_DY_MIN, min(ADB_DX_DY_MAX, dy))
+        packet = struct.pack(
+            "<bBbbbBBB",
+            ADB_MAGIC_NUMBER,
+            ADB_UPDATE_MOUSE,
+            1 if mouse_down else 0,
+            clamped_dx,
+            clamped_dy,
+            0,
+            0,
+            0,
+        )
+        self._serial_handle.write(packet)
+
+    async def connect(self) -> str:
+        async with self._lock:
+            return await asyncio.to_thread(self._ensure_open_blocking)
+
+    async def send_mouse(self, dx: int, dy: int, mouse_down: bool) -> None:
+        async with self._lock:
+            await asyncio.to_thread(self._send_mouse_blocking, dx, dy, mouse_down)
+
+    async def close(self) -> None:
+        async with self._lock:
+            handle = self._serial_handle
+            self._serial_handle = None
+            self._serial_path = None
+            if handle is not None:
+                await asyncio.to_thread(handle.close)
 
 
 @dataclass
@@ -52,6 +138,7 @@ class SessionState:
 class SessionManager:
     def __init__(self) -> None:
         self._state = SessionState()
+        self._adb = AdbSerialBridge()
 
     async def _start_stream(self) -> None:
         if self._state.stream_task or self._state.websocket is None:
@@ -81,6 +168,15 @@ class SessionManager:
             self._state.owner_id = owner_id
             if self._state.websocket is not None:
                 await run_control_sequence(self._state.websocket)
+                try:
+                    path = await self._adb.connect()
+                    await self._state.websocket.send_json(
+                        {"type": "status", "message": f"ADB serial connected: {path}"}
+                    )
+                except RuntimeError as exc:
+                    await self._state.websocket.send_json(
+                        {"type": "error", "message": str(exc)}
+                    )
             await self._start_stream()
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
 
@@ -108,6 +204,7 @@ class SessionManager:
                         {"type": "error", "message": str(exc)}
                     )
             await self._stop_stream()
+            await self._adb.close()
             return {"active": False, "message": "Session stopped."}
 
     async def status(self) -> Dict[str, Any]:
@@ -128,6 +225,13 @@ class SessionManager:
             if self._state.websocket is websocket:
                 self._state.websocket = None
                 await self._stop_stream()
+                await self._adb.close()
+
+    async def send_mouse_input(self, dx: int, dy: int, mouse_down: bool) -> None:
+        async with self._state.lock:
+            if not self._state.active:
+                raise RuntimeError("Session is not active; start a session before sending ADB input.")
+        await self._adb.send_mouse(dx, dy, mouse_down)
 
 
 def open_usb_stream() -> tuple[Any, int, Any]:
@@ -351,6 +455,14 @@ def create_app() -> FastAPI:
                     await websocket.send_json(
                         {"type": "console_echo", "message": f"> {message}"}
                     )
+                elif data.get("type") == "mouse_input":
+                    try:
+                        dx = int(data.get("dx", 0))
+                        dy = int(data.get("dy", 0))
+                        mouse_down = bool(data.get("mouse_down", False))
+                        await session_manager.send_mouse_input(dx=dx, dy=dy, mouse_down=mouse_down)
+                    except RuntimeError as exc:
+                        await websocket.send_json({"type": "error", "message": str(exc)})
                 elif data.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
         except WebSocketDisconnect:

@@ -1,5 +1,7 @@
 # Decisions (running)
 
+- 2026-02-10: Keep web-to-Arduino ADB transport byte-for-byte compatible with MacFriends (`magic=123`, 8-byte instruction layout, `dx/dy` clamp to [-63,63]) to avoid firmware-side divergence.
+
 - 2026-02-10: Enforce a single CDC interface in firmware (`CFG_TUD_CDC == 1`) and treat it as control/debug only; all video transport remains vendor bulk.
 - 2026-02-10: Remove legacy CDC video transport from host/web documentation and tooling paths; video transport is vendor bulk only, while CDC is retained strictly for debug/control.
 - 2026-02-03: Rename the core1 Apple I/O service loop to AppleCore (formerly “video core”/KVMCore) to reflect its role handling video capture plus ADB.

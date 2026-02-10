@@ -174,6 +174,9 @@
         margin: 0;
         max-width: var(--video-width);
       }
+      .note strong {
+        color: #9dd8ff;
+      }
     </style>
   </head>
   <body>
@@ -198,6 +201,10 @@
         <p class="note">
           The backend stays idle until you start a session. Only one browser session can own the
           Pico + CDC0 control connections at a time.
+        </p>
+        <p class="note">
+          <strong>Mouse capture:</strong> click the video canvas to lock the pointer and stream
+          relative motion + left-click state to the ADB Arduino bridge.
         </p>
       </div>
       <section class="panel console">
@@ -234,6 +241,11 @@
       let frameReady = false;
       let renderQueued = false;
       const imageData = ctx.createImageData(WIDTH, HEIGHT);
+      let pointerLocked = false;
+      let mouseDown = false;
+      let pendingDeltaX = 0;
+      let pendingDeltaY = 0;
+      let mouseSendQueued = false;
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -328,6 +340,41 @@
         powerLed.classList.toggle("on", isOn);
       };
 
+      const queueMousePacket = () => {
+        if (mouseSendQueued) {
+          return;
+        }
+        mouseSendQueued = true;
+        requestAnimationFrame(() => {
+          mouseSendQueued = false;
+          if (!socket || socket.readyState !== WebSocket.OPEN) {
+            pendingDeltaX = 0;
+            pendingDeltaY = 0;
+            return;
+          }
+          if (!pointerLocked && !mouseDown) {
+            pendingDeltaX = 0;
+            pendingDeltaY = 0;
+            return;
+          }
+          const dx = Math.trunc(pendingDeltaX);
+          const dy = Math.trunc(pendingDeltaY);
+          pendingDeltaX -= dx;
+          pendingDeltaY -= dy;
+          if (dx === 0 && dy === 0 && pointerLocked) {
+            return;
+          }
+          socket.send(
+            JSON.stringify({
+              type: "mouse_input",
+              dx,
+              dy,
+              mouse_down: mouseDown,
+            }),
+          );
+        });
+      };
+
       const updateStatus = async () => {
         const response = await fetch("/api/session/status");
         const data = await response.json();
@@ -360,6 +407,55 @@
         setPowerLed(false);
         appendLog(`[session] ${data.message}`);
         updateStatus();
+      });
+
+      canvas.addEventListener("click", async () => {
+        if (!document.pointerLockElement) {
+          try {
+            await canvas.requestPointerLock();
+          } catch (error) {
+            appendLog(`[mouse] Pointer lock failed: ${error}`);
+          }
+        }
+      });
+
+      document.addEventListener("pointerlockchange", () => {
+        pointerLocked = document.pointerLockElement === canvas;
+        if (pointerLocked) {
+          appendLog("[mouse] Pointer locked to video canvas.");
+        } else {
+          pendingDeltaX = 0;
+          pendingDeltaY = 0;
+          appendLog("[mouse] Pointer unlocked.");
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "mouse_input", dx: 0, dy: 0, mouse_down: false }));
+          }
+        }
+      });
+
+      document.addEventListener("mousemove", (event) => {
+        if (!pointerLocked) {
+          return;
+        }
+        pendingDeltaX += event.movementX;
+        pendingDeltaY += event.movementY;
+        queueMousePacket();
+      });
+
+      document.addEventListener("mousedown", (event) => {
+        if (!pointerLocked || event.button !== 0) {
+          return;
+        }
+        mouseDown = true;
+        queueMousePacket();
+      });
+
+      document.addEventListener("mouseup", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        mouseDown = false;
+        queueMousePacket();
       });
 
       input.addEventListener("keydown", (event) => {

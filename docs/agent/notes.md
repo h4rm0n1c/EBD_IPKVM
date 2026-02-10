@@ -29,3 +29,5 @@
 - Current board wiring: UART1 on GPIO20/21 connects the Pico to the ATmega328p (MacFriends core); Arduino TX → Pico RX needs a resistor divider to avoid 5V on RP2040 GPIO.
 - ADB CDC test channel should emit a rate-limited RX-activity line when valid ADB traffic is observed, to confirm host queries are being received.
 - Validate ADB behavior against the reference implementations stored in `/opt/adb` during bring-up.
+
+- Browser pointer lock for canvas-relative mouse capture requires a user gesture (canvas click) before movement events include `movementX/movementY`; unlocked state should send a mouse-up packet to avoid stuck button state.
