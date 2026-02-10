@@ -36,8 +36,10 @@
 
 - ROM-disk boot assist releases keys in a `finally` path and on session stop/disconnect to reduce risk of stuck modifier state if the hold task is interrupted.
 
-- Field testing indicates ROM-disk boot chord timing may need a longer post-power-on hold; 45s currently improves reliability versus 30s.
+- Field testing indicates ROM-disk boot chord timing may need a shorter post-power-on hold now that repeated assertion is reliable; 10s is the current default.
 
 - For synthetic key holds involving modifiers, send modifier bitfields that reflect transition order (e.g., Cmd-down uses Cmd only; Opt-down and subsequent keys use Cmd|Opt; release unwinds in reverse) to avoid host-side interpretation drift.
 
 - Some boot paths appear to initialize keyboard handling after power rails are stable; periodic chord reassert during the hold window improves capture reliability versus one-shot keydown.
+
+- Pointer-lock mouse transport must emit packets on button transitions even at `dx=dy=0`; suppressing zero-delta packets can drop click up/down events and look flaky on ADB mouse input.

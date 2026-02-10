@@ -245,7 +245,8 @@
       const LINE_BYTES = 64;
       const RLE_FLAG = 0x8000;
       const LEN_MASK = 0x7fff;
-      const MOUSE_SENSITIVITY = 0.5;
+      const MOUSE_SENSITIVITY = 0.35;
+      const MOUSE_MAX_DELTA_PER_PACKET = 12;
       const MOD_CMD = 1;
       const MOD_OPT = 2;
       const MOD_SHIFT = 4;
@@ -290,6 +291,7 @@
       let pendingDeltaX = 0;
       let pendingDeltaY = 0;
       let mouseSendQueued = false;
+      let lastSentMouseDown = false;
 
       const clearVideoCanvas = () => {
         ctx.fillStyle = "#000";
@@ -429,13 +431,17 @@
             pendingDeltaY = 0;
             return;
           }
-          const dx = Math.trunc(pendingDeltaX);
-          const dy = Math.trunc(pendingDeltaY);
+          const dxRaw = Math.trunc(pendingDeltaX);
+          const dyRaw = Math.trunc(pendingDeltaY);
+          const dx = Math.max(-MOUSE_MAX_DELTA_PER_PACKET, Math.min(MOUSE_MAX_DELTA_PER_PACKET, dxRaw));
+          const dy = Math.max(-MOUSE_MAX_DELTA_PER_PACKET, Math.min(MOUSE_MAX_DELTA_PER_PACKET, dyRaw));
           pendingDeltaX -= dx;
           pendingDeltaY -= dy;
-          if (dx === 0 && dy === 0 && pointerLocked) {
+          const buttonStateChanged = mouseDown !== lastSentMouseDown;
+          if (dx === 0 && dy === 0 && pointerLocked && !buttonStateChanged) {
             return;
           }
+          lastSentMouseDown = mouseDown;
           socket.send(
             JSON.stringify({
               type: "mouse_input",
@@ -509,6 +515,8 @@
         } else {
           pendingDeltaX = 0;
           pendingDeltaY = 0;
+          mouseDown = false;
+          lastSentMouseDown = false;
           appendLog("[mouse] Pointer unlocked.");
           if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "mouse_input", dx: 0, dy: 0, mouse_down: false }));

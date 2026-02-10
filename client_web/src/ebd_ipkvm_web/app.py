@@ -46,7 +46,7 @@ ADB_UPDATE_KEYBOARD = 0x02
 ADB_DX_DY_MIN = -63
 ADB_DX_DY_MAX = 63
 DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
-ROM_DISK_HOLD_SECONDS = 45.0
+ROM_DISK_HOLD_SECONDS = 10.0
 ROM_DISK_REFRESH_SECONDS = 0.35
 
 MAC_KEY_COMMAND = 0x37
@@ -270,7 +270,7 @@ class SessionManager:
                             "type": "status",
                             "message": (
                                 "ROM-disk boot chord asserted before power-on "
-                                "(Command+Option+X+O), reasserting for 45s."
+                                "(Command+Option+X+O), reasserting for 10s."
                             ),
                         }
                     )
