@@ -46,6 +46,15 @@ ADB_UPDATE_KEYBOARD = 0x02
 ADB_DX_DY_MIN = -63
 ADB_DX_DY_MAX = 63
 DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
+ROM_DISK_HOLD_SECONDS = 30.0
+
+MAC_KEY_COMMAND = 0x37
+MAC_KEY_OPTION = 0x3A
+MAC_KEY_X = 0x07
+MAC_KEY_O = 0x1F
+MAC_MOD_COMMAND = 0x01
+MAC_MOD_OPTION = 0x02
+MAC_MOD_ROM_CHORD = MAC_MOD_COMMAND | MAC_MOD_OPTION
 
 
 class AdbSerialBridge:
@@ -169,6 +178,44 @@ class SessionManager:
     def __init__(self) -> None:
         self._state = SessionState()
         self._adb = AdbSerialBridge()
+        self._rom_disk_task: Optional[asyncio.Task[None]] = None
+
+    async def _cancel_rom_disk_task(self) -> None:
+        task = self._rom_disk_task
+        if task is None:
+            return
+        task.cancel()
+        self._rom_disk_task = None
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _send_rom_disk_press(self) -> None:
+        for key_code in (MAC_KEY_COMMAND, MAC_KEY_OPTION, MAC_KEY_X, MAC_KEY_O):
+            await self._adb.send_keyboard(key_code, False, MAC_MOD_ROM_CHORD)
+
+    async def _send_rom_disk_release(self) -> None:
+        for key_code in (MAC_KEY_O, MAC_KEY_X):
+            await self._adb.send_keyboard(key_code, True, MAC_MOD_ROM_CHORD)
+        for key_code in (MAC_KEY_OPTION, MAC_KEY_COMMAND):
+            await self._adb.send_keyboard(key_code, True, 0)
+
+    async def _hold_rom_disk_chord(self, hold_s: float) -> None:
+        try:
+            await self._send_rom_disk_press()
+            await asyncio.sleep(hold_s)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            try:
+                await self._send_rom_disk_release()
+            except RuntimeError:
+                pass
+
+    async def _start_rom_disk_hold(self, hold_s: float) -> None:
+        await self._cancel_rom_disk_task()
+        self._rom_disk_task = asyncio.create_task(self._hold_rom_disk_chord(hold_s))
 
     async def _start_stream(self) -> None:
         if self._state.stream_task or self._state.websocket is None:
@@ -186,7 +233,7 @@ class SessionManager:
         await task
         self._state.stream_task = None
 
-    async def start(self, owner_id: str) -> Dict[str, Any]:
+    async def start(self, owner_id: str, *, boot_rom_disk: bool = False) -> Dict[str, Any]:
         async with self._state.lock:
             if self._state.active:
                 return {
@@ -206,6 +253,17 @@ class SessionManager:
                 except RuntimeError as exc:
                     await self._state.websocket.send_json(
                         {"type": "error", "message": str(exc)}
+                    )
+                if boot_rom_disk:
+                    await self._start_rom_disk_hold(ROM_DISK_HOLD_SECONDS)
+                    await self._state.websocket.send_json(
+                        {
+                            "type": "status",
+                            "message": (
+                                "Holding ROM-disk boot chord "
+                                "(Command+Option+X+O) for 30s."
+                            ),
+                        }
                     )
             await self._start_stream()
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
@@ -234,6 +292,7 @@ class SessionManager:
                         {"type": "error", "message": str(exc)}
                     )
             await self._stop_stream()
+            await self._cancel_rom_disk_task()
             await self._adb.close()
             return {"active": False, "message": "Session stopped."}
 
@@ -255,6 +314,7 @@ class SessionManager:
             if self._state.websocket is websocket:
                 self._state.websocket = None
                 await self._stop_stream()
+                await self._cancel_rom_disk_task()
                 await self._adb.close()
 
     async def send_mouse_input(self, dx: int, dy: int, mouse_down: bool) -> None:
@@ -460,7 +520,8 @@ def create_app() -> FastAPI:
     @app.post("/api/session/start")
     async def start_session(payload: Dict[str, Any]) -> JSONResponse:
         owner_id = str(payload.get("owner_id") or "browser-session")
-        response = await session_manager.start(owner_id)
+        boot_rom_disk = bool(payload.get("boot_rom_disk", False))
+        response = await session_manager.start(owner_id, boot_rom_disk=boot_rom_disk)
         return JSONResponse(response)
 
     @app.post("/api/session/stop")

@@ -52,3 +52,5 @@ The browser captures pointer-locked movement on the video canvas and sends relat
 Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOARD`), `dx=0`, `dy=0`, and key fields populated (`keyCode`, `isKeyUp`, `modifierKeys`). Browser events are translated to Mac-style scan codes before transport.
 
 In the web client capture mode, right-click exits pointer lock (instead of relying on Escape) so Escape can be forwarded as keyboard input.
+
+When `/api/session/start` is called with `boot_rom_disk=true`, the backend automatically sends and holds `Command+Option+X+O` for ~30 seconds after startup (then releases it), using standard keyboard packets (`updateType=2`).

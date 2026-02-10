@@ -33,3 +33,5 @@
 - Browser pointer lock for canvas-relative mouse capture requires a user gesture (canvas click) before movement events include `movementX/movementY`; unlocked state should send a mouse-up packet to avoid stuck button state.
 
 - Browser keyboard capture now maps `KeyboardEvent.code` values to Mac-style scan codes for serial transport; unmapped keys are intentionally ignored to avoid sending incorrect scan codes.
+
+- ROM-disk boot assist releases keys in a `finally` path and on session stop/disconnect to reduce risk of stuck modifier state if the hold task is interrupted.

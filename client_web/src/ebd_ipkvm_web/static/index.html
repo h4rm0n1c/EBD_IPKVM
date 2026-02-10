@@ -77,7 +77,16 @@
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+        align-items: center;
         margin-bottom: 8px;
+      }
+      .checkbox-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #fff;
+        font-size: 0.85rem;
+        margin-left: 4px;
       }
       button {
         border: none;
@@ -190,6 +199,10 @@
           <div class="controls">
             <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
             <button class="secondary" id="stop-btn">Stop</button>
+            <label class="checkbox-control" for="boot-rom-disk">
+              <input id="boot-rom-disk" type="checkbox" />
+              Boot for ROM disk
+            </label>
           </div>
           <canvas class="video-canvas" id="video-canvas" width="512" height="342">
             Video stream placeholder (512 × 342 source, 2× display)
@@ -222,6 +235,7 @@
       const input = document.getElementById("console-input");
       const startBtn = document.getElementById("start-btn");
       const stopBtn = document.getElementById("stop-btn");
+      const bootRomDiskCheckbox = document.getElementById("boot-rom-disk");
       const canvas = document.getElementById("video-canvas");
       const powerLed = document.getElementById("power-led");
       const ctx = canvas.getContext("2d", { alpha: false });
@@ -445,7 +459,10 @@
         const response = await fetch("/api/session/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ owner_id: ownerId }),
+          body: JSON.stringify({
+            owner_id: ownerId,
+            boot_rom_disk: Boolean(bootRomDiskCheckbox && bootRomDiskCheckbox.checked),
+          }),
         });
         const data = await response.json();
         setPowerLed(true);
