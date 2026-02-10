@@ -1,5 +1,8 @@
 # Log (running)
 
+- 2026-02-10: Clarified USB enumeration docs: one CDC ACM debug/control function appears as two USB interfaces (Comm + Data), which is expected and still a single tty channel.
+- 2026-02-10: Renamed firmware CDC ring symbols to `cdc_ctrl_*` and added a TinyUSB compile-time guard (`CFG_TUD_CDC == 1`) to prevent reintroducing CDC video paths.
+- 2026-02-10: Removed deprecated CDC video-feed references, simplified `host_recv_frames.py` to USB bulk video + EP0 control only, and updated web/docs text to treat CDC strictly as control/debug.
 - 2026-02-04: Copied MacFriends macOS reference app sources into docs/reference/macfriends for ADB comms reference.
 - 2026-02-03: Reimplemented CDC1 ring-buffered control/status output with priority drain, bumped CDC TX buffer, and updated host tooling for CDC auto-detect + interactive relay.
 - 2026-02-04: Updated ADB documentation to use the MacFriends Arduino core on an ATmega328p over UART1 (GPIO20/21) and captured the wiring/level-shifting notes.

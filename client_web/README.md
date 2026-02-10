@@ -28,7 +28,7 @@ If you still cannot reach it remotely, check your firewall or run `uvicorn` expl
 Only one WebSocket client can be connected at a time; close any existing browser session before connecting from another machine.
 `crypto.randomUUID` is only available in secure contexts; remote HTTP access can lack it, so the UI uses a fallback ID generator.
 
-The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC console panel.
+The dependencies include `uvicorn[standard]` so WebSocket support is available for the CDC0 console panel.
 The video stream uses the USB bulk interface (pyusb + EP0 control), matching `host_recv_frames.py`.
 
 ### Troubleshooting missing dependencies

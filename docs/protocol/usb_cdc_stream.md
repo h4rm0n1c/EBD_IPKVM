@@ -1,22 +1,25 @@
-# USB CDC line stream protocol
+# USB bulk video + CDC control protocol
 
 The firmware exposes a vendor bulk interface for video, plus a USB CDC control interface:
 
-- BULK (vendor): video stream (binary packets). This is the preferred transport.
-- CDC1: control + status (ASCII commands and logs). CDC0 video streaming is deprecated.
+- BULK (vendor): video stream (binary packets).
+- CDC ACM: control + status (ASCII commands and logs).
 
 Captured Macintosh Classic video is streamed as fixed-size packets over the vendor bulk interface.
 Each packet contains a single scanline of 512 pixels (1 bpp) and a compact
 header for framing.
 
-### Identifying CDC0 vs CDC1 on Linux
-The USB interface strings are set to `EBD_IPKVM stream` and `EBD_IPKVM control`,
-which are visible in tools like `lsusb -v` or `udevadm info -a`. The kernel
-also exposes per-interface symlinks in `/dev/serial/by-id` using the interface
-number:
+### Identifying interfaces on Linux
+The USB interface strings are set to `EBD_IPKVM stream (bulk)` and
+`EBD_IPKVM control`, which are visible in tools like `lsusb -v` or
+`udevadm info -a`.
 
-- `...-if00` → CDC0 (legacy stream, deprecated)
-- `...-if02` → CDC1 (control)
+Expected `lsusb -t` shape (single CDC ACM function + vendor bulk):
+- `If 0` Vendor Specific → video bulk interface
+- `If 1` Communications → CDC ACM control interface
+- `If 2` CDC Data → CDC ACM data interface
+
+Seeing both `If 1` and `If 2` does **not** mean there are two CDC serial channels; those two interfaces are the standard ACM pair for one `/dev/ttyACM*` node. The control tty is typically exposed as `/dev/serial/by-id/...-if01...`.
 
 ## Packet layout (variable length)
 
@@ -38,7 +41,7 @@ number:
 - Firmware may emit raw packets even when RLE mode is enabled if the RLE payload is not smaller than 64 bytes.
 
 ## Host control commands
-The firmware is host-controlled over CDC1 (control channel):
+The firmware is host-controlled over CDC ACM (control channel):
 
 | Command | Action |
 | ------- | ------ |
@@ -76,14 +79,14 @@ EP0 vendor requests mirror the core control commands for capture plus power/rese
 | `E` | Enable RLE line encoding (raw packets still possible if they are smaller). Default. |
 | `e` | Disable RLE line encoding (force raw 64-byte payloads). |
 
-Status lines (including utilization counters) are emitted on CDC1 and can be
-read without interfering with the CDC0 video stream. Utilization percentages
+Status lines (including utilization counters) are emitted on CDC ACM and can be
+read without interfering with the bulk video stream. Utilization percentages
 (`c0`, `c1`) reflect time spent doing actual USB handling, capture, and TX queue
 work (only when those operations perform work), rather than total loop
 occupancy.
 
 ### GPIO diagnostic output (`G`)
-- Emitted on CDC1 (control channel).
+- Emitted on CDC ACM (control channel).
 - Temporarily samples GPIO states and counts transitions for PIXCLK/HSYNC/VSYNC/VIDEO.
 - Edge counts are sampled (polling-based), so very high-frequency signals can undercount; they are intended to confirm activity, not exact frequency.
 - Output format:

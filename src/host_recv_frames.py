@@ -22,9 +22,7 @@ STREAM_RAW = False
 STREAM_RAW_PATH = "-"
 QUIET = False
 QUIET_SET = False
-STREAM_DEV = "usb"
 CTRL_DEV = None
-CTRL_MODE = "ep0"
 ARGS = []
 for arg in sys.argv[1:]:
     if arg == "--no-reset":
@@ -69,16 +67,8 @@ for arg in sys.argv[1:]:
     elif arg == "--verbose":
         QUIET = False
         QUIET_SET = True
-    elif arg.startswith("--stream-device="):
-        STREAM_DEV = arg.split("=", 1)[1]
-    elif arg == "--stream-usb":
-        STREAM_DEV = "usb"
     elif arg.startswith("--ctrl-device="):
         CTRL_DEV = arg.split("=", 1)[1]
-    elif arg == "--ctrl-ep0":
-        CTRL_MODE = "ep0"
-    elif arg == "--ctrl-cdc":
-        CTRL_MODE = "cdc"
     else:
         ARGS.append(arg)
 
@@ -92,6 +82,9 @@ LEN_MASK = 0x7FFF
 
 MAGIC0 = 0xEB
 MAGIC1 = 0xD1
+
+OUTDIR = ARGS[0] if len(ARGS) > 0 else "frames"
+MAX_FRAMES = None if STREAM_RAW else 100
 
 log_out = sys.stdout
 raw_stream = None
@@ -159,16 +152,11 @@ def set_raw_and_dtr(fd: int) -> None:
     status |= (TIOCM_DTR | TIOCM_RTS)
     fcntl.ioctl(fd, TIOCMSET, struct.pack("I", status))
 
-if len(ARGS) > 0:
-    STREAM_DEV = ARGS[0]
-OUTDIR = ARGS[1] if len(ARGS) > 1 else "frames"
-MAX_FRAMES = None if STREAM_RAW else 100
-
 if CTRL_DEV is None:
     CTRL_DEV, err = auto_detect_ctrl_device()
     if err:
         print(err, file=sys.stderr)
-        print("[host] supply a control device with --ctrl-device=/dev/ttyACM1.", file=sys.stderr)
+        print("[host] supply a control device with --ctrl-device=/dev/ttyACM0.", file=sys.stderr)
         sys.exit(2)
     log(f"[host] auto-detected control CDC device: {CTRL_DEV}")
 
@@ -344,43 +332,26 @@ def service_cdc_relay(ready_fds, ctrl_fd, stdin_fd, relay_active):
         if data:
             os.write(ctrl_fd, data)
 
-use_usb_stream = STREAM_DEV == "usb" or STREAM_DEV.startswith("usb:")
-stream_fd = None
 usb_dev = None
 usb_intf = None
 usb_ep_in = None
 stdin_fd = None
 stdin_attr = None
 relay_active = False
-if use_usb_stream:
-    usb_dev, usb_intf, usb_ep_in = open_usb_stream()
-    ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
-    set_raw_and_dtr(ctrl_fd)
-else:
-    stream_fd = os.open(STREAM_DEV, os.O_RDWR | os.O_NOCTTY)
-    ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
-    set_raw_and_dtr(stream_fd)
-    set_raw_and_dtr(ctrl_fd)
-    if CTRL_MODE == "ep0":
-        usb_dev = open_usb_device_for_control()
+usb_dev, usb_intf, usb_ep_in = open_usb_stream()
+ctrl_fd = os.open(CTRL_DEV, os.O_RDWR | os.O_NOCTTY)
+set_raw_and_dtr(ctrl_fd)
 
 if sys.stdin.isatty():
     stdin_fd = sys.stdin.fileno()
     stdin_attr = set_cbreak(stdin_fd)
     relay_active = True
 
-if CTRL_MODE == "ep0" and usb_dev is None:
-    print("[host] EP0 control selected but USB device is unavailable.", file=sys.stderr)
-    sys.exit(2)
-
 if SEND_BOOT:
     os.write(ctrl_fd, b"P")
 
 if SEND_STOP:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
-    else:
-        os.write(ctrl_fd, b"X")
+    send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
     time.sleep(0.05)
 
 if DIAG_SECS > 0:
@@ -411,56 +382,35 @@ if BOOT_WAIT > 0:
 
 # Tell Pico to reset counters (optional) then start.
 if SEND_RESET:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_RESET_COUNTERS)
-    else:
-        os.write(ctrl_fd, b"R")
+    send_ep0_cmd(usb_dev, CTRL_REQ_RESET_COUNTERS)
     time.sleep(0.05)
 if RLE_MODE is True:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_RLE_ON)
-    else:
-        os.write(ctrl_fd, b"E")
+    send_ep0_cmd(usb_dev, CTRL_REQ_RLE_ON)
     time.sleep(0.01)
 elif RLE_MODE is False:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_RLE_OFF)
-    else:
-        os.write(ctrl_fd, b"e")
+    send_ep0_cmd(usb_dev, CTRL_REQ_RLE_OFF)
     time.sleep(0.01)
 if PROBE_ONLY:
-    if CTRL_MODE == "ep0":
-        send_ep0_cmd(usb_dev, CTRL_REQ_PROBE_PACKET)
-    else:
-        os.write(ctrl_fd, b"U")
+    send_ep0_cmd(usb_dev, CTRL_REQ_PROBE_PACKET)
     time.sleep(0.2)
     probe_deadline = time.time() + 1.0
     probe_bytes = 0
     while time.time() < probe_deadline:
-        if use_usb_stream:
-            chunk = read_usb_stream(usb_ep_in, 0.25)
-        else:
-            r, _, _ = select.select([stream_fd], [], [], 0.25)
-            if not r:
-                continue
-            chunk = os.read(stream_fd, 8192)
+        chunk = read_usb_stream(usb_ep_in, 0.25)
         if chunk:
             probe_bytes += len(chunk)
     print(f"[host] probe bytes received: {probe_bytes}")
     sys.exit(0)
-if CTRL_MODE == "ep0":
-    send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_START)
-else:
-    os.write(ctrl_fd, b"S")
+send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_START)
 
 mode_note = "reset+start" if SEND_RESET else "start"
 boot_note = "boot" if SEND_BOOT else "no-boot"
 ext = "pbm" if OUTPUT_FORMAT == "pbm" else "pgm"
 stream_note = f", raw_stream={STREAM_RAW_PATH}" if STREAM_RAW else ""
 if STREAM_RAW:
-    log(f"[host] reading {STREAM_DEV}, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+    log(f"[host] reading usb-bulk, streaming raw frames ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 else:
-    log(f"[host] reading {STREAM_DEV}, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
+    log(f"[host] reading usb-bulk, writing {OUTDIR}/frame_###.{ext} ({mode_note}, {boot_note}, boot_wait={BOOT_WAIT:.2f}s, diag={DIAG_SECS:.2f}s{stream_note})")
 if relay_active:
     log("[host] CDC relay enabled (stdin -> control, stderr <- CDC; cbreak mode).")
     if STREAM_RAW:
@@ -484,25 +434,14 @@ try:
             break
         if MAX_FRAMES is not None and done_count >= MAX_FRAMES:
             break
-        if use_usb_stream:
-            relay_fds = [ctrl_fd]
-            if relay_active:
-                relay_fds.append(stdin_fd)
-            ready, _, _ = select.select(relay_fds, [], [], 0)
-            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
-            chunk = read_usb_stream(usb_ep_in, stream_timeout)
-            ready, _, _ = select.select(relay_fds, [], [], 0)
-            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
-        else:
-            fds = [stream_fd, ctrl_fd]
-            if relay_active:
-                fds.append(stdin_fd)
-            ready, _, _ = select.select(fds, [], [], 0.25)
-            service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
-            if stream_fd in ready:
-                chunk = os.read(stream_fd, 8192)
-            else:
-                chunk = b""
+        relay_fds = [ctrl_fd]
+        if relay_active:
+            relay_fds.append(stdin_fd)
+        ready, _, _ = select.select(relay_fds, [], [], 0)
+        service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
+        chunk = read_usb_stream(usb_ep_in, stream_timeout)
+        ready, _, _ = select.select(relay_fds, [], [], 0)
+        service_cdc_relay(ready, ctrl_fd, stdin_fd, relay_active)
 
         if not chunk:
             now = time.time()
@@ -606,18 +545,13 @@ finally:
         termios.tcsetattr(stdin_fd, termios.TCSANOW, stdin_attr)
     if SEND_STOP:
         try:
-            if CTRL_MODE == "ep0":
-                send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
-            else:
-                os.write(ctrl_fd, b"X")
+            send_ep0_cmd(usb_dev, CTRL_REQ_CAPTURE_STOP)
         except OSError:
             pass
     try:
         os.write(ctrl_fd, b"p")
     except OSError:
         pass
-    if stream_fd is not None:
-        os.close(stream_fd)
     os.close(ctrl_fd)
     if usb_dev is not None and usb_intf is not None:
         try:
