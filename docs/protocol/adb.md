@@ -31,6 +31,8 @@ the Arduino shield/hardware, not on the Pico GPIO.
 
 The web backend now writes MacFriends-compatible 8-byte instructions directly to the Arduino serial port (`115200` baud) when the browser sends mouse input.
 
+Web session ownership is single-owner + multi-viewer: one `owner_id` is allowed to start/stop control and send ADB input, while additional connected clients remain in viewer mode and continue receiving the live video stream.
+
 - Device selection defaults to `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0`.
 - Override with `ADB_SERIAL_PORT` to provide an explicit tty path or glob.
 - Packet bytes match `Arduino/include/instruction.h` and MacFriends `ADBInstruction.toData()`.

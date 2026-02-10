@@ -47,3 +47,5 @@
 - If web pointer control feels floaty/sluggish, sensitivity and per-packet delta cap need to be tuned together; too-low sensitivity plus a tight cap over-damps motion.
 
 - Pointer lock has no native edge constraints; if canvas-bounded behavior is desired, maintain a virtual cursor and clamp it to capture geometry before deriving outbound deltas.
+
+- For shared web sessions, preserve live video for all clients but reject non-owner input packets server-side to prevent control contention.

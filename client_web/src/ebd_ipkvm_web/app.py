@@ -169,7 +169,7 @@ class AdbSerialBridge:
 class SessionState:
     active: bool = False
     owner_id: Optional[str] = None
-    websocket: Optional[WebSocket] = None
+    websockets: set[WebSocket] = field(default_factory=set)
     stream_task: Optional[asyncio.Task[None]] = None
     stream_stop: asyncio.Event = field(default_factory=asyncio.Event)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -180,6 +180,26 @@ class SessionManager:
         self._state = SessionState()
         self._adb = AdbSerialBridge()
         self._rom_disk_task: Optional[asyncio.Task[None]] = None
+
+    async def _broadcast_json(self, payload: Dict[str, Any]) -> None:
+        stale: list[WebSocket] = []
+        for websocket in list(self._state.websockets):
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                stale.append(websocket)
+        for websocket in stale:
+            self._state.websockets.discard(websocket)
+
+    async def _broadcast_bytes(self, payload: bytes) -> None:
+        stale: list[WebSocket] = []
+        for websocket in list(self._state.websockets):
+            try:
+                await websocket.send_bytes(payload)
+            except Exception:
+                stale.append(websocket)
+        for websocket in stale:
+            self._state.websockets.discard(websocket)
 
     async def _cancel_rom_disk_task(self) -> None:
         task = self._rom_disk_task
@@ -227,11 +247,11 @@ class SessionManager:
         self._rom_disk_task = asyncio.create_task(self._hold_rom_disk_chord(hold_s, refresh_s))
 
     async def _start_stream(self) -> None:
-        if self._state.stream_task or self._state.websocket is None:
+        if self._state.stream_task or not self._state.websockets:
             return
         self._state.stream_stop.clear()
         self._state.stream_task = asyncio.create_task(
-            stream_loop(self._state.websocket, self._state.stream_stop)
+            stream_loop(self._broadcast_bytes, self._broadcast_json, self._state.stream_stop)
         )
 
     async def _stop_stream(self) -> None:
@@ -252,20 +272,20 @@ class SessionManager:
                 }
             self._state.active = True
             self._state.owner_id = owner_id
-            if self._state.websocket is not None:
+            if self._state.websockets:
                 try:
                     path = await self._adb.connect()
-                    await self._state.websocket.send_json(
+                    await self._broadcast_json(
                         {"type": "status", "message": f"ADB serial connected: {path}"}
                     )
                 except RuntimeError as exc:
-                    await self._state.websocket.send_json(
+                    await self._broadcast_json(
                         {"type": "error", "message": str(exc)}
                     )
                 if boot_rom_disk:
                     await self._send_rom_disk_press()
                     await self._start_rom_disk_hold(ROM_DISK_HOLD_SECONDS, ROM_DISK_REFRESH_SECONDS)
-                    await self._state.websocket.send_json(
+                    await self._broadcast_json(
                         {
                             "type": "status",
                             "message": (
@@ -274,7 +294,14 @@ class SessionManager:
                             ),
                         }
                     )
-                await run_control_sequence(self._state.websocket)
+                await run_control_sequence(self._broadcast_json)
+                await self._broadcast_json(
+                    {
+                        "type": "session_mode",
+                        "active": self._state.active,
+                        "owner_id": self._state.owner_id,
+                    }
+                )
             await self._start_stream()
             return {"active": True, "owner_id": owner_id, "message": "Session started."}
 
@@ -286,7 +313,7 @@ class SessionManager:
                 raise HTTPException(status_code=403, detail="Session owned by another client.")
             self._state.active = False
             self._state.owner_id = None
-            if self._state.websocket is not None:
+            if self._state.websockets:
                 try:
                     dev = await asyncio.to_thread(open_usb_device_for_control)
                     for req, note in (
@@ -294,16 +321,19 @@ class SessionManager:
                         (CTRL_REQ_PS_OFF, "ps_on=0"),
                     ):
                         await asyncio.to_thread(send_ep0_cmd, dev, req)
-                        await self._state.websocket.send_json(
+                        await self._broadcast_json(
                             {"type": "status", "message": f"EP0: {note}"}
                         )
                 except RuntimeError as exc:
-                    await self._state.websocket.send_json(
+                    await self._broadcast_json(
                         {"type": "error", "message": str(exc)}
                     )
             await self._stop_stream()
             await self._cancel_rom_disk_task()
             await self._adb.close()
+            await self._broadcast_json(
+                {"type": "session_mode", "active": False, "owner_id": None}
+            )
             return {"active": False, "message": "Session stopped."}
 
     async def status(self) -> Dict[str, Any]:
@@ -312,31 +342,46 @@ class SessionManager:
 
     async def attach_websocket(self, websocket: WebSocket) -> None:
         async with self._state.lock:
-            if self._state.websocket is not None:
-                await websocket.close(code=1008, reason="Another client is already connected.")
-                raise HTTPException(status_code=409, detail="WebSocket already connected.")
-            self._state.websocket = websocket
+            self._state.websockets.add(websocket)
             if self._state.active:
                 await self._start_stream()
+            await websocket.send_json(
+                {
+                    "type": "session_mode",
+                    "active": self._state.active,
+                    "owner_id": self._state.owner_id,
+                }
+            )
 
     async def detach_websocket(self, websocket: WebSocket) -> None:
         async with self._state.lock:
-            if self._state.websocket is websocket:
-                self._state.websocket = None
+            if websocket in self._state.websockets:
+                self._state.websockets.remove(websocket)
+            if not self._state.websockets:
                 await self._stop_stream()
                 await self._cancel_rom_disk_task()
                 await self._adb.close()
 
-    async def send_mouse_input(self, dx: int, dy: int, mouse_down: bool) -> None:
+    async def send_mouse_input(self, owner_id: str, dx: int, dy: int, mouse_down: bool) -> None:
         async with self._state.lock:
             if not self._state.active:
                 raise RuntimeError("Session is not active; start a session before sending ADB input.")
+            if owner_id != self._state.owner_id:
+                raise RuntimeError("Viewer mode: only the active session owner can send mouse input.")
         await self._adb.send_mouse(dx, dy, mouse_down)
 
-    async def send_keyboard_input(self, scan_code: int, is_key_up: bool, modifier_keys: int) -> None:
+    async def send_keyboard_input(
+        self,
+        owner_id: str,
+        scan_code: int,
+        is_key_up: bool,
+        modifier_keys: int,
+    ) -> None:
         async with self._state.lock:
             if not self._state.active:
                 raise RuntimeError("Session is not active; start a session before sending ADB input.")
+            if owner_id != self._state.owner_id:
+                raise RuntimeError("Viewer mode: only the active session owner can send keyboard input.")
         await self._adb.send_keyboard(scan_code, is_key_up, modifier_keys)
 
 
@@ -421,7 +466,7 @@ def send_ep0_cmd(dev: Any, req: int) -> None:
 
 
 async def run_control_sequence(
-    websocket: WebSocket,
+    send_json: Any,
     *,
     boot_wait_s: float = DEFAULT_BOOT_WAIT_S,
     diag_secs: float = DEFAULT_DIAG_SECS,
@@ -431,11 +476,11 @@ async def run_control_sequence(
     try:
         dev = await asyncio.to_thread(open_usb_device_for_control)
     except RuntimeError as exc:
-        await websocket.send_json({"type": "error", "message": str(exc)})
+        await send_json({"type": "error", "message": str(exc)})
         return
 
     if diag_secs > 0:
-        await websocket.send_json(
+        await send_json(
             {"type": "status", "message": f"diag: waiting {diag_secs:.2f}s before start"}
         )
         await asyncio.sleep(diag_secs)
@@ -453,9 +498,9 @@ async def run_control_sequence(
         try:
             await asyncio.to_thread(send_ep0_cmd, dev, req)
         except RuntimeError as exc:
-            await websocket.send_json({"type": "error", "message": str(exc)})
+            await send_json({"type": "error", "message": str(exc)})
             return
-        await websocket.send_json({"type": "status", "message": f"EP0: {note}"})
+        await send_json({"type": "status", "message": f"EP0: {note}"})
 
 
 def pop_one_packet(buf: bytearray) -> Optional[bytes]:
@@ -480,11 +525,11 @@ def pop_one_packet(buf: bytearray) -> Optional[bytes]:
     return pkt
 
 
-async def stream_loop(websocket: WebSocket, stop_event: asyncio.Event) -> None:
+async def stream_loop(send_bytes: Any, send_json: Any, stop_event: asyncio.Event) -> None:
     try:
         dev, intf_num, ep_in = open_usb_stream()
     except RuntimeError as exc:
-        await websocket.send_json(
+        await send_json(
             {"type": "error", "message": f"Failed to open USB stream: {exc}"}
         )
         return
@@ -507,7 +552,7 @@ async def stream_loop(websocket: WebSocket, stop_event: asyncio.Event) -> None:
                     continue
                 payload = pkt[8 : 8 + payload_len]
                 header = struct.pack("<HHHH", frame_id, line_id, plen, 0)
-                await websocket.send_bytes(header + payload)
+                await send_bytes(header + payload)
     finally:
         try:
             import usb.util
@@ -552,7 +597,7 @@ def create_app() -> FastAPI:
             await websocket.send_json(
                 {
                     "type": "status",
-                    "message": "WebSocket connected. Session is idle by default.",
+                    "message": "WebSocket connected. One owner controls input; additional clients stay in viewer mode.",
                 }
             )
             while True:
@@ -564,18 +609,26 @@ def create_app() -> FastAPI:
                     )
                 elif data.get("type") == "mouse_input":
                     try:
+                        owner_id = str(data.get("owner_id") or "")
                         dx = int(data.get("dx", 0))
                         dy = int(data.get("dy", 0))
                         mouse_down = bool(data.get("mouse_down", False))
-                        await session_manager.send_mouse_input(dx=dx, dy=dy, mouse_down=mouse_down)
+                        await session_manager.send_mouse_input(
+                            owner_id=owner_id,
+                            dx=dx,
+                            dy=dy,
+                            mouse_down=mouse_down,
+                        )
                     except RuntimeError as exc:
                         await websocket.send_json({"type": "error", "message": str(exc)})
                 elif data.get("type") == "keyboard_input":
                     try:
+                        owner_id = str(data.get("owner_id") or "")
                         scan_code = int(data.get("scan_code", 0))
                         is_key_up = bool(data.get("is_key_up", False))
                         modifier_keys = int(data.get("modifier_keys", 0))
                         await session_manager.send_keyboard_input(
+                            owner_id=owner_id,
                             scan_code=scan_code,
                             is_key_up=is_key_up,
                             modifier_keys=modifier_keys,

@@ -191,7 +191,7 @@
   <body>
     <header>
       <h1>EBD IPKVM Web Client</h1>
-      <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
+      <p class="status" id="session-status">Status: idle (single-session, multi-viewer)</p>
     </header>
     <main>
       <div class="video-column">
@@ -212,8 +212,7 @@
           </div>
         </section>
         <p class="note">
-          The backend stays idle until you start a session. Only one browser session can own the
-          Pico + CDC0 control connections at a time.
+          The backend stays idle until you start a session. Only one browser session can own control at a time; other connected clients remain in viewer mode with live video.
         </p>
         <p class="note">
           <strong>Mouse capture:</strong> click the video canvas to lock the pointer and stream
@@ -294,6 +293,8 @@
       let lastSentMouseDown = false;
       let virtualPointerX = WIDTH / 2;
       let virtualPointerY = HEIGHT / 2;
+      let sessionOwnerId = null;
+      let viewerMode = true;
 
       const clamp = (value, minValue, maxValue) => Math.min(maxValue, Math.max(minValue, value));
 
@@ -402,7 +403,7 @@
       };
 
       const sendKeyboardPacket = (event, isKeyUp) => {
-        if (!pointerLocked || !socket || socket.readyState !== WebSocket.OPEN) {
+        if (viewerMode || !pointerLocked || !socket || socket.readyState !== WebSocket.OPEN) {
           return false;
         }
         const scanCode = BROWSER_CODE_TO_MAC_KEYCODE[event.code];
@@ -411,6 +412,7 @@
         }
         socket.send(JSON.stringify({
           type: "keyboard_input",
+          owner_id: ownerId,
           scan_code: scanCode,
           is_key_up: isKeyUp,
           modifier_keys: getModifierKeys(event),
@@ -425,7 +427,7 @@
         mouseSendQueued = true;
         requestAnimationFrame(() => {
           mouseSendQueued = false;
-          if (!socket || socket.readyState !== WebSocket.OPEN) {
+          if (viewerMode || !socket || socket.readyState !== WebSocket.OPEN) {
             pendingDeltaX = 0;
             pendingDeltaY = 0;
             return;
@@ -449,6 +451,7 @@
           socket.send(
             JSON.stringify({
               type: "mouse_input",
+              owner_id: ownerId,
               dx,
               dy,
               mouse_down: mouseDown,
@@ -457,12 +460,25 @@
         });
       };
 
+      const updateViewerUi = () => {
+        startBtn.disabled = viewerMode;
+        stopBtn.disabled = viewerMode || !sessionOwnerId;
+      };
+
+      const applySessionMode = (active, owner) => {
+        sessionOwnerId = owner || null;
+        viewerMode = Boolean(active) && sessionOwnerId !== ownerId;
+        const modeLabel = viewerMode ? "viewer" : "owner";
+        const activeLabel = active ? "active" : "idle";
+        sessionStatus.textContent = `Status: ${activeLabel} (${modeLabel} mode)`;
+        setPowerLed(Boolean(active));
+        updateViewerUi();
+      };
+
       const updateStatus = async () => {
         const response = await fetch("/api/session/status");
         const data = await response.json();
-        const active = data.active ? "active" : "idle";
-        sessionStatus.textContent = `Status: ${active} (single-session, single-client)`;
-        setPowerLed(Boolean(data.active));
+        applySessionMode(Boolean(data.active), data.owner_id || null);
       };
 
       startBtn.addEventListener("click", async () => {
@@ -475,7 +491,6 @@
           }),
         });
         const data = await response.json();
-        setPowerLed(true);
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
@@ -489,12 +504,15 @@
         const data = await response.json();
         resetVideoState();
         clearVideoCanvas();
-        setPowerLed(false);
         appendLog(`[session] ${data.message}`);
         updateStatus();
       });
 
       canvas.addEventListener("click", async () => {
+        if (viewerMode) {
+          appendLog("[viewer] Input is disabled while another client owns control.");
+          return;
+        }
         if (!document.pointerLockElement) {
           try {
             await canvas.requestPointerLock();
@@ -525,13 +543,13 @@
           lastSentMouseDown = false;
           appendLog("[mouse] Pointer unlocked.");
           if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "mouse_input", dx: 0, dy: 0, mouse_down: false }));
+            socket.send(JSON.stringify({ type: "mouse_input", owner_id: ownerId, dx: 0, dy: 0, mouse_down: false }));
           }
         }
       });
 
       document.addEventListener("mousemove", (event) => {
-        if (!pointerLocked) {
+        if (viewerMode || !pointerLocked) {
           return;
         }
         const scaledX = event.movementX * MOUSE_SENSITIVITY;
@@ -633,6 +651,9 @@
           return;
         }
         const data = JSON.parse(event.data);
+        if (data.type === "session_mode") {
+          applySessionMode(Boolean(data.active), data.owner_id || null);
+        }
         if (data.message) {
           appendLog(data.message);
         }
@@ -643,10 +664,13 @@
         setPowerLed(false);
         const reason = event.reason ? event.reason : "n/a";
         appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
+        viewerMode = true;
+        updateViewerUi();
       });
 
       clearVideoCanvas();
       setPowerLed(false);
+      updateViewerUi();
       updateStatus();
     </script>
   </body>
