@@ -1,5 +1,6 @@
 # Log (running)
 
+- 2026-02-10: Retuned web mouse mapping to 0.75x sensitivity with ±24 per-packet delta cap after testing showed the prior tuning felt floaty/over-damped.
 - 2026-02-10: Fixed web mouse click reliability by always transmitting button-state changes even when relative movement is 0.
 - 2026-02-10: Smoothed web mouse motion mapping by reducing sensitivity to 0.35x and capping per-packet deltas to ±12 before serial transport.
 - 2026-02-10: Updated ROM-disk boot assist to periodically reassert Cmd+Opt+X+O during the 10s hold window so late keyboard initialization still sees the chord.
