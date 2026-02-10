@@ -1,5 +1,6 @@
 # Decisions (running)
 
+- 2026-02-10: Use right-click as the primary pointer-lock exit path in the web client so Escape remains available for keyboard passthrough during ADB testing.
 - 2026-02-10: Keep web-to-Arduino ADB transport byte-for-byte compatible with MacFriends (`magic=123`, 8-byte instruction layout, `dx/dy` clamp to [-63,63]) to avoid firmware-side divergence.
 
 - 2026-02-10: Enforce a single CDC interface in firmware (`CFG_TUD_CDC == 1`) and treat it as control/debug only; all video transport remains vendor bulk.

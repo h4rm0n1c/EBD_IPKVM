@@ -42,6 +42,7 @@ DEFAULT_CTRL_MODE = "ep0"
 ADB_SERIAL_BAUD = 115200
 ADB_MAGIC_NUMBER = 123
 ADB_UPDATE_MOUSE = 0x01
+ADB_UPDATE_KEYBOARD = 0x02
 ADB_DX_DY_MIN = -63
 ADB_DX_DY_MAX = 63
 DEFAULT_ADB_SERIAL_PORT_GLOB = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*-if00-port0"
@@ -108,6 +109,26 @@ class AdbSerialBridge:
         )
         self._serial_handle.write(packet)
 
+    def _send_keyboard_blocking(self, scan_code: int, is_key_up: bool, modifier_keys: int) -> None:
+        path = self._ensure_open_blocking()
+        if self._serial_handle is None:
+            raise RuntimeError(f"ADB serial device {path} was not opened.")
+        clamped_scan = max(0, min(255, scan_code))
+        clamped_modifiers = max(0, min(255, modifier_keys))
+        packet = struct.pack(
+            "<bBbbbBBB",
+            ADB_MAGIC_NUMBER,
+            ADB_UPDATE_KEYBOARD,
+            0,
+            0,
+            0,
+            clamped_scan,
+            1 if is_key_up else 0,
+            clamped_modifiers,
+        )
+        self._serial_handle.write(packet)
+
+
     async def connect(self) -> str:
         async with self._lock:
             return await asyncio.to_thread(self._ensure_open_blocking)
@@ -115,6 +136,15 @@ class AdbSerialBridge:
     async def send_mouse(self, dx: int, dy: int, mouse_down: bool) -> None:
         async with self._lock:
             await asyncio.to_thread(self._send_mouse_blocking, dx, dy, mouse_down)
+
+    async def send_keyboard(self, scan_code: int, is_key_up: bool, modifier_keys: int) -> None:
+        async with self._lock:
+            await asyncio.to_thread(
+                self._send_keyboard_blocking,
+                scan_code,
+                is_key_up,
+                modifier_keys,
+            )
 
     async def close(self) -> None:
         async with self._lock:
@@ -232,6 +262,12 @@ class SessionManager:
             if not self._state.active:
                 raise RuntimeError("Session is not active; start a session before sending ADB input.")
         await self._adb.send_mouse(dx, dy, mouse_down)
+
+    async def send_keyboard_input(self, scan_code: int, is_key_up: bool, modifier_keys: int) -> None:
+        async with self._state.lock:
+            if not self._state.active:
+                raise RuntimeError("Session is not active; start a session before sending ADB input.")
+        await self._adb.send_keyboard(scan_code, is_key_up, modifier_keys)
 
 
 def open_usb_stream() -> tuple[Any, int, Any]:
@@ -461,6 +497,18 @@ def create_app() -> FastAPI:
                         dy = int(data.get("dy", 0))
                         mouse_down = bool(data.get("mouse_down", False))
                         await session_manager.send_mouse_input(dx=dx, dy=dy, mouse_down=mouse_down)
+                    except RuntimeError as exc:
+                        await websocket.send_json({"type": "error", "message": str(exc)})
+                elif data.get("type") == "keyboard_input":
+                    try:
+                        scan_code = int(data.get("scan_code", 0))
+                        is_key_up = bool(data.get("is_key_up", False))
+                        modifier_keys = int(data.get("modifier_keys", 0))
+                        await session_manager.send_keyboard_input(
+                            scan_code=scan_code,
+                            is_key_up=is_key_up,
+                            modifier_keys=modifier_keys,
+                        )
                     except RuntimeError as exc:
                         await websocket.send_json({"type": "error", "message": str(exc)})
                 elif data.get("type") == "ping":

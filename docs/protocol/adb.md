@@ -47,3 +47,8 @@ The web backend now writes MacFriends-compatible 8-byte instructions directly to
 | 7 | `modifierKeys` | uint8 | `0` for mouse-only packets |
 
 The browser captures pointer-locked movement on the video canvas and sends relative `dx`/`dy` plus left-button state over WebSocket as `mouse_input`; the backend converts those into these serial packets.
+
+
+Keyboard packets use the same 8-byte layout with `updateType=2` (`UPDATE_KEYBOARD`), `dx=0`, `dy=0`, and key fields populated (`keyCode`, `isKeyUp`, `modifierKeys`). Browser events are translated to Mac-style scan codes before transport.
+
+In the web client capture mode, right-click exits pointer lock (instead of relying on Escape) so Escape can be forwarded as keyboard input.
