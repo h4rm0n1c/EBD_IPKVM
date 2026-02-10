@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EBD IPKVM Web Client (Prototype)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --video-width: 1024px;
+        --video-height: 684px;
+        --panel-height: 760px;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #0e1117;
+        color: #f5f5f5;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 12px 20px;
+        border-bottom: 1px solid #1f2430;
+      }
+      header h1 {
+        font-size: 1.2rem;
+        margin: 0 0 4px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: calc(var(--video-width) + 24px) 320px;
+        gap: 16px;
+        padding: 12px 20px 16px;
+        flex: 1;
+        min-height: 0;
+        max-width: 100%;
+        margin: 0 auto;
+        justify-content: center;
+        align-items: start;
+      }
+      .panel.video-panel {
+        width: 100%;
+        height: var(--panel-height);
+        display: flex;
+        flex-direction: column;
+        background: #d8d0c3;
+        border-color: #b7b0a5;
+        padding: 12px 24px 24px;
+      }
+      .panel {
+        background: #151a23;
+        border: 1px solid #1f2430;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+      button {
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #3b82f6;
+        color: #fff;
+      }
+      button.secondary {
+        background: #2f3645;
+        color: #fff;
+      }
+      .status {
+        font-size: 0.85rem;
+        color: #9aa4b2;
+        margin: 4px 0 0;
+      }
+      .video-canvas {
+        width: 100%;
+        height: var(--video-height);
+        border-radius: 10px;
+        background: #0b0f17;
+        border: 1px dashed #2f3645;
+        display: grid;
+        place-items: center;
+        color: #5f6b7a;
+        font-size: 0.9rem;
+      }
+      .console {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: var(--panel-height);
+        align-self: start;
+        margin-left: 10px;
+      }
+      .console h2 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .console-log {
+        flex: 1;
+        background: #0b0f17;
+        border-radius: 8px;
+        border: 1px solid #2a3242;
+        padding: 10px;
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        font-size: 0.8rem;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .console-input {
+        display: flex;
+        gap: 8px;
+      }
+      .console-input input {
+        flex: 1;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #2a3242;
+        background: #0b0f17;
+        color: #fff;
+      }
+      .note {
+        font-size: 0.8rem;
+        color: #9aa4b2;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>EBD IPKVM Web Client</h1>
+      <p class="status" id="session-status">Status: idle (single-session, single-client)</p>
+    </header>
+    <main>
+      <section class="panel video-panel">
+        <div class="controls">
+          <button class="primary" id="start-btn">Start Capture / Boot Mac</button>
+          <button class="secondary" id="stop-btn">Stop</button>
+        </div>
+        <canvas class="video-canvas" id="video-canvas" width="1024" height="684">
+          Video stream placeholder (1024 × 684)
+        </canvas>
+        <p class="note">
+          The backend stays idle until you start a session. Only one browser session can own the
+          Pico + CDC connections at a time.
+        </p>
+      </section>
+      <section class="panel console">
+        <h2>CDC1 Live Console</h2>
+        <div class="console-log" id="console-log"></div>
+        <div class="console-input">
+          <input id="console-input" type="text" placeholder="Type and press Enter..." />
+        </div>
+      </section>
+    </main>
+    <script>
+      const consoleLog = document.getElementById("console-log");
+      const sessionStatus = document.getElementById("session-status");
+      const input = document.getElementById("console-input");
+      const startBtn = document.getElementById("start-btn");
+      const stopBtn = document.getElementById("stop-btn");
+      const canvas = document.getElementById("video-canvas");
+      const ctx = canvas.getContext("2d");
+
+      const WIDTH = 512;
+      const HEIGHT = 342;
+      const SCALE = 2;
+      const RENDER_WIDTH = WIDTH * SCALE;
+      const RENDER_HEIGHT = HEIGHT * SCALE;
+      const LINE_BYTES = 64;
+      const RLE_FLAG = 0x8000;
+      const LEN_MASK = 0x7fff;
+
+      let currentFrameId = null;
+      let lineCount = 0;
+      let lineBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
+      let renderBuffer = new Uint8Array(LINE_BYTES * HEIGHT);
+      let lineSeen = new Uint8Array(HEIGHT);
+      let frameReady = false;
+      let renderQueued = false;
+      const imageData = ctx.createImageData(RENDER_WIDTH, RENDER_HEIGHT);
+
+      const resetFrameBuffer = () => {
+        lineBuffer.fill(0);
+        lineSeen.fill(0);
+        lineCount = 0;
+      };
+
+      const decodeRleLine = (payload) => {
+        if (payload.length % 2 !== 0) {
+          return null;
+        }
+        const output = new Uint8Array(LINE_BYTES);
+        let outIndex = 0;
+        for (let i = 0; i < payload.length; i += 2) {
+          const count = payload[i];
+          const value = payload[i + 1];
+          if (count === 0) {
+            return null;
+          }
+          if (outIndex + count > LINE_BYTES) {
+            return null;
+          }
+          output.fill(value, outIndex, outIndex + count);
+          outIndex += count;
+        }
+        if (outIndex !== LINE_BYTES) {
+          return null;
+        }
+        return output;
+      };
+
+      const renderFrame = () => {
+        const pixels = imageData.data;
+        for (let y = 0; y < HEIGHT; y += 1) {
+          const rowStart = y * LINE_BYTES;
+          for (let xByte = 0; xByte < LINE_BYTES; xByte += 1) {
+            const byte = renderBuffer[rowStart + xByte];
+            for (let bit = 7; bit >= 0; bit -= 1) {
+              const on = (byte >> bit) & 1;
+              const value = on ? 255 : 0;
+              const x = xByte * 8 + (7 - bit);
+              const outX = x * SCALE;
+              const outY = y * SCALE;
+              const topLeft = (outY * RENDER_WIDTH + outX) * 4;
+              const topRight = topLeft + 4;
+              const bottomLeft = topLeft + RENDER_WIDTH * 4;
+              const bottomRight = bottomLeft + 4;
+              for (const idx of [topLeft, topRight, bottomLeft, bottomRight]) {
+                pixels[idx] = value;
+                pixels[idx + 1] = value;
+                pixels[idx + 2] = value;
+                pixels[idx + 3] = 255;
+              }
+            }
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+      };
+
+      const queueRender = () => {
+        if (renderQueued) {
+          return;
+        }
+        renderQueued = true;
+        requestAnimationFrame(() => {
+          renderQueued = false;
+          if (frameReady) {
+            renderFrame();
+            frameReady = false;
+          }
+        });
+      };
+
+      const appendLog = (message) => {
+        const line = document.createElement("div");
+        line.textContent = message;
+        consoleLog.appendChild(line);
+        consoleLog.scrollTop = consoleLog.scrollHeight;
+      };
+
+      const fallbackId = () => `browser-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const ownerId = typeof crypto !== "undefined" && crypto.randomUUID
+        ? `browser-${crypto.randomUUID()}`
+        : fallbackId();
+
+      const updateStatus = async () => {
+        const response = await fetch("/api/session/status");
+        const data = await response.json();
+        const active = data.active ? "active" : "idle";
+        sessionStatus.textContent = `Status: ${active} (single-session, single-client)`;
+      };
+
+      startBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
+      stopBtn.addEventListener("click", async () => {
+        const response = await fetch("/api/session/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: ownerId }),
+        });
+        const data = await response.json();
+        appendLog(`[session] ${data.message}`);
+        updateStatus();
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          const message = input.value.trim();
+          if (message && socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "console_input", message }));
+            input.value = "";
+          }
+        }
+      });
+
+      const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws`);
+      socket.binaryType = "arraybuffer";
+      socket.addEventListener("message", (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          const buffer = event.data;
+          if (buffer.byteLength < 8) {
+            return;
+          }
+          const header = new DataView(buffer, 0, 8);
+          const frameId = header.getUint16(0, true);
+          const lineId = header.getUint16(2, true);
+          const payloadLen = header.getUint16(4, true);
+          const payloadFlags = payloadLen & RLE_FLAG;
+          const payloadSize = payloadLen & LEN_MASK;
+          if (lineId >= HEIGHT || payloadSize === 0) {
+            return;
+          }
+          if (currentFrameId === null) {
+            currentFrameId = frameId;
+          }
+          if (frameId !== currentFrameId) {
+            resetFrameBuffer();
+            currentFrameId = frameId;
+          }
+          const payload = new Uint8Array(buffer, 8, payloadSize);
+          let packed = payload;
+          if (payloadFlags) {
+            const decoded = decodeRleLine(payload);
+            if (!decoded) {
+              return;
+            }
+            packed = decoded;
+          }
+          lineBuffer.set(packed, lineId * LINE_BYTES);
+          if (!lineSeen[lineId]) {
+            lineSeen[lineId] = 1;
+            lineCount += 1;
+          }
+          if (lineCount >= HEIGHT) {
+            renderBuffer.set(lineBuffer);
+            frameReady = true;
+            queueRender();
+            resetFrameBuffer();
+          }
+          return;
+        }
+        const data = JSON.parse(event.data);
+        if (data.message) {
+          appendLog(data.message);
+        }
+      });
+      socket.addEventListener("close", (event) => {
+        const reason = event.reason ? event.reason : "n/a";
+        appendLog(`[ws] Connection closed (code=${event.code}, reason=${reason}).`);
+      });
+
+      updateStatus();
+    </script>
+  </body>
+</html>

@@ -27,6 +27,7 @@ In `client_web/README.md` or `client_web/docs/devuan.md`:
 In the README:
 - Provide a one-line run command (e.g., `pipx run ebd-ipkvm-web --host 0.0.0.0 --port 8000`).
 - Explicitly state that the service starts idle and only connects to devices when the web UI triggers a session.
+- Explicitly call out that the web client is single-session/single-client with one set of device connections.
 Add config flags for default devices but don’t auto-connect at startup.
 :::
 
@@ -49,8 +50,14 @@ Extract and reuse the core CDC stream decode logic from `src/host_recv_frames.py
 - CDC stream device discovery/override.
 - Line decoding + RLE handling.
 - Frame buffer assembly.
-Convert frames to a browser-friendly format (e.g., PNG) and stream over WebSocket to the UI’s canvas.
-Maintain parity with current options (raw/pgm/pbm handling where relevant to the pipeline).
+Stream in-memory, binary 1-bpp RLE line payloads over WebSocket (no file writes) and decode into a frame buffer in the browser:
+- Keep the payload format identical to the CDC stream (`docs/protocol/usb_cdc_stream.md`) so we can swap transports later.
+- Send line packets (frame_id, line_id, flags, payload_len, payload bytes) as binary WS messages.
+- Expand RLE in the browser (or server) using the same `(count, value)` semantics as `host_recv_frames.py`.
+- Render via a `Uint8ClampedArray` → `ImageData` path for 1-bpp frames.
+Assemble full frames from per-line packets before display (buffer lines keyed by frame_id, flush on complete frame or frame_id change).
+Maintain parity with current raw/RLE toggles and 1-bpp assumptions used by the host receiver.
+Push as much decode/render logic into the browser as possible so long-term the Pico can serve raw line packets while clients handle assembly/rendering (future UDP transport).
 :::
 
 ## Step 6 — Add CDC1 live console passthrough

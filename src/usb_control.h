@@ -10,4 +10,8 @@ enum usb_ctrl_request {
     USB_CTRL_REQ_RLE_ON = 0x05,
     USB_CTRL_REQ_RLE_OFF = 0x06,
     USB_CTRL_REQ_CAPTURE_PARK = 0x07,
+    USB_CTRL_REQ_PS_ON = 0x08,
+    USB_CTRL_REQ_PS_OFF = 0x09,
+    USB_CTRL_REQ_BOOTSEL = 0x0A,
+    USB_CTRL_REQ_REBOOT = 0x0B,
 };

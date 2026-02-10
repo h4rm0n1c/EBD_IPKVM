@@ -381,6 +381,32 @@ static void handle_rle_off(void) {
     }
 }
 
+static void handle_ps_on(bool on) {
+    set_ps_on(on);
+    if (can_emit_text()) {
+        cdc_ctrl_printf("[EBD_IPKVM] ps_on=%u\n", on ? 1 : 0);
+    }
+}
+
+static void handle_bootsel(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    sleep_ms(10);
+    reset_usb_boot(0, 0);
+}
+
+static void handle_reboot(void) {
+    video_core_set_armed(false);
+    video_core_set_want_frame(false);
+    txq_offset = 0;
+    core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
+    sleep_ms(10);
+    watchdog_reboot(0, 0, 0);
+    while (true) { tight_loop_contents(); }
+}
+
 static void handle_ep0_command(uint8_t cmd) {
     switch (cmd) {
     case USB_CTRL_REQ_CAPTURE_START:
@@ -403,6 +429,18 @@ static void handle_ep0_command(uint8_t cmd) {
         break;
     case USB_CTRL_REQ_RLE_OFF:
         handle_rle_off();
+        break;
+    case USB_CTRL_REQ_PS_ON:
+        handle_ps_on(true);
+        break;
+    case USB_CTRL_REQ_PS_OFF:
+        handle_ps_on(false);
+        break;
+    case USB_CTRL_REQ_BOOTSEL:
+        handle_bootsel();
+        break;
+    case USB_CTRL_REQ_REBOOT:
+        handle_reboot();
         break;
     default:
         break;
@@ -434,30 +472,13 @@ static bool poll_cdc_commands(void) {
         if (ch == 'R' || ch == 'r') {
             handle_reset_counters();
         } else if (ch == 'P') {
-            set_ps_on(true);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ps_on=1\n");
-            }
+            handle_ps_on(true);
         } else if (ch == 'p') {
-            set_ps_on(false);
-            if (can_emit_text()) {
-                cdc_ctrl_printf("[EBD_IPKVM] ps_on=0\n");
-            }
+            handle_ps_on(false);
         } else if (ch == 'B' || ch == 'b') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            sleep_ms(10);
-            reset_usb_boot(0, 0);
+            handle_bootsel();
         } else if (ch == 'Z' || ch == 'z') {
-            video_core_set_armed(false);
-            video_core_set_want_frame(false);
-            txq_offset = 0;
-            core_bridge_send(CORE_BRIDGE_CMD_STOP_CAPTURE, 0);
-            sleep_ms(10);
-            watchdog_reboot(0, 0, 0);
-            while (true) { tight_loop_contents(); }
+            handle_reboot();
         } else if (ch == 'F' || ch == 'f') {
             core_bridge_send(CORE_BRIDGE_CMD_SINGLE_FRAME, 0);
         } else if (ch == 'T' || ch == 't') {
